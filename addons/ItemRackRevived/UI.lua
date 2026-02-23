@@ -181,7 +181,10 @@ local function RefreshSetRow(idx, name)
         row:SetAlpha(1.0)
         row:EnableMouse(true)
         row.setName = name
-        if row.saveBtn then row.saveBtn:Show() end
+        if row.saveBtn then
+            row.saveBtn:Show()
+            row.saveBtn:EnableMouse(true)
+        end
 
         -- Highlight selected
         if selectedSet == name then
@@ -196,7 +199,10 @@ local function RefreshSetRow(idx, name)
         row:EnableMouse(false)
         row.setName = nil
         row.highlight:Hide()
-        if row.saveBtn then row.saveBtn:Hide() end
+        if row.saveBtn then
+            row.saveBtn:Hide()
+            row.saveBtn:EnableMouse(false)
+        end
     end
 end
 
@@ -256,15 +262,26 @@ local function CreateSetsPanel(parent, xOff, yOff, availableH)
         row.nameTxt = nameTxt
 
         -- Per-row Save button (overwrites this set with current gear)
-        local saveBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        -- Plain button, no UIPanelButtonTemplate, to avoid keyboard handler inheritance
+        local saveBtn = CreateFrame("Button", nil, row)
         saveBtn:SetSize(36, 18)
         saveBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-        saveBtn:SetText("Save")
+        saveBtn:EnableMouse(false)  -- off by default; only on when row is populated
+        local sBg = saveBtn:CreateTexture(nil, "BACKGROUND")
+        sBg:SetAllPoints()
+        sBg:SetColorTexture(0.20, 0.38, 0.60, 0.85)
+        local sHl = saveBtn:CreateTexture(nil, "HIGHLIGHT")
+        sHl:SetAllPoints()
+        sHl:SetColorTexture(0.35, 0.55, 0.80, 0.50)
+        local sTx = saveBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        sTx:SetFont(sTx:GetFont(), 9, "OUTLINE")
+        sTx:SetAllPoints()
+        sTx:SetJustifyH("CENTER")
+        sTx:SetText("Save")
         saveBtn:Hide()
         saveBtn:SetScript("OnClick", function(self)
             if row.setName then
                 IRR_SaveCurrentSet(row.setName)
-                -- Keep the selection on this set after overwrite
                 selectedSet = row.setName
                 IRR_UpdateSetsList()
             end
@@ -382,10 +399,12 @@ function IRR_BuildUI()
     f:SetSize(FRAME_W, FRAME_H)
     f:SetFrameStrata("DIALOG")
     f:SetMovable(true)
-    f:EnableMouse(true)
+    f:EnableMouse(false)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop",  f.StopMovingOrSizing)
+    f:HookScript("OnShow", function(self) self:EnableMouse(true)  end)
+    f:HookScript("OnHide", function(self) self:EnableMouse(false) end)
     f:Hide()
 
     -- Restore saved position
