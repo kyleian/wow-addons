@@ -221,8 +221,6 @@ function SlyBag_BuildUI()
     f:SetBackdropColor(0.07, 0.07, 0.10, 0.96)
     f:SetBackdropBorderColor(0.30, 0.30, 0.40, 1)
 
-    tinsert(UISpecialFrames, "SlyBagFrame")
-
     f:Hide()
 
     -- ---- Header ----
