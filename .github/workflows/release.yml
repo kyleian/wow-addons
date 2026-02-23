@@ -1,5 +1,6 @@
 name: Release
 
+# Triggered by any tag push (e.g. git tag -a "1.0.0" -m "..." && git push origin 1.0.0)
 on:
   push:
     tags:
@@ -8,34 +9,55 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        addon:
-          - SlyAtlasLoot
-          - SlyBag
-          - SlyChar
-          - SlyItemizer
-          - SlyLoot
-          - SlyMetrics
-          - SlyMount
-          - SlyRepair
-          - SlySlot
-          - SlySuite
-          - SlyUF
-          - SlyWeakAuras
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Package ${{ matrix.addon }}
-        uses: BigWigsMods/packager@v2
+      - name: Get tag name
+        id: tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      # Build a single zip: SlySuite-1.0.0.zip
+      # Contains all Sly* addon folders at the top level so the user
+      # extracts straight into Interface/AddOns/.
+      - name: Build zip
+        run: |
+          STAGING="SlySuite-${{ steps.tag.outputs.TAG }}"
+          mkdir -p "$STAGING"
+          for dir in addons/Sly*/; do
+            cp -r "$dir" "$STAGING/$(basename $dir)"
+          done
+          zip -r "${STAGING}.zip" "$STAGING/"
+          echo "ZIP=${STAGING}.zip" >> "$GITHUB_OUTPUT"
+        id: build
+
+      # Create a GitHub Release with the zip attached
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.build.outputs.ZIP }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Upload to CurseForge (only runs if CF_API_KEY secret is set)
+      # Steps to enable:
+      #   1. Create the project at authors.curseforge.com → get a numeric Project ID
+      #   2. Create an API token at authors.curseforge.com → "My API Tokens"
+      #   3. Add CF_API_KEY and CF_PROJECT_ID as repo secrets in GitHub Settings → Secrets
+      - name: Upload to CurseForge
+        if: ${{ secrets.CF_API_KEY != '' }}
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          package-directory: addons/${{ matrix.addon }}
-          release-type: curseforge,github
+          CF_PROJECT_ID: ${{ secrets.CF_PROJECT_ID }}
+          TAG: ${{ steps.tag.outputs.TAG }}
+          ZIP: ${{ steps.build.outputs.ZIP }}
+        run: |
+          # TBC Anniversary game version ID on CurseForge  = 9551 (update if wrong)
+          GAME_VERSION_ID=9551
+          curl -sf -X POST \
+            -H "X-Api-Token: $CF_API_KEY" \
+            -F "metadata={\"changelog\":\"See GitHub release notes\",\"changelogType\":\"text\",\"displayName\":\"SlySuite $TAG\",\"gameVersions\":[$GAME_VERSION_ID],\"releaseType\":\"release\"}" \
+            -F "file=@$ZIP" \
+            "https://www.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file"

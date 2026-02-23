@@ -26,27 +26,44 @@ A suite of custom World of Warcraft addons for **TBC Anniversary** (Interface 20
 - Optional: [WeakAuras 2](https://www.curseforge.com/wow/addons/weakauras-2) for SlyWeakAuras
 - Optional: ItemRackRevived for SlyChar gear sets / SlyItemizer
 
+## Suite management
+
+All addons are controlled through the **SlySuite** panel (`/sly`). Each sub-addon registers itself with SlySuite; from the panel you can:
+
+- **Toggle** any sub-addon on/off at runtime
+- See **status** (OK / Error / Disabled / Loading) per addon
+- View **error details** and retry failed addons
+- Open any addon's panel directly via its **Open ▶** button
+
+Disabling an addon in the panel suppresses its initialization — a full `/reload` is needed to truly unload its code from memory (same behaviour as DBM modules).
+
 ## Installation
 
 ### From CurseForge / GitHub Releases
-Download the latest zip from the [Releases](../../releases) page and extract to:
+Download the latest `SlySuite-x.x.x.zip` from the [Releases](../../releases) page and extract it into:
 ```
 World of Warcraft\_anniversary_\Interface\AddOns\
 ```
+This drops all `Sly*` addon folders into AddOns at once. Enable/disable individual modules using `/sly` inside the game.
 
-### Manual
-Clone this repo and copy the addon folders from `addons/` into your AddOns directory.
+### Manual (from source)
+Clone this repo and copy all folders from `addons/` into your AddOns directory.
 
 ## Releasing
 
-Releases are automated via GitHub Actions using the [BigWigs Packager](https://github.com/BigWigsMods/packager). Tag a commit to trigger a build:
+Tag a commit to trigger the GitHub Action, which automatically builds `SlySuite-{tag}.zip` and attaches it to a GitHub Release:
 
 ```bash
 git tag -a "1.0.0" -m "Release 1.0.0"
 git push origin 1.0.0
 ```
 
-Each addon is packaged and uploaded to CurseForge automatically (requires `CF_API_KEY` secret set in the repo settings).
+To also publish to CurseForge automatically, add two repo secrets (**Settings → Secrets → Actions**):
+
+| Secret | Value |
+|---|---|
+| `CF_API_KEY` | Your CurseForge API token (authors.curseforge.com → My API Tokens) |
+| `CF_PROJECT_ID` | Numeric project ID from your CurseForge project URL |
 
 ## License
 
