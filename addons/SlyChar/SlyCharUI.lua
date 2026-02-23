@@ -1591,19 +1591,10 @@ function SC_BuildMain()
     BuildWingFrame(f)
     SlyCharMainFrame = f
 
-    -- Escape key: only capture when visible so the game menu still works
-    -- when SlyChar is closed. EnableKeyboard is toggled with show/hide.
-    f:EnableKeyboard(false)
-    f:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            self:Hide()
-            self:SetPropagateKeyboardInput(false)
-        else
-            self:SetPropagateKeyboardInput(true)
-        end
-    end)
-    f:HookScript("OnShow", function(self) self:EnableKeyboard(true) end)
-    f:HookScript("OnHide", function(self) self:EnableKeyboard(false) end)
+    -- Register with UISpecialFrames so Escape closes this frame when shown.
+    -- CloseWindows() skips hidden frames, so the game menu still opens normally
+    -- when SlyChar is not visible.
+    tinsert(UISpecialFrames, "SlyCharMainFrame")
 
     SC_SwitchTab(SC.db.lastTab or "stats")
 end
