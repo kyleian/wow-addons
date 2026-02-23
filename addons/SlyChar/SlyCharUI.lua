@@ -504,6 +504,7 @@ local function BuildSlot(parent, slotId, label, x, y)
             GameTooltip:AddLine("Left-click: swap gear", 0.5, 0.5, 0.5)
             GameTooltip:AddLine("Shift+click: socket gems", 0.5, 0.5, 0.5)
             GameTooltip:AddLine("Drag: move to trade/bank", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine("Enchanting: use default char frame (C key)", 0.45, 0.45, 0.45)
         else
             GameTooltip:SetText(label, 0.65, 0.65, 0.65)
             GameTooltip:AddLine("Empty slot", 0.4, 0.4, 0.4)
@@ -522,16 +523,19 @@ local function BuildSlot(parent, slotId, label, x, y)
         if IsInventoryItemLocked(slotId) then return end
         GameTooltip:Hide()
         SC_HidePicker()
-        PickupInventoryItem(slotId)
-        UpdateSlot(slotWidgets[slotId], slotId)
+        local ok = pcall(PickupInventoryItem, slotId)
+        if ok then UpdateSlot(slotWidgets[slotId], slotId) end
     end)
 
     -- Drop ON: equip whatever is on the cursor (dragged from bags/bank)
+    -- Skip if cursor holds an enchant — protected action; use default char frame.
     btn:SetScript("OnReceiveDrag", function(self)
-        if not GetCursorInfo() and not SpellIsTargeting() then return end
+        local ctype = GetCursorInfo()
+        if not ctype then return end
+        if ctype == "enchant" or ctype == "spell" then return end
         GameTooltip:Hide()
-        PickupInventoryItem(slotId)
-        UpdateSlot(slotWidgets[slotId], slotId)
+        local ok, err = pcall(PickupInventoryItem, slotId)
+        if ok then UpdateSlot(slotWidgets[slotId], slotId) end
     end)
 
     btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -549,14 +553,17 @@ local function BuildSlot(parent, slotId, label, x, y)
             -- Weapon stone / temp enchant: stone use triggers SpellIsTargeting.
             -- Apply it to this slot by targeting with PickupInventoryItem.
             if SpellIsTargeting() then
-                PickupInventoryItem(slotId)
-                UpdateSlot(slotWidgets[slotId], slotId)
+                local ok = pcall(PickupInventoryItem, slotId)
+                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
                 return
             end
-            -- If cursor has an item (dragged from bag), equip it
-            if GetCursorInfo() then
-                PickupInventoryItem(slotId)
-                UpdateSlot(slotWidgets[slotId], slotId)
+            -- If cursor has an item (dragged from bag), equip it.
+            -- Skip enchant/spell cursors — those are protected; use default char frame.
+            local ctype = GetCursorInfo()
+            if ctype then
+                if ctype == "enchant" or ctype == "spell" then return end
+                local ok = pcall(PickupInventoryItem, slotId)
+                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
                 return
             end
             -- Toggle picker
