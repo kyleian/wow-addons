@@ -120,16 +120,18 @@ function SlySlot_BuildUI()
     f:SetBackdropColor(0.07, 0.07, 0.10, 0.96)
     f:SetBackdropBorderColor(0.30, 0.30, 0.40, 1)
 
-    -- Escape
-    f:EnableKeyboard(true)
+    -- Escape key: only active when frame is visible
+    f:EnableKeyboard(false)
     f:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" and self:IsShown() then
+        if key == "ESCAPE" then
             self:Hide()
             self:SetPropagateKeyboardInput(false)
         else
             self:SetPropagateKeyboardInput(true)
         end
     end)
+    f:HookScript("OnShow", function(self) self:EnableKeyboard(true) end)
+    f:HookScript("OnHide", function(self) self:EnableKeyboard(false) end)
 
     f:Hide()
 

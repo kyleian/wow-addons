@@ -1591,18 +1591,19 @@ function SC_BuildMain()
     BuildWingFrame(f)
     SlyCharMainFrame = f
 
-    -- Handle Escape key: consume it (close frame) only when we're visible.
-    -- Using EnableKeyboard + SetPropagateKeyboardInput so the key falls
-    -- through to WoW's normal handling (game menu) when we are hidden.
-    f:EnableKeyboard(true)
+    -- Escape key: only capture when visible so the game menu still works
+    -- when SlyChar is closed. EnableKeyboard is toggled with show/hide.
+    f:EnableKeyboard(false)
     f:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" and self:IsShown() then
+        if key == "ESCAPE" then
             self:Hide()
             self:SetPropagateKeyboardInput(false)
         else
             self:SetPropagateKeyboardInput(true)
         end
     end)
+    f:HookScript("OnShow", function(self) self:EnableKeyboard(true) end)
+    f:HookScript("OnHide", function(self) self:EnableKeyboard(false) end)
 
     SC_SwitchTab(SC.db.lastTab or "stats")
 end
