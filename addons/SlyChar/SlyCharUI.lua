@@ -1622,7 +1622,7 @@ function SC_BuildMain()
 
     local btnStrip = CreateFrame("Frame", nil, f)
     btnStrip:SetSize(BTN_STRIP_W, FRAME_H - HDR_H - FOOT_H)
-    btnStrip:SetPoint("TOPLEFT", f, "TOPLEFT", CHAR_W + 2 + SIDE_W, -HDR_H)
+    btnStrip:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -HDR_H)
     FillBg(btnStrip, 0.05, 0.04, 0.08, 1)
 
     local STRIP_BTNS = {
