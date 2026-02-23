@@ -5,6 +5,10 @@ build/
 # WTF backups (can be large)
 wtf-backups/
 
+# Internal Copilot/AI context (not for public repo)
+.claude/
+COPILOT_CONTEXT.md
+
 # Saved variables snapshots (optional - can be tracked if desired)
 # wtf-configs/
 

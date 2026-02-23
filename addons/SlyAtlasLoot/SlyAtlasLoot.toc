@@ -2,6 +2,8 @@
 ## Title: SlyAtlasLoot
 ## Notes: AtlasLoot drop rate integration — tooltip drop %, target-aware rates, item search panel.
 ## Version: 1.0.0
+## X-Curse-Project-ID: 0
+## Author: Sly
 ## OptionalDependencies: SlySuite, AtlasLootClassic, AtlasLootClassic_DungeonsAndRaids
 ## SavedVariables: SlyAtlasLootDB
 

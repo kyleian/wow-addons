@@ -1,0 +1,15 @@
+# Normalize line endings to LF in the repo
+* text=auto eol=lf
+
+# Lua and WoW-specific files
+*.lua text eol=lf
+*.toc text eol=lf
+*.pkgmeta text eol=lf
+
+# Docs
+*.md text eol=lf
+*.txt text eol=lf
+
+# Windows scripts (keep CRLF)
+*.ps1 text eol=crlf
+*.bat text eol=crlf

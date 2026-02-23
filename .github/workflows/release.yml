@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        addon:
+          - SlyAtlasLoot
+          - SlyBag
+          - SlyChar
+          - SlyItemizer
+          - SlyLoot
+          - SlyMetrics
+          - SlyMount
+          - SlyRepair
+          - SlySlot
+          - SlySuite
+          - SlyUF
+          - SlyWeakAuras
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Package ${{ matrix.addon }}
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          package-directory: addons/${{ matrix.addon }}
+          release-type: curseforge,github

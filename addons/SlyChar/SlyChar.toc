@@ -2,6 +2,8 @@
 ## Title: SlyChar
 ## Notes: Enhanced character sheet — movable CharacterFrame + gear picker + Stats, Gear Sets, Reputation, Skills tabs.
 ## Version: 1.1.0
+## X-Curse-Project-ID: 0
+## Author: Sly
 ## OptionalDependencies: SlySuite, ExtendedCharStats, ItemRackRevived
 ## SavedVariables: SlyCharDB
 

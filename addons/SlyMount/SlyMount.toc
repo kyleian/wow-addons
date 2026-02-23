@@ -2,6 +2,7 @@
 ## Title: Sly Mount
 ## Notes: Favorite mounts list with random pick keybind. Zone-aware (ground vs flying). /slymount to open.
 ## Version: 1.0.0
+## X-Curse-Project-ID: 0
 ## Author: Custom
 ## OptionalDependencies: SlySuite
 ## SavedVariables: SlyMountDB

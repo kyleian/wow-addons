@@ -2,6 +2,7 @@
 ## Title: Sly Suite
 ## Notes: Addon manager and error sandbox for the Sly addon family. /sly to open.
 ## Version: 1.0.0
+## X-Curse-Project-ID: 0
 ## Author: Custom
 ## SavedVariables: SlySuiteDB
 
