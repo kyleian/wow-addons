@@ -181,6 +181,7 @@ local function RefreshSetRow(idx, name)
         row:SetAlpha(1.0)
         row:EnableMouse(true)
         row.setName = name
+        if row.saveBtn then row.saveBtn:Show() end
 
         -- Highlight selected
         if selectedSet == name then
@@ -195,6 +196,7 @@ local function RefreshSetRow(idx, name)
         row:EnableMouse(false)
         row.setName = nil
         row.highlight:Hide()
+        if row.saveBtn then row.saveBtn:Hide() end
     end
 end
 
@@ -253,10 +255,26 @@ local function CreateSetsPanel(parent, xOff, yOff, availableH)
         nameTxt:SetTextColor(0.9, 0.9, 0.9)
         row.nameTxt = nameTxt
 
-        -- Item count
+        -- Per-row Save button (overwrites this set with current gear)
+        local saveBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        saveBtn:SetSize(36, 18)
+        saveBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        saveBtn:SetText("Save")
+        saveBtn:Hide()
+        saveBtn:SetScript("OnClick", function(self)
+            if row.setName then
+                IRR_SaveCurrentSet(row.setName)
+                -- Keep the selection on this set after overwrite
+                selectedSet = row.setName
+                IRR_UpdateSetsList()
+            end
+        end)
+        row.saveBtn = saveBtn
+
+        -- Item count (shifted left to leave room for the Save button)
         local countTxt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         countTxt:SetFont(countTxt:GetFont(), 9, "")
-        countTxt:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        countTxt:SetPoint("RIGHT", saveBtn, "LEFT", -4, 0)
         countTxt:SetTextColor(0.55, 0.55, 0.55)
         row.countTxt = countTxt
 
