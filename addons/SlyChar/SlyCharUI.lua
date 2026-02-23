@@ -27,7 +27,7 @@ SlyCharMainFrame = nil   -- global ref, set at end of SC_BuildMain
 
 -- ---- Layout ----
 local FRAME_W      = 732
-local FRAME_H      = 462
+local FRAME_H      = 448
 local HDR_H        = 30
 local FOOT_H       = 20
 local CHAR_W       = 370
@@ -46,7 +46,7 @@ local MODEL_W  = COL_R - PAD - MODEL_X
 local MODEL_H  = 280
 
 local COL_H     = 8 * SLOT_S + 7 * SLOT_GAP
-local WPN_Y     = SLOT_TOP - COL_H - 10
+local WPN_Y     = SLOT_TOP - COL_H - 6
 local WPN_GAP   = 10
 local WPN_TOTAL = 3 * SLOT_S + 2 * WPN_GAP
 local WPN_START = math.floor((CHAR_W - WPN_TOTAL) / 2)
