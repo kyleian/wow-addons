@@ -147,6 +147,16 @@ function IRR_LoadSet(name)
         end
     end
 
+    -- Switch dual spec if linked
+    local linkedSpec = IRR_GetSpecLink(name)
+    if linkedSpec and GetNumTalentGroups and GetNumTalentGroups() >= 2 then
+        local active = GetActiveTalentGroup and GetActiveTalentGroup() or 1
+        if active ~= linkedSpec then
+            SetActiveTalentGroup(linkedSpec)
+            print("|cff00ccff[ItemRack Revived]|r Switched to Spec " .. linkedSpec .. ".")
+        end
+    end
+
     -- Report
     if #missing == 0 then
         print("|cff00ccff[ItemRack Revived]|r Set |cffffcc00" .. name
@@ -159,6 +169,21 @@ function IRR_LoadSet(name)
             print("  |cffff4444- " .. itemName .. "|r")
         end
     end
+end
+
+-- -------------------------------------------------------
+-- IRR_SetSpecLink(name, spec)
+-- Links a dual-spec group (1 or 2) to a set, or clears it (nil).
+-- When IRR_LoadSet is called the linked spec is activated.
+-- -------------------------------------------------------
+function IRR_SetSpecLink(name, spec)
+    if not IRR.db.specLinks then IRR.db.specLinks = {} end
+    IRR.db.specLinks[name] = spec  -- nil clears the link
+end
+
+-- Returns 1, 2, or nil.
+function IRR_GetSpecLink(name)
+    return IRR.db.specLinks and IRR.db.specLinks[name] or nil
 end
 
 -- -------------------------------------------------------

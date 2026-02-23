@@ -721,6 +721,22 @@ local function BuildSetRows(parent)
         eqTx:SetFont(eqTx:GetFont(), 9, "OUTLINE") ; eqTx:SetAllPoints()
         eqTx:SetJustifyH("CENTER") ; eqTx:SetText("Equip")
 
+        -- Spec-link toggle button  (left of Equip)
+        -- Clicking cycles: none → Spec 1 → Spec 2 → none
+        local specBtn = CreateFrame("Button", nil, row)
+        specBtn:SetSize(28, 16)
+        specBtn:SetPoint("RIGHT", eqBtn, "LEFT", -2, 0)
+        specBtn:EnableMouse(false)
+        local specBg = specBtn:CreateTexture(nil, "BACKGROUND")
+        specBg:SetAllPoints() ; specBg:SetColorTexture(0.20, 0.20, 0.25, 0.85)
+        specBtn.bg = specBg
+        local specHl = specBtn:CreateTexture(nil, "HIGHLIGHT")
+        specHl:SetAllPoints() ; specHl:SetColorTexture(1, 1, 1, 0.15)
+        local specTx = specBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        specTx:SetFont(specTx:GetFont(), 8, "OUTLINE") ; specTx:SetAllPoints()
+        specTx:SetJustifyH("CENTER") ; specTx:SetText("--")
+        specBtn.tx = specTx
+
         local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         nm:SetFont(nm:GetFont(), 10, "")
         nm:SetPoint("LEFT", row, "LEFT", 0, 0)
@@ -734,7 +750,7 @@ local function BuildSetRows(parent)
         cnt:SetTextColor(0.4, 0.4, 0.4)
 
         row:Hide()
-        setRowWidgets[i] = {row=row, nm=nm, cnt=cnt, eqBtn=eqBtn, saveBtn=saveBtn, delBtn=delBtn}
+        setRowWidgets[i] = {row=row, nm=nm, cnt=cnt, specBtn=specBtn, eqBtn=eqBtn, saveBtn=saveBtn, delBtn=delBtn}
     end
 end
 
@@ -745,7 +761,7 @@ function SC_RefreshSets()
         local w = setRowWidgets[1]
         if w then
             w.nm:SetText("|cffff8800ItemRackRevived not loaded|r")
-            w.cnt:SetText("") ; w.eqBtn:Hide() ; w.saveBtn:Hide() ; w.delBtn:Hide()
+            w.cnt:SetText("") ; w.eqBtn:Hide() ; w.saveBtn:Hide() ; w.specBtn:Hide() ; w.delBtn:Hide()
             w.row:Show()
         end
         return
@@ -756,7 +772,7 @@ function SC_RefreshSets()
         local w = setRowWidgets[1]
         if w then
             w.nm:SetText("|cff666666No sets saved|r")
-            w.cnt:SetText("") ; w.eqBtn:Hide() ; w.saveBtn:Hide() ; w.delBtn:Hide()
+            w.cnt:SetText("") ; w.eqBtn:Hide() ; w.saveBtn:Hide() ; w.specBtn:Hide() ; w.delBtn:Hide()
             w.row:Show()
         end
         return
@@ -771,6 +787,48 @@ function SC_RefreshSets()
 
         w.nm:SetText("|cffdddddd" .. name .. "|r")
         w.cnt:SetText(string.format("|cff555555(%d)|r", n))
+
+        -- Spec-link toggle
+        local function UpdateSpecBtn()
+            local spec = IRR_GetSpecLink and IRR_GetSpecLink(name)
+            local hasDualSpec = GetNumTalentGroups and GetNumTalentGroups() >= 2
+            if not hasDualSpec then
+                w.specBtn:Hide()
+            else
+                w.specBtn:EnableMouse(true)
+                w.specBtn:Show()
+                if spec == 1 then
+                    w.specBtn.tx:SetText("|cffffd700S1|r")
+                    w.specBtn.bg:SetColorTexture(0.40, 0.32, 0.05, 0.90)
+                elseif spec == 2 then
+                    w.specBtn.tx:SetText("|cff66ccffS2|r")
+                    w.specBtn.bg:SetColorTexture(0.05, 0.25, 0.45, 0.90)
+                else
+                    w.specBtn.tx:SetText("|cff666666--|r")
+                    w.specBtn.bg:SetColorTexture(0.20, 0.20, 0.25, 0.85)
+                end
+            end
+        end
+        UpdateSpecBtn()
+        w.specBtn:SetScript("OnClick", function()
+            if not IRR_SetSpecLink then return end
+            local cur = IRR_GetSpecLink and IRR_GetSpecLink(name)
+            local next = (cur == nil and 1) or (cur == 1 and 2) or nil
+            IRR_SetSpecLink(name, next)
+            UpdateSpecBtn()
+        end)
+        w.specBtn:SetScript("OnEnter", function(self)
+            local spec = IRR_GetSpecLink and IRR_GetSpecLink(name)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Spec Link", 1, 0.82, 0)
+            if spec then
+                GameTooltip:AddLine("Equipping this set will switch to Spec " .. spec .. ".", 0.8, 0.8, 0.8, true)
+            else
+                GameTooltip:AddLine("Click to link a spec (1 or 2).\nWhen set is equipped, that spec activates.", 0.8, 0.8, 0.8, true)
+            end
+            GameTooltip:Show()
+        end)
+        w.specBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         w.eqBtn:EnableMouse(true)
         w.eqBtn:SetScript("OnClick", function()
