@@ -109,6 +109,13 @@
       "description": "Unit frames — player, target, target-of-target, party. Replaces ZPerl. /slyuf to toggle.",
       "sourceDir": "addons\\SlyUF",
       "version": "1.0.0"
+    },
+    {
+      "name": "SlyMetrics",
+      "enabled": true,
+      "description": "Damage + healing meter plus threat display. Multiple tab panels (DPS/HPS/Threat) in one draggable window. Replaces Details + TinyThreat. /sm or /slymetrics",
+      "sourceDir": "addons\\SlyMetrics",
+      "version": "1.0.0"
     }
   ],
   "deployment": {

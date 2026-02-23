@@ -1,0 +1,10 @@
+## Interface: 20505
+## Title: Sly Metrics
+## Notes: Damage meter + threat meter in one draggable window. /slymetrics to toggle.
+## Version: 1.0.0
+## Author: Custom
+## SavedVariables: SlyMetricsDB
+## OptionalDeps: SlySuite
+
+SlyMetrics.lua
+SlyMetricsUI.lua
