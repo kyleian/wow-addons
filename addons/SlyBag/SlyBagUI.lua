@@ -202,7 +202,7 @@ function SlyBag_BuildUI()
     f:SetSize(FRAME_W, FRAME_H)
     f:SetPoint(db.position.point, UIParent, db.position.point,
                db.position.x, db.position.y)
-    f:EnableMouse(true)
+    f:EnableMouse(false)   -- toggled by OnShow/OnHide; hidden frames must not capture input
     f:SetMovable(true)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
@@ -211,6 +211,8 @@ function SlyBag_BuildUI()
         local p, _, _, x, y = self:GetPoint()
         SlyBag.db.position = { point = p, x = x, y = y }
     end)
+    f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
+    f:HookScript("OnHide", function(self) self:EnableMouse(false) end)
     f:SetBackdrop({
         bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",

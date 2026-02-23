@@ -57,7 +57,7 @@ local function MakeFrame(name, parent)
     })
     f:SetBackdropColor(0.06, 0.06, 0.09, 0.90)
     f:SetBackdropBorderColor(0.22, 0.22, 0.30, 1)
-    f:EnableMouse(true)
+    f:EnableMouse(false)   -- toggled by OnShow/OnHide; hidden frames must not capture input
     f:SetMovable(true)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
@@ -68,6 +68,8 @@ local function MakeFrame(name, parent)
             SlyUF.db.positions[self:GetName() or "?"] = { point = p, x = x, y = y }
         end
     end)
+    f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
+    f:HookScript("OnHide", function(self) self:EnableMouse(false) end)
     return f
 end
 
@@ -414,8 +416,7 @@ function SlyUF_BuildAll()
     -- Player
     local playerF = BuildUnitFrame("SlyUFPlayer", "player", "LEFT")
     SlyUF.frames.player = playerF
-    -- Always show player frame
-    playerF:Show()
+    -- Player frame shown only via SlyUF.Enable(), not unconditionally here
 
     -- Target
     local targetF = BuildUnitFrame("SlyUFTarget", "target", "RIGHT")
