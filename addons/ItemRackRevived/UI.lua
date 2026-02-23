@@ -221,6 +221,8 @@ local function CreateSetsPanel(parent, xOff, yOff, availableH)
     local rowH    = 26
     local listH   = MAX_SET_ROWS * rowH
 
+    local editBox  -- forward ref; assigned below, captured by row OnClick closures
+
     for i = 1, MAX_SET_ROWS do
         local rowY = listTop - (i - 1) * rowH
 
@@ -258,15 +260,16 @@ local function CreateSetsPanel(parent, xOff, yOff, availableH)
         countTxt:SetTextColor(0.55, 0.55, 0.55)
         row.countTxt = countTxt
 
-        -- Left-click: select + load
+        -- Left-click: select + load; Right-click: select only
         row:SetScript("OnClick", function(self, btn)
             if btn == "LeftButton" and self.setName then
                 selectedSet = self.setName
+                if editBox then editBox:SetText(self.setName) end
                 IRR_UpdateSetsList()
                 IRR_LoadSet(self.setName)
             elseif btn == "RightButton" and self.setName then
-                -- Right-click: select without loading
                 selectedSet = self.setName
+                if editBox then editBox:SetText(self.setName) end
                 IRR_UpdateSetsList()
             end
         end)
@@ -285,7 +288,7 @@ local function CreateSetsPanel(parent, xOff, yOff, availableH)
     saveLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff + 6, sepY - 10)
 
     -- EditBox for set name
-    local editBox = CreateFrame("EditBox", "IRRSetNameInput", parent,
+    editBox = CreateFrame("EditBox", "IRRSetNameInput", parent,
         "InputBoxTemplate")
     editBox:SetSize(RIGHT_W - 24, 20)
     editBox:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff + 4, sepY - 26)
@@ -304,10 +307,20 @@ local function CreateSetsPanel(parent, xOff, yOff, availableH)
     saveBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff + 4, sepY - 52)
     saveBtn:SetText("Save Set")
     saveBtn:SetScript("OnClick", function()
-        local name = editBox:GetText()
+        -- Use whatever is in the box (populated on select = overwrite; typed = new)
+        local name = strtrim(editBox:GetText())
+        if name == "" then
+            print("|cff00ccff[ItemRack Revived]|r Select a set to overwrite, or type a name for a new set.")
+            return
+        end
+        local isNew = not IRR_SetExists(name)
         if IRR_SaveCurrentSet(name) then
-            editBox:SetText("")
-            editBox:ClearFocus()
+            selectedSet = name
+            IRR_UpdateSetsList()
+            if isNew then
+                -- Only clear box for brand-new saves; keep name visible after overwrite
+                editBox:ClearFocus()
+            end
         end
     end)
 

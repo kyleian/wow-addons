@@ -214,18 +214,22 @@ function SlySlot_BuildUI()
         return b
     end
 
-    -- Save button
-    MakeBtn(f, "Save Current", rightX, -104, 120, function()
-        local name = strtrim(SlySlotNameBox:GetText())
-        if name == "" then
-            print("|cff00ccff[SlySlot]|r Enter a profile name first.")
+    -- Save button  — overwrites selectedProfile if one is active, else uses name box
+    local saveBtn = MakeBtn(f, "Save", rightX, -104, 120, function()
+        -- If a profile is already selected, overwrite it directly
+        local isOverwrite = (selectedProfile ~= nil)
+        local name = selectedProfile or strtrim(SlySlotNameBox:GetText())
+        if not name or name == "" then
+            print("|cff00ccff[SlySlot]|r Select a profile or enter a name first.")
             return
         end
         local ok, err = SlySlot_SaveProfile(name)
         if ok then
             selectedProfile = name
+            SlySlotNameBox:SetText(name)
             SlySlot_UIRefresh()
-            print("|cff00ccff[SlySlot]|r Saved: |cffffcc00" .. name .. "|r")
+            local verb = isOverwrite and "Overwritten" or "Saved"
+            print("|cff00ccff[SlySlot]|r " .. verb .. ": |cffffcc00" .. name .. "|r")
         else
             print("|cffff4444[SlySlot]|r " .. (err or "Error"))
         end
