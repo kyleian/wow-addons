@@ -682,31 +682,59 @@ local function BuildSetRows(parent)
         bg:SetAllPoints(row)
         bg:SetColorTexture(0, 0, 0, i%2==0 and 0.12 or 0)
 
+        -- Delete button (far right)
+        local delBtn = CreateFrame("Button", nil, row)
+        delBtn:SetSize(16, 16)
+        delBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        delBtn:EnableMouse(false)
+        local delBg = delBtn:CreateTexture(nil, "BACKGROUND")
+        delBg:SetAllPoints() ; delBg:SetColorTexture(0.45, 0.10, 0.10, 0.85)
+        local delHl = delBtn:CreateTexture(nil, "HIGHLIGHT")
+        delHl:SetAllPoints() ; delHl:SetColorTexture(0.70, 0.20, 0.20, 0.50)
+        local delTx = delBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        delTx:SetFont(delTx:GetFont(), 9, "OUTLINE") ; delTx:SetAllPoints()
+        delTx:SetJustifyH("CENTER") ; delTx:SetText("|cffff6666x|r")
+
+        -- Save button
+        local saveBtn = CreateFrame("Button", nil, row)
+        saveBtn:SetSize(36, 16)
+        saveBtn:SetPoint("RIGHT", delBtn, "LEFT", -2, 0)
+        saveBtn:EnableMouse(false)
+        local saveBg = saveBtn:CreateTexture(nil, "BACKGROUND")
+        saveBg:SetAllPoints() ; saveBg:SetColorTexture(0.15, 0.38, 0.60, 0.85)
+        local saveHl = saveBtn:CreateTexture(nil, "HIGHLIGHT")
+        saveHl:SetAllPoints() ; saveHl:SetColorTexture(0.30, 0.55, 0.80, 0.50)
+        local saveTx = saveBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        saveTx:SetFont(saveTx:GetFont(), 9, "OUTLINE") ; saveTx:SetAllPoints()
+        saveTx:SetJustifyH("CENTER") ; saveTx:SetText("Save")
+
+        -- Equip button
+        local eqBtn = CreateFrame("Button", nil, row)
+        eqBtn:SetSize(40, 16)
+        eqBtn:SetPoint("RIGHT", saveBtn, "LEFT", -2, 0)
+        eqBtn:EnableMouse(false)
+        local eqBg = eqBtn:CreateTexture(nil, "BACKGROUND")
+        eqBg:SetAllPoints() ; eqBg:SetColorTexture(0.15, 0.30, 0.15, 0.85)
+        local eqHl = eqBtn:CreateTexture(nil, "HIGHLIGHT")
+        eqHl:SetAllPoints() ; eqHl:SetColorTexture(0.25, 0.55, 0.25, 0.50)
+        local eqTx = eqBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        eqTx:SetFont(eqTx:GetFont(), 9, "OUTLINE") ; eqTx:SetAllPoints()
+        eqTx:SetJustifyH("CENTER") ; eqTx:SetText("Equip")
+
         local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         nm:SetFont(nm:GetFont(), 10, "")
         nm:SetPoint("LEFT", row, "LEFT", 0, 0)
         nm:SetJustifyH("LEFT")
-        nm:SetWidth((SIDE_W - PAD*2 - 16) - 72)
+        nm:SetWidth(160)
 
         local cnt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         cnt:SetFont(cnt:GetFont(), 9, "")
         cnt:SetPoint("LEFT", nm, "RIGHT", 2, 0)
+        cnt:SetJustifyH("LEFT")
         cnt:SetTextColor(0.4, 0.4, 0.4)
 
-        local eqBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        eqBtn:SetSize(44, 16)
-        eqBtn:SetPoint("RIGHT", row, "RIGHT", -20, 0)
-        eqBtn:SetText("Equip")
-        eqBtn:SetNormalFontObject("GameFontNormalSmall")
-
-        local delBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        delBtn:SetSize(16, 16)
-        delBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-        delBtn:SetText("|cffff4444x|r")
-        delBtn:SetNormalFontObject("GameFontNormalSmall")
-
         row:Hide()
-        setRowWidgets[i] = {row=row, nm=nm, cnt=cnt, eqBtn=eqBtn, delBtn=delBtn}
+        setRowWidgets[i] = {row=row, nm=nm, cnt=cnt, eqBtn=eqBtn, saveBtn=saveBtn, delBtn=delBtn}
     end
 end
 
@@ -717,7 +745,7 @@ function SC_RefreshSets()
         local w = setRowWidgets[1]
         if w then
             w.nm:SetText("|cffff8800ItemRackRevived not loaded|r")
-            w.cnt:SetText("") ; w.eqBtn:Hide() ; w.delBtn:Hide()
+            w.cnt:SetText("") ; w.eqBtn:Hide() ; w.saveBtn:Hide() ; w.delBtn:Hide()
             w.row:Show()
         end
         return
@@ -728,7 +756,7 @@ function SC_RefreshSets()
         local w = setRowWidgets[1]
         if w then
             w.nm:SetText("|cff666666No sets saved|r")
-            w.cnt:SetText("") ; w.eqBtn:Hide() ; w.delBtn:Hide()
+            w.cnt:SetText("") ; w.eqBtn:Hide() ; w.saveBtn:Hide() ; w.delBtn:Hide()
             w.row:Show()
         end
         return
@@ -744,6 +772,7 @@ function SC_RefreshSets()
         w.nm:SetText("|cffdddddd" .. name .. "|r")
         w.cnt:SetText(string.format("|cff555555(%d)|r", n))
 
+        w.eqBtn:EnableMouse(true)
         w.eqBtn:SetScript("OnClick", function()
             if IRR_LoadSet then
                 IRR_LoadSet(name)
@@ -752,6 +781,15 @@ function SC_RefreshSets()
             end
         end)
 
+        w.saveBtn:EnableMouse(true)
+        w.saveBtn:SetScript("OnClick", function()
+            if IRR_SaveCurrentSet then
+                IRR_SaveCurrentSet(name)
+                SC_RefreshSets()
+            end
+        end)
+
+        w.delBtn:EnableMouse(true)
         w.delBtn:SetScript("OnClick", function()
             if IRR_DeleteSet then IRR_DeleteSet(name) end
             SC_RefreshSets()
