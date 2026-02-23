@@ -126,6 +126,7 @@ local MAX_SKILL_ROWS = 60
 -- Wing panel state (spellbook wing still built; side-panel tracker handles the rest)
 local wingFrame       = nil
 local wingPanes       = {}
+local honorValues     = {}
 local activeWingKey   = nil
 local wingTitleTx     = nil
 local currentSidePanel      = nil   -- currently open native side panel
@@ -171,7 +172,9 @@ local function SC_BuildPicker()
     f:SetWidth(PICKER_W)
     f:SetHeight(100)
     f:SetFrameStrata("TOOLTIP")
-    f:EnableMouse(true)
+    f:EnableMouse(false)
+    f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
+    f:HookScript("OnHide", function(self) self:EnableMouse(false) end)
     f:Hide()
 
     local bord = f:CreateTexture(nil, "OVERLAY")
@@ -1067,6 +1070,7 @@ function SC_ToggleWing(key)
     if wingTitleTx then wingTitleTx:SetText(key) end
     wingFrame:Show()
     if key == "spells" then SC_RefreshSpells() end
+    if key == "honor"  then SC_RefreshHonor()  end
 end
 
 
@@ -1101,6 +1105,33 @@ function SC_RefreshSpells()
             end
         end
     end
+end
+
+function SC_RefreshHonor()
+    if not honorValues.currHonor then return end
+    local function N(n) return n and n > 0 and format("%d", n) or "0" end
+
+    local honor = UnitHonor and UnitHonor("player") or 0
+    honorValues.currHonor:SetText(honor > 0 and format("%d", honor) or "n/a")
+
+    local arena = GetArenaCurrency and GetArenaCurrency() or 0
+    honorValues.arena:SetText(arena > 0 and format("%d", arena) or "n/a")
+
+    local tdHK, tdCon, wkHK, wkCon, lwHK, lwCon, lfHK =
+        0, 0, 0, 0, 0, 0, 0
+    if GetPVPSessionStats then
+        local a,b,c,d,e,f2,g,h,i,j = GetPVPSessionStats()
+        tdHK = a or 0 ; tdCon = c or 0
+        wkHK = d or 0 ; wkCon = f2 or 0
+        lwHK = g or 0 ; lwCon = i or 0
+        lfHK = j or 0
+    end
+    honorValues.todayHK:SetText(N(tdHK))
+    honorValues.weekHK:SetText(N(wkHK))
+    honorValues.lastHK:SetText(N(lwHK))
+    honorValues.lifeHK:SetText(N(lfHK))
+    honorValues.weekContrib:SetText(wkCon > 0 and format("%d", wkCon) or "\226\128\148")
+    honorValues.lastContrib:SetText(lwCon > 0 and format("%d", lwCon) or "\226\128\148")
 end
 
 local function BuildWingFrame(mainFrame)
@@ -1190,6 +1221,41 @@ local function BuildWingFrame(mainFrame)
         spellRows[i] = {frame=row, lbl=lbl, rank=rank, spellIdx=nil}
     end
 
+    -- ---- Honor Pane ----
+    do
+        local hp = CreateFrame("Frame", nil, f)
+        hp:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+        hp:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+        hp:Hide()
+        FillBg(hp, 0.04, 0.04, 0.07, 1)
+        wingPanes["honor"] = hp
+
+        local function HL(y, text, r, g, b, valX)
+            local lbl = hp:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            lbl:SetFont(lbl:GetFont(), 10, valX and "" or (r == 1 and g == 0.82 and "OUTLINE" or ""))
+            lbl:SetPoint("TOPLEFT", hp, "TOPLEFT", valX or PAD, y)
+            lbl:SetJustifyH("LEFT")
+            lbl:SetTextColor(r or 0.9, g or 0.9, b or 0.9)
+            lbl:SetText(text)
+            return lbl
+        end
+        local vX = 170  -- x offset for value column
+
+        HL( -6,  "Points",        1.00, 0.82, 0.20)
+        HL(-24,  "Current Honor:", 0.65, 0.65, 0.70) ; honorValues.currHonor = HL(-24,  "—", 1,1,1, vX)
+        HL(-42,  "Arena Points:",  0.65, 0.65, 0.70) ; honorValues.arena     = HL(-42,  "—", 1,1,1, vX)
+
+        HL(-64,  "Kills",          1.00, 0.82, 0.20)
+        HL(-82,  "Today:",         0.65, 0.65, 0.70) ; honorValues.todayHK   = HL(-82,  "—", 1,1,1, vX)
+        HL(-100, "This Week:",     0.65, 0.65, 0.70) ; honorValues.weekHK    = HL(-100, "—", 1,1,1, vX)
+        HL(-118, "Last Week:",     0.65, 0.65, 0.70) ; honorValues.lastHK    = HL(-118, "—", 1,1,1, vX)
+        HL(-136, "Lifetime:",      0.65, 0.65, 0.70) ; honorValues.lifeHK    = HL(-136, "—", 1,1,1, vX)
+
+        HL(-158, "Contribution",   1.00, 0.82, 0.20)
+        HL(-176, "This Week:",     0.65, 0.65, 0.70) ; honorValues.weekContrib = HL(-176, "—", 1,1,1, vX)
+        HL(-194, "Last Week:",     0.65, 0.65, 0.70) ; honorValues.lastContrib = HL(-194, "—", 1,1,1, vX)
+    end
+
     -- Wing footer stripe
     local wingFoot = CreateFrame("Frame", nil, f)
     wingFoot:SetSize(WING_W, FOOT_H)
@@ -1207,7 +1273,7 @@ function SC_BuildMain()
     f:SetSize(FRAME_W, FRAME_H)
     f:SetFrameStrata("DIALOG")
     f:SetMovable(true)
-    f:EnableMouse(true)
+    f:EnableMouse(false)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", function(self)
@@ -1497,6 +1563,10 @@ function SC_BuildMain()
           fn=function()
               SC_OpenPanel("Blizzard_AchievementUI", "AchievementFrame", ToggleAchievementFrame)
           end },
+        { tip="Honor",        desc="View honor & PvP stats",  lbl="Hon", r=1.00, g=0.25, b=0.35,
+          fn=function()
+              SC_ToggleWing("honor")
+          end },
     }
 
     local bSz = BTN_STRIP_W - 6  -- 26px buttons with 3px margin each side
@@ -1580,9 +1650,11 @@ function SC_BuildMain()
     ftxt:SetFont(ftxt:GetFont(), 8, "")
     ftxt:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     ftxt:SetTextColor(0.3, 0.3, 0.38)
-    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·PvP·G·A·×")
+    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·PvP·G·A·Hon·×")
 
-    f:HookScript("OnHide", function()
+    f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
+    f:HookScript("OnHide", function(self)
+        self:EnableMouse(false)
         SC_HidePicker()
         SC_CloseSidePanel()
         if wingFrame then wingFrame:Hide() ; activeWingKey = nil end
@@ -1590,11 +1662,6 @@ function SC_BuildMain()
 
     BuildWingFrame(f)
     SlyCharMainFrame = f
-
-    -- Register with UISpecialFrames so Escape closes this frame when shown.
-    -- CloseWindows() skips hidden frames, so the game menu still opens normally
-    -- when SlyChar is not visible.
-    tinsert(UISpecialFrames, "SlyCharMainFrame")
 
     SC_SwitchTab(SC.db.lastTab or "stats")
 end
