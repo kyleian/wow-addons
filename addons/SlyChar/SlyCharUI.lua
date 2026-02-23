@@ -1109,29 +1109,30 @@ end
 
 function SC_RefreshHonor()
     if not honorValues.currHonor then return end
-    local function N(n) return n and n > 0 and format("%d", n) or "0" end
+    local function N(n) return (n and n > 0) and format("%d", n) or "0" end
 
-    local honor = UnitHonor and UnitHonor("player") or 0
-    honorValues.currHonor:SetText(honor > 0 and format("%d", honor) or "n/a")
+    -- TBC Anniversary: UnitHonorPoints / UnitArenaPoints
+    local honor = (UnitHonorPoints and UnitHonorPoints("player")) or 0
+    local arena = (UnitArenaPoints and UnitArenaPoints("player")) or 0
+    honorValues.currHonor:SetText(format("%d", honor))
+    honorValues.arena:SetText(format("%d", arena))
 
-    local arena = GetArenaCurrency and GetArenaCurrency() or 0
-    honorValues.arena:SetText(arena > 0 and format("%d", arena) or "n/a")
+    -- Each PVP stats function returns (honorableKills, dishonorableKills)
+    local sessHK  = 0
+    local wkHK    = 0
+    local lwHK    = 0
+    local lifeHK  = 0
+    if GetPVPSessionStats  then local a = GetPVPSessionStats()  ; sessHK  = a or 0 end
+    if GetPVPThisWeekStats then local a = GetPVPThisWeekStats() ; wkHK    = a or 0 end
+    if GetPVPLastWeekStats then local a = GetPVPLastWeekStats() ; lwHK    = a or 0 end
+    if GetPVPLifetimeStats then local a = GetPVPLifetimeStats() ; lifeHK  = a or 0 end
 
-    local tdHK, tdCon, wkHK, wkCon, lwHK, lwCon, lfHK =
-        0, 0, 0, 0, 0, 0, 0
-    if GetPVPSessionStats then
-        local a,b,c,d,e,f2,g,h,i,j = GetPVPSessionStats()
-        tdHK = a or 0 ; tdCon = c or 0
-        wkHK = d or 0 ; wkCon = f2 or 0
-        lwHK = g or 0 ; lwCon = i or 0
-        lfHK = j or 0
-    end
-    honorValues.todayHK:SetText(N(tdHK))
+    honorValues.todayHK:SetText(N(sessHK))
     honorValues.weekHK:SetText(N(wkHK))
     honorValues.lastHK:SetText(N(lwHK))
-    honorValues.lifeHK:SetText(N(lfHK))
-    honorValues.weekContrib:SetText(wkCon > 0 and format("%d", wkCon) or "\226\128\148")
-    honorValues.lastContrib:SetText(lwCon > 0 and format("%d", lwCon) or "\226\128\148")
+    honorValues.lifeHK:SetText(N(lifeHK))
+    honorValues.weekContrib:SetText("\226\128\148")
+    honorValues.lastContrib:SetText("\226\128\148")
 end
 
 local function BuildWingFrame(mainFrame)
