@@ -41,20 +41,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Upload to CurseForge (only runs if CF_API_KEY secret is set)
-      # Steps to enable:
-      #   1. Create the project at authors.curseforge.com → get a numeric Project ID
-      #   2. Create an API token at authors.curseforge.com → "My API Tokens"
-      #   3. Add CF_API_KEY and CF_PROJECT_ID as repo secrets in GitHub Settings → Secrets
+      # Upload to CurseForge (skipped automatically if secrets are not set)
       - name: Upload to CurseForge
-        if: ${{ secrets.CF_API_KEY != '' }}
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           CF_PROJECT_ID: ${{ secrets.CF_PROJECT_ID }}
           TAG: ${{ steps.tag.outputs.TAG }}
           ZIP: ${{ steps.build.outputs.ZIP }}
         run: |
-          # TBC Anniversary game version ID on CurseForge  = 9551 (update if wrong)
+          if [ -z "$CF_API_KEY" ] || [ -z "$CF_PROJECT_ID" ]; then
+            echo "CF secrets not set — skipping CurseForge upload."
+            exit 0
+          fi
+          # TBC Anniversary game version ID on CurseForge = 9551 (update if wrong)
           GAME_VERSION_ID=9551
           curl -sf -X POST \
             -H "X-Api-Token: $CF_API_KEY" \
