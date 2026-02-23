@@ -1,0 +1,10 @@
+## Interface: 20505
+## Title: Sly UF
+## Notes: Clean unit frames — player, target, ToT, party. Replaces ZPerl. /slyuf to toggle.
+## Version: 1.0.0
+## Author: Custom
+## SavedVariables: SlyUFDB
+## OptionalDeps: SlySuite
+
+SlyUF.lua
+SlyUFUI.lua

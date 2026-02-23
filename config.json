@@ -102,6 +102,13 @@
       "description": "Action bar profile manager — save, load, export, and import action bar layouts per character. Replaces Myslot. /slyslot",
       "sourceDir": "addons\\SlySlot",
       "version": "1.0.0"
+    },
+    {
+      "name": "SlyUF",
+      "enabled": true,
+      "description": "Unit frames — player, target, target-of-target, party. Replaces ZPerl. /slyuf to toggle.",
+      "sourceDir": "addons\\SlyUF",
+      "version": "1.0.0"
     }
   ],
   "deployment": {
