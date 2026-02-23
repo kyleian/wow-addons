@@ -1,0 +1,8 @@
+## Interface: 20505
+## Title: GearScore
+## Notes: Calculates and displays gear score on tooltips and the character frame. /gs to open.
+## Version: 1.0.0
+## Author: Custom
+## SavedVariables: GearScoreDB
+
+GearScore.lua

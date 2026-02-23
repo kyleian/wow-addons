@@ -1,0 +1,9 @@
+## Interface: 20505
+## Title: SlyAtlasLoot
+## Notes: AtlasLoot drop rate integration — tooltip drop %, target-aware rates, item search panel.
+## Version: 1.0.0
+## OptionalDependencies: SlySuite, AtlasLootClassic, AtlasLootClassic_DungeonsAndRaids
+## SavedVariables: SlyAtlasLootDB
+
+SlyAtlasLoot.lua
+SlyAtlasLootUI.lua

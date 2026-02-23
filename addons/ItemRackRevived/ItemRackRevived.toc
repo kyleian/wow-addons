@@ -1,0 +1,10 @@
+## Interface: 20505
+## Title: ItemRack Revived
+## Notes: Gear set manager with a movable character panel. /itemrack to open.
+## Version: 1.0.0
+## Author: Custom
+## SavedVariables: ItemRackRevivedDB
+
+ItemRackRevived.lua
+Sets.lua
+UI.lua

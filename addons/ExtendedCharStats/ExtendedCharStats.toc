@@ -1,0 +1,9 @@
+## Interface: 20505
+## Title: ExtendedCharStats
+## Notes: Movable panel showing extended character statistics: spell power, crit, hit, haste, expertise, resilience, armor pen. /estats to open.
+## Version: 1.0.0
+## Author: Custom
+## OptionalDependencies: SlySuite
+## SavedVariables: ExtendedCharStatsDB
+
+ExtendedCharStats.lua

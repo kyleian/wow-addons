@@ -1,0 +1,10 @@
+## Interface: 20505
+## Title: Sly Mount
+## Notes: Favorite mounts list with random pick keybind. Zone-aware (ground vs flying). /slymount to open.
+## Version: 1.0.0
+## Author: Custom
+## OptionalDependencies: SlySuite
+## SavedVariables: SlyMountDB
+
+SlyMount.lua
+SlyMountUI.lua

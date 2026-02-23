@@ -1,0 +1,11 @@
+## Interface: 20505
+## Title: Sly Itemizer
+## Notes: Item comparison, DPS score delta, enchant/gem suggestions. Works with ItemRack Revived. /slyitem
+## Version: 1.0.0
+## Author: Custom
+## OptionalDependencies: SlySuite, ItemRackRevived
+## SavedVariables: SlyItemizerDB
+
+SlyItemizer.lua
+SlyItemizerDB.lua
+SlyItemizerUI.lua

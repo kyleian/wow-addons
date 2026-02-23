@@ -1,0 +1,105 @@
+{
+  "wow": {
+    "installPath": "C:\\Program Files (x86)\\World of Warcraft",
+    "clientDir": "_anniversary_",
+    "addonsPath": "C:\\Program Files (x86)\\World of Warcraft\\_anniversary_\\Interface\\AddOns",
+    "wtfPath": "C:\\Program Files (x86)\\World of Warcraft\\_anniversary_\\WTF",
+    "interfaceVersion": "20505",
+    "gameVersion": "TBC Anniversary"
+  },
+  "characters": [
+    { "realm": "Nightslayer", "name": "Slyw" },
+    { "realm": "Nightslayer", "name": "Slysh" }
+  ],
+  "addons": [
+    {
+      "name": "SlySuite",
+      "enabled": true,
+      "description": "Top-level addon manager and error sandbox for the Sly addon family.",
+      "sourceDir": "addons\\SlySuite",
+      "version": "1.0.0"
+    },
+    {
+      "name": "SlyWeakAuras",
+      "enabled": true,
+      "description": "WeakAura pack manager: import, capture, and manage named WA export string packs (e.g. Yabba/Foji suite).",
+      "sourceDir": "addons\\SlyWeakAuras",
+      "version": "1.0.0"
+    },
+    {
+      "name": "ItemRackRevived",
+      "enabled": true,
+      "description": "Gear set manager with character screen popout. Replacement for ItemRack.",
+      "sourceDir": "addons\\ItemRackRevived",
+      "version": "1.0.0"
+    },
+    {
+      "name": "GearScore",
+      "enabled": true,
+      "description": "Calculates and displays gear score on tooltips and character frame.",
+      "sourceDir": "addons\\GearScore",
+      "version": "1.0.0"
+    },
+    {
+      "name": "ExtendedCharStats",
+      "enabled": true,
+      "description": "Extended character statistics panel showing spell power, crit, hit, haste, etc.",
+      "sourceDir": "addons\\ExtendedCharStats",
+      "version": "1.0.0"
+    },
+    {
+      "name": "SlyRepair",
+      "enabled": true,
+      "description": "Auto-repair gear at any merchant. Reports cost to party/raid/say. /slyrepair",
+      "sourceDir": "addons\\SlyRepair",
+      "version": "1.0.0"
+    },
+    {
+      "name": "SlyLoot",
+      "enabled": true,
+      "description": "Master looter assistant: quality loot announcer + /roll tracker + winner picker. /slyloot",
+      "sourceDir": "addons\\SlyLoot",
+      "version": "1.0.0"
+    },
+    {
+      "name": "SlyMount",
+      "enabled": true,
+      "description": "Favorite mounts list with zone-aware random pick (ground/flying). /slymount",
+      "sourceDir": "addons\\SlyMount",
+      "version": "1.0.0"
+    },
+    {
+      "name": "SlyItemizer",
+      "enabled": true,
+      "description": "Item compare, DPS score delta on tooltips, enchant/gem suggestions by class/spec. /slyitem",
+      "sourceDir": "addons\\SlyItemizer",
+      "version": "1.0.0"
+    },
+    {
+      "name": "SlyAtlasLoot",
+      "enabled": true,
+      "description": "AtlasLoot integration: drop % on tooltips, target-aware rates, item search panel. /slyatlas",
+      "sourceDir": "addons\\SlyAtlasLoot",
+      "version": "1.0.0"
+    },
+    {
+      "name": "SlyChar",
+      "enabled": true,
+      "description": "Movable character sheet companion — extended stats + gear sets docked beside CharacterFrame. C key. /slychar",
+      "sourceDir": "addons\\SlyChar",
+      "version": "1.0.0"
+    }
+  ],
+  "deployment": {
+    "backupWtfOnDeploy": true,
+    "wtfBackupDir": "wtf-backups"
+  },
+  "backlog": [
+    {
+      "id": "weakauras-warrior",
+      "priority": "medium",
+      "description": "Search wago.io for warrior WeakAuras (battle/commanding shout missing alert, shout duration tracker, Rend debuff, cooldown bars) and import best matches into SlyWeakAuras. Filter by TBC Anniversary game version.",
+      "wagoSearchTerms": ["warrior shout missing", "warrior shout timer", "warrior rend tracker", "warrior cooldowns tbc", "warrior tbc pack"]
+    }
+  ]
+}

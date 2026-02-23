@@ -1,0 +1,25 @@
+# WoW addon build artifacts
+*.zip
+build/
+
+# WTF backups (can be large)
+wtf-backups/
+
+# Saved variables snapshots (optional - can be tracked if desired)
+# wtf-configs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/settings.json
+*.swp
+*~
+
+# Node (if any tooling added later)
+node_modules/
+
+# Logs
+*.log

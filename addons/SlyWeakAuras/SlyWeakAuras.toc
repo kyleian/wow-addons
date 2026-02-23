@@ -1,0 +1,11 @@
+## Interface: 20505
+## Title: Sly WeakAuras
+## Notes: SlySuite sub-mod for managing, importing, and capturing WeakAura packages (e.g. Foji suite). /slywa to open.
+## Version: 1.0.0
+## Author: Custom
+## OptionalDependencies: SlySuite, WeakAuras
+## SavedVariables: SlyWeakAurasDB
+
+SlyWeakAuras.lua
+SlyWeakAurasImport.lua
+SlyWeakAurasUI.lua
