@@ -1109,23 +1109,39 @@ end
 
 function SC_RefreshHonor()
     if not honorValues.currHonor then return end
-    local function N(n) return (n and n > 0) and format("%d", n) or "0" end
 
-    -- TBC Anniversary: UnitHonorPoints / UnitArenaPoints
-    local honor = (UnitHonorPoints and UnitHonorPoints("player")) or 0
-    local arena = (UnitArenaPoints and UnitArenaPoints("player")) or 0
+    -- Ensure the PVP addon is loaded so its APIs are available
+    if LoadAddOn then LoadAddOn("Blizzard_PVPUI") end
+
+    local function N(n) return (n and n > 0) and format("%d", n) or "0" end
+    local function Try(...)
+        for i = 1, select("#", ...) do
+            local fn = select(i, ...)
+            if type(fn) == "function" then
+                local ok, v = pcall(fn, "player")
+                if ok and v and v ~= 0 then return v end
+            end
+        end
+        return 0
+    end
+
+    -- TBC Anniversary uses UnitHonorPoints / UnitArenaPoints.
+    -- GetHonorCurrency is a fallback seen in some 2.x builds.
+    local honor = Try(UnitHonorPoints, GetHonorCurrency)
+    local arena = Try(UnitArenaPoints, GetArenaCurrency)
+
+    -- Debug: uncomment if still showing 0
+    DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[SlyChar Honor Debug]|r honor=" .. tostring(honor) .. " arena=" .. tostring(arena)
+        .. " UnitHonorPoints=" .. tostring(UnitHonorPoints) .. " GetHonorCurrency=" .. tostring(GetHonorCurrency))
+
     honorValues.currHonor:SetText(format("%d", honor))
     honorValues.arena:SetText(format("%d", arena))
 
-    -- Each PVP stats function returns (honorableKills, dishonorableKills)
-    local sessHK  = 0
-    local wkHK    = 0
-    local lwHK    = 0
-    local lifeHK  = 0
-    if GetPVPSessionStats  then local a = GetPVPSessionStats()  ; sessHK  = a or 0 end
-    if GetPVPThisWeekStats then local a = GetPVPThisWeekStats() ; wkHK    = a or 0 end
-    if GetPVPLastWeekStats then local a = GetPVPLastWeekStats() ; lwHK    = a or 0 end
-    if GetPVPLifetimeStats then local a = GetPVPLifetimeStats() ; lifeHK  = a or 0 end
+    local sessHK, wkHK, lwHK, lifeHK = 0, 0, 0, 0
+    if GetPVPSessionStats  then local a = GetPVPSessionStats()  ; sessHK = a or 0 end
+    if GetPVPThisWeekStats then local a = GetPVPThisWeekStats() ; wkHK   = a or 0 end
+    if GetPVPLastWeekStats then local a = GetPVPLastWeekStats() ; lwHK   = a or 0 end
+    if GetPVPLifetimeStats then local a = GetPVPLifetimeStats() ; lifeHK = a or 0 end
 
     honorValues.todayHK:SetText(N(sessHK))
     honorValues.weekHK:SetText(N(wkHK))
