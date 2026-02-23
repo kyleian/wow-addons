@@ -1652,7 +1652,14 @@ function SC_BuildMain()
           end },
         { tip="Guild",     desc="Open Guild panel",           lbl="G",   r=0.25, g=1.00, b=0.55,
           fn=function()
-              SC_OpenPanel("Blizzard_GuildUI", "GuildFrame", ToggleGuildFrame)
+              -- GuildFrame is always loaded in TBC (not a separate LoD addon)
+              if GuildFrame then
+                  SC_ToggleSidePanel(GuildFrame)
+              elseif GuildFrame_Toggle then
+                  GuildFrame_Toggle()
+              else
+                  pcall(function() ToggleGuildFrame() end)
+              end
           end },
         { tip="Achievements", desc="Open Achievements panel", lbl="A",   r=1.00, g=0.70, b=0.20,
           fn=function()
