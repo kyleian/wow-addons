@@ -11,6 +11,7 @@ local ROW_H     = 22
 local BTN_H     = 22
 
 local selectedProfile = nil   -- currently highlighted profile name
+local rowPool         = {}    -- reusable row button pool (no SetParent/destroy)
 
 -- -------------------------------------------------------
 -- Layout helpers
@@ -40,42 +41,49 @@ function SlySlot_UIRefresh()
     local contentH = math.max(PANEL_H - 80, #names * ROW_H + 4)
     SlySlotListContent:SetHeight(contentH)
 
-    -- Clear existing rows
-    for _, child in ipairs({ SlySlotListContent:GetChildren() }) do
-        child:Hide()
-        child:SetParent(nil)
+    -- Hide all pooled rows first (never SetParent(nil) — that orphans frames
+    -- onto UIParent and leaves invisible mouse-blocking buttons in the world)
+    for _, row in ipairs(rowPool) do
+        row:Hide()
     end
 
     for i, name in ipairs(names) do
-        local row = CreateFrame("Button", nil, SlySlotListContent)
-        row:SetSize(LIST_W - 8, ROW_H)
-        row:SetPoint("TOPLEFT", SlySlotListContent, "TOPLEFT", 2, -(i - 1) * ROW_H)
-
-        local bg = row:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        if name == selectedProfile then
-            bg:SetTexture(0.20, 0.40, 0.65, 0.5)
-        else
-            bg:SetTexture(0.10, 0.10, 0.13, 0.5)
+        -- Reuse a pooled row or create a new one
+        local row = rowPool[i]
+        if not row then
+            row = CreateFrame("Button", nil, SlySlotListContent)
+            row:SetSize(LIST_W - 8, ROW_H)
+            local bg = row:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            row.bg = bg
+            local hl = row:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetTexture(0.25, 0.50, 0.80, 0.3)
+            local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            label:SetPoint("LEFT", row, "LEFT", 4, 0)
+            row.label = label
+            rowPool[i] = row
         end
 
-        local hl = row:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints()
-        hl:SetTexture(0.25, 0.50, 0.80, 0.3)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", SlySlotListContent, "TOPLEFT", 2, -(i - 1) * ROW_H)
 
-        local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetPoint("LEFT", row, "LEFT", 4, 0)
-        label:SetText(name)
-        label:SetTextColor(name == selectedProfile and 1 or 0.85,
-                           name == selectedProfile and 1 or 0.85,
-                           name == selectedProfile and 1 or 0.9)
+        local isSelected = (name == selectedProfile)
+        row.bg:SetTexture(isSelected and 0.20 or 0.10,
+                          isSelected and 0.40 or 0.10,
+                          isSelected and 0.65 or 0.13,
+                          0.5)
+        row.label:SetText(name)
+        row.label:SetTextColor(isSelected and 1 or 0.85,
+                               isSelected and 1 or 0.85,
+                               isSelected and 1 or 0.9)
 
+        -- Capture name in closure via local
+        local rowName = name
         row:SetScript("OnClick", function()
-            selectedProfile = name
+            selectedProfile = rowName
             SlySlot_UIRefresh()
-            -- Populate name box
-            if SlySlotNameBox then SlySlotNameBox:SetText(name) end
-            -- Clear export box
+            if SlySlotNameBox  then SlySlotNameBox:SetText(rowName) end
             if SlySlotExportBox then SlySlotExportBox:SetText("") end
         end)
 
@@ -101,7 +109,6 @@ function SlySlot_BuildUI()
     f:SetSize(FRAME_W, FRAME_H)
     f:SetPoint(db.position.point, UIParent, db.position.point,
                db.position.x, db.position.y)
-    f:SetToplevel(true)
     f:EnableMouse(true)
     f:SetMovable(true)
     f:RegisterForDrag("LeftButton")

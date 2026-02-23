@@ -202,7 +202,6 @@ function SlyBag_BuildUI()
     f:SetSize(FRAME_W, FRAME_H)
     f:SetPoint(db.position.point, UIParent, db.position.point,
                db.position.x, db.position.y)
-    f:SetToplevel(true)
     f:EnableMouse(true)
     f:SetMovable(true)
     f:RegisterForDrag("LeftButton")
