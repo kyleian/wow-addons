@@ -88,6 +88,20 @@
       "description": "Movable character sheet companion — extended stats + gear sets docked beside CharacterFrame. C key. /slychar",
       "sourceDir": "addons\\SlyChar",
       "version": "1.0.0"
+    },
+    {
+      "name": "SlyBag",
+      "enabled": true,
+      "description": "Unified bag window — all bags merged into one searchable grid. Replaces Baganator. /slybag",
+      "sourceDir": "addons\\SlyBag",
+      "version": "1.0.0"
+    },
+    {
+      "name": "SlySlot",
+      "enabled": true,
+      "description": "Action bar profile manager — save, load, export, and import action bar layouts per character. Replaces Myslot. /slyslot",
+      "sourceDir": "addons\\SlySlot",
+      "version": "1.0.0"
     }
   ],
   "deployment": {
