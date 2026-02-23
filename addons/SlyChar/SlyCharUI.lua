@@ -1151,36 +1151,54 @@ function SC_RefreshHonor()
     -- Ensure the PVP addon is loaded so its APIs are available
     if LoadAddOn then LoadAddOn("Blizzard_PVPUI") end
 
-    local function N(n) return (n and n > 0) and format("%d", n) or "0" end
-    local function Try(...)
+    -- Try a function with "player" arg first, then no-arg fallback
+    local function TryGet(...)
         for i = 1, select("#", ...) do
             local fn = select(i, ...)
             if type(fn) == "function" then
                 local ok, v = pcall(fn, "player")
-                if ok and v and v ~= 0 then return v end
+                if ok and type(v) == "number" and v ~= 0 then return v end
+                ok, v = pcall(fn)
+                if ok and type(v) == "number" and v ~= 0 then return v end
             end
         end
         return 0
     end
 
-    -- TBC Anniversary uses UnitHonorPoints / UnitArenaPoints.
-    -- GetHonorCurrency is a fallback seen in some 2.x builds.
-    local honor = Try(UnitHonorPoints, GetHonorCurrency)
-    local arena = Try(UnitArenaPoints, GetArenaCurrency)
+    -- TBC 2.x: UnitHonorPoints / UnitArenaPoints (with arg)
+    --          GetHonorPoints / GetArenaPoints    (no arg)
+    local honor = TryGet(UnitHonorPoints, GetHonorPoints)
+    local arena = TryGet(UnitArenaPoints, GetArenaPoints)
 
-    -- Debug: uncomment if still showing 0
-    DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[SlyChar Honor Debug]|r honor=" .. tostring(honor) .. " arena=" .. tostring(arena)
-        .. " UnitHonorPoints=" .. tostring(UnitHonorPoints) .. " GetHonorCurrency=" .. tostring(GetHonorCurrency))
+    -- Debug dump - remove once confirmed working
+    local function fn(name) return tostring(type(_G[name]) == "function" and "fn" or _G[name]) end
+    DEFAULT_CHAT_FRAME:AddMessage(
+        "|cffff8800[S-Hon]|r"
+        .. " HP=" .. tostring(honor)
+        .. " AP=" .. tostring(arena)
+        .. " UHP=" .. fn("UnitHonorPoints")
+        .. " GHP=" .. fn("GetHonorPoints")
+        .. " UAP=" .. fn("UnitArenaPoints")
+        .. " GAP=" .. fn("GetArenaPoints"))
 
     honorValues.currHonor:SetText(format("%d", honor))
     honorValues.arena:SetText(format("%d", arena))
 
-    local sessHK, wkHK, lwHK, lifeHK = 0, 0, 0, 0
-    if GetPVPSessionStats  then local a = GetPVPSessionStats()  ; sessHK = a or 0 end
-    if GetPVPThisWeekStats then local a = GetPVPThisWeekStats() ; wkHK   = a or 0 end
-    if GetPVPLastWeekStats then local a = GetPVPLastWeekStats() ; lwHK   = a or 0 end
-    if GetPVPLifetimeStats then local a = GetPVPLifetimeStats() ; lifeHK = a or 0 end
+    local function PVPStat(fnName)
+        local f = _G[fnName]
+        if type(f) == "function" then
+            local ok, a = pcall(f)
+            if ok and type(a) == "number" then return a end
+        end
+        return 0
+    end
 
+    local sessHK = PVPStat("GetPVPSessionStats")
+    local wkHK   = PVPStat("GetPVPThisWeekStats")
+    local lwHK   = PVPStat("GetPVPLastWeekStats")
+    local lifeHK = PVPStat("GetPVPLifetimeStats")
+
+    local function N(n) return (n and n > 0) and format("%d", n) or "0" end
     honorValues.todayHK:SetText(N(sessHK))
     honorValues.weekHK:SetText(N(wkHK))
     honorValues.lastHK:SetText(N(lwHK))
