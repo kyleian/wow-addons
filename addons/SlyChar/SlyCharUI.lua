@@ -130,6 +130,143 @@ local MAX_SKILL_ROWS      = 60
 local MAX_NIT_LOCK_ROWS   = 10
 local MAX_NIT_RUN_ROWS    = 8
 
+-- ============================================================
+-- Themes
+-- ============================================================
+local SC_THEMES = {
+    shadow = {
+        name="Shadow",
+        frameBg  = {0.05, 0.05, 0.07, 0.97},
+        border   = {0.28, 0.28, 0.35, 1},
+        headerBg = {0.09, 0.09, 0.14, 1},
+        sep      = {0.25, 0.25, 0.32, 1},
+        div      = {0.20, 0.20, 0.27, 1},
+        sideBg   = {0.05, 0.05, 0.08, 1},
+        tabBarBg = {0.07, 0.07, 0.11, 1},
+        footBg   = {0.07, 0.07, 0.10, 1},
+        modelBg  = {0.03, 0.03, 0.04, 1},
+        tabActiveBg   = {0.11, 0.16, 0.26},
+        tabInactiveBg = {0.06, 0.06, 0.09},
+        tabActiveTxt  = {1.00, 1.00, 1.00},
+        tabInactiveTxt= {0.55, 0.55, 0.60},
+    },
+    midnight = {
+        name="Midnight",
+        frameBg  = {0.04, 0.06, 0.14, 0.97},
+        border   = {0.30, 0.42, 0.72, 1},
+        headerBg = {0.06, 0.09, 0.22, 1},
+        sep      = {0.20, 0.30, 0.55, 1},
+        div      = {0.15, 0.22, 0.44, 1},
+        sideBg   = {0.04, 0.06, 0.16, 1},
+        tabBarBg = {0.06, 0.09, 0.20, 1},
+        footBg   = {0.05, 0.08, 0.18, 1},
+        modelBg  = {0.02, 0.03, 0.08, 1},
+        tabActiveBg   = {0.15, 0.24, 0.52},
+        tabInactiveBg = {0.05, 0.07, 0.17},
+        tabActiveTxt  = {0.75, 0.90, 1.00},
+        tabInactiveTxt= {0.42, 0.52, 0.70},
+    },
+    crimson = {
+        name="Crimson",
+        frameBg  = {0.10, 0.04, 0.04, 0.97},
+        border   = {0.55, 0.18, 0.18, 1},
+        headerBg = {0.16, 0.06, 0.06, 1},
+        sep      = {0.38, 0.10, 0.10, 1},
+        div      = {0.28, 0.08, 0.08, 1},
+        sideBg   = {0.11, 0.04, 0.04, 1},
+        tabBarBg = {0.15, 0.05, 0.05, 1},
+        footBg   = {0.13, 0.05, 0.05, 1},
+        modelBg  = {0.05, 0.02, 0.02, 1},
+        tabActiveBg   = {0.42, 0.10, 0.10},
+        tabInactiveBg = {0.12, 0.04, 0.04},
+        tabActiveTxt  = {1.00, 0.72, 0.72},
+        tabInactiveTxt= {0.62, 0.38, 0.38},
+    },
+    emerald = {
+        name="Emerald",
+        frameBg  = {0.04, 0.09, 0.05, 0.97},
+        border   = {0.20, 0.52, 0.24, 1},
+        headerBg = {0.05, 0.13, 0.07, 1},
+        sep      = {0.12, 0.34, 0.14, 1},
+        div      = {0.08, 0.24, 0.10, 1},
+        sideBg   = {0.03, 0.10, 0.05, 1},
+        tabBarBg = {0.05, 0.13, 0.07, 1},
+        footBg   = {0.04, 0.11, 0.06, 1},
+        modelBg  = {0.02, 0.05, 0.03, 1},
+        tabActiveBg   = {0.10, 0.38, 0.14},
+        tabInactiveBg = {0.04, 0.10, 0.05},
+        tabActiveTxt  = {0.68, 1.00, 0.70},
+        tabInactiveTxt= {0.38, 0.62, 0.40},
+    },
+    gold = {
+        name="Gold",
+        frameBg  = {0.12, 0.10, 0.04, 0.97},
+        border   = {0.68, 0.52, 0.14, 1},
+        headerBg = {0.18, 0.15, 0.06, 1},
+        sep      = {0.46, 0.36, 0.10, 1},
+        div      = {0.32, 0.24, 0.07, 1},
+        sideBg   = {0.13, 0.10, 0.04, 1},
+        tabBarBg = {0.18, 0.14, 0.05, 1},
+        footBg   = {0.16, 0.13, 0.05, 1},
+        modelBg  = {0.06, 0.05, 0.02, 1},
+        tabActiveBg   = {0.44, 0.32, 0.08},
+        tabInactiveBg = {0.14, 0.11, 0.04},
+        tabActiveTxt  = {1.00, 0.92, 0.50},
+        tabInactiveTxt= {0.68, 0.58, 0.28},
+    },
+    storm = {
+        name="Storm",
+        frameBg  = {0.08, 0.09, 0.13, 0.97},
+        border   = {0.46, 0.50, 0.64, 1},
+        headerBg = {0.11, 0.12, 0.18, 1},
+        sep      = {0.30, 0.34, 0.46, 1},
+        div      = {0.22, 0.25, 0.34, 1},
+        sideBg   = {0.08, 0.09, 0.14, 1},
+        tabBarBg = {0.11, 0.12, 0.18, 1},
+        footBg   = {0.10, 0.11, 0.16, 1},
+        modelBg  = {0.04, 0.04, 0.07, 1},
+        tabActiveBg   = {0.24, 0.28, 0.46},
+        tabInactiveBg = {0.09, 0.10, 0.15},
+        tabActiveTxt  = {0.82, 0.90, 1.00},
+        tabInactiveTxt= {0.48, 0.54, 0.68},
+    },
+}
+local SC_THEME_ORDER = {"shadow","midnight","crimson","emerald","gold","storm"}
+local themeRefs = {}   -- texture handles populated in SC_BuildMain
+
+function SC_ApplyTheme(name)
+    local th = SC_THEMES[name]
+    if not th then name = "shadow" ; th = SC_THEMES.shadow end
+    if SC.db then SC.db.theme = name end
+    local r = themeRefs
+    local function sc(t, c) if t then t:SetColorTexture(c[1],c[2],c[3],c[4] or 1) end end
+    sc(r.frameBg,    th.frameBg)
+    sc(r.frameBord,  th.border)
+    sc(r.frameInner, th.frameBg)
+    sc(r.hdrBg,      th.headerBg)
+    sc(r.hdrSep,     th.sep)
+    sc(r.charDiv,    th.div)
+    sc(r.sideBg,     th.sideBg)
+    sc(r.tabBarBg,   th.tabBarBg)
+    sc(r.tabSep,     th.div)
+    sc(r.modelBg,    th.modelBg)
+    sc(r.footBg,     th.footBg)
+    if r.themeBtn then
+        r.themeBtn:SetText("|cffbbbbff"..th.name.."|r")
+    end
+    SC_SwitchTab(SC.db and SC.db.lastTab or "stats")
+end
+
+function SC_CycleTheme()
+    local cur = (SC.db and SC.db.theme) or "shadow"
+    local idx = 1
+    for i, k in ipairs(SC_THEME_ORDER) do
+        if k == cur then idx = i ; break end
+    end
+    idx = (idx % #SC_THEME_ORDER) + 1
+    SC_ApplyTheme(SC_THEME_ORDER[idx])
+end
+
 -- Wing panel state (spellbook wing still built; side-panel tracker handles the rest)
 local wingFrame       = nil
 local wingPanes       = {}
@@ -1620,11 +1757,13 @@ end
 function SC_SwitchTab(name)
     SC.db.lastTab = name
     for k, tf in pairs(tabFrames) do tf:SetShown(k == name) end
+    local th = SC_THEMES[(SC.db and SC.db.theme) or "shadow"] or SC_THEMES.shadow
     for k, tb in pairs(tabBtnWidgets) do
         local a = (k == name)
-        tb.bg:SetColorTexture(
-            a and 0.11 or 0.06, a and 0.16 or 0.06, a and 0.26 or 0.09, 1)
-        tb.txt:SetTextColor(a and 1 or 0.55, a and 1 or 0.55, a and 1 or 0.60)
+        local bg = a and th.tabActiveBg   or th.tabInactiveBg
+        local tx = a and th.tabActiveTxt  or th.tabInactiveTxt
+        tb.bg:SetColorTexture(bg[1], bg[2], bg[3], 1)
+        tb.txt:SetTextColor(tx[1], tx[2], tx[3])
         tb.txt:SetFont(tb.txt:GetFont(), a and 11 or 10, a and "OUTLINE" or "")
     end
 end
@@ -1934,19 +2073,21 @@ function SC_BuildMain()
     f:SetPoint("CENTER")
     f:Hide()
 
-    FillBg(f, 0.05, 0.05, 0.07, 0.97)
+    themeRefs.frameBg   = FillBg(f, 0.05, 0.05, 0.07, 0.97)
     local bord = f:CreateTexture(nil, "OVERLAY")
     bord:SetAllPoints(f) ; bord:SetColorTexture(0.28, 0.28, 0.35, 1)
+    themeRefs.frameBord  = bord
     local inner = f:CreateTexture(nil, "BACKGROUND")
     inner:SetPoint("TOPLEFT",     f, "TOPLEFT",      1, -1)
     inner:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1,  1)
     inner:SetColorTexture(0.05, 0.05, 0.07, 0.97)
+    themeRefs.frameInner = inner
 
     -- Header
     local hdr = CreateFrame("Frame", nil, f)
     hdr:SetSize(FRAME_W, HDR_H)
     hdr:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    FillBg(hdr, 0.09, 0.09, 0.14, 1)
+    themeRefs.hdrBg = FillBg(hdr, 0.09, 0.09, 0.14, 1)
 
     headerName = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     headerName:SetFont(headerName:GetFont(), 13, "OUTLINE")
@@ -1977,10 +2118,40 @@ function SC_BuildMain()
     end)
     resetBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Theme cycle button
+    local themeBtn = CreateFrame("Button", nil, hdr)
+    themeBtn:SetSize(56, 18)
+    themeBtn:SetPoint("RIGHT", resetBtn, "LEFT", -4, 0)
+    themeBtn:EnableMouse(true)
+    themeBtn:RegisterForClicks("LeftButtonUp")
+    local themeBtnBg = themeBtn:CreateTexture(nil, "BACKGROUND")
+    themeBtnBg:SetAllPoints(themeBtn)
+    themeBtnBg:SetColorTexture(0.12, 0.12, 0.20, 0.90)
+    local themeBtnHl = themeBtn:CreateTexture(nil, "HIGHLIGHT")
+    themeBtnHl:SetAllPoints(themeBtn)
+    themeBtnHl:SetColorTexture(1, 1, 1, 0.12)
+    local themeBtnTx = themeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    themeBtnTx:SetFont(themeBtnTx:GetFont(), 9, "OUTLINE")
+    themeBtnTx:SetAllPoints(themeBtn) ; themeBtnTx:SetJustifyH("CENTER")
+    themeBtnTx:SetText("|cffbbbbffShadow|r")
+    themeBtn:SetScript("OnClick", SC_CycleTheme)
+    themeBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText("Cycle theme", 1, 0.82, 0)
+        for _, k in ipairs(SC_THEME_ORDER) do
+            local isActive = (SC.db.theme == k)
+            GameTooltip:AddLine((isActive and "|cffffd700> " or "  ") .. SC_THEMES[k].name .. (isActive and " (active)|r" or ""), 0.8, 0.8, 0.8)
+        end
+        GameTooltip:Show()
+    end)
+    themeBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    themeRefs.themeBtn = themeBtnTx
+
     local hdrSep = f:CreateTexture(nil, "ARTWORK")
     hdrSep:SetSize(FRAME_W, 1)
     hdrSep:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -HDR_H)
     hdrSep:SetColorTexture(0.25, 0.25, 0.32, 1)
+    themeRefs.hdrSep = hdrSep
 
     -- Character body (gear + model)
     local charBody = CreateFrame("Frame", nil, f)
@@ -1991,6 +2162,7 @@ function SC_BuildMain()
     div:SetSize(1, FRAME_H - HDR_H - FOOT_H)
     div:SetPoint("TOPLEFT", f, "TOPLEFT", CHAR_W, -HDR_H)
     div:SetColorTexture(0.20, 0.20, 0.27, 1)
+    themeRefs.charDiv = div
 
     for i, s in ipairs(LEFT_SLOTS) do
         BuildSlot(charBody, s.id, s.label,
@@ -2010,6 +2182,7 @@ function SC_BuildMain()
     modBg:SetSize(MODEL_W, MODEL_H)
     modBg:SetPoint("TOPLEFT", charBody, "TOPLEFT", MODEL_X, SLOT_TOP - 12)
     modBg:SetColorTexture(0.03, 0.03, 0.04, 1)
+    themeRefs.modelBg = modBg
 
     local model = CreateFrame("PlayerModel", "SlyCharModel", charBody)
     model:SetSize(MODEL_W, MODEL_H)
@@ -2038,12 +2211,12 @@ function SC_BuildMain()
     local side = CreateFrame("Frame", nil, f)
     side:SetSize(SIDE_W, FRAME_H - HDR_H - FOOT_H)
     side:SetPoint("TOPLEFT", f, "TOPLEFT", CHAR_W + 1, -HDR_H)
-    FillBg(side, 0.05, 0.05, 0.08, 1)
+    themeRefs.sideBg = FillBg(side, 0.05, 0.05, 0.08, 1)
 
     local tabBar = CreateFrame("Frame", nil, side)
     tabBar:SetSize(SIDE_W, 24)
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
-    FillBg(tabBar, 0.07, 0.07, 0.11, 1)
+    themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
     local tbW = math.floor(SIDE_W / 5)
     local tabDefs = {
@@ -2076,6 +2249,7 @@ function SC_BuildMain()
     tabSep:SetSize(SIDE_W, 1)
     tabSep:SetPoint("TOPLEFT", side, "TOPLEFT", 0, -24)
     tabSep:SetColorTexture(0.20, 0.20, 0.27, 1)
+    themeRefs.tabSep = tabSep
 
     local tcY = -25
     local tcH = FRAME_H - HDR_H - FOOT_H - 25
@@ -2331,7 +2505,7 @@ function SC_BuildMain()
     local footer = CreateFrame("Frame", nil, f)
     footer:SetSize(FRAME_W, FOOT_H)
     footer:SetPoint("BOTTOM", f, "BOTTOM", 0, 0)
-    FillBg(footer, 0.07, 0.07, 0.10, 1)
+    themeRefs.footBg = FillBg(footer, 0.07, 0.07, 0.10, 1)
 
     local ftxt = footer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     ftxt:SetFont(ftxt:GetFont(), 8, "")
@@ -2350,5 +2524,5 @@ function SC_BuildMain()
     BuildWingFrame(f)
     SlyCharMainFrame = f
 
-    SC_SwitchTab(SC.db.lastTab or "stats")
+    SC_ApplyTheme(SC.db.theme or "shadow")
 end

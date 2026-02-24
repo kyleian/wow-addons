@@ -14,6 +14,7 @@ SC.version = "1.0.0"
 local DB_DEFAULTS = {
     position = nil,     -- {point, x, y} for SlyCharMainFrame
     lastTab  = "stats",
+    theme    = "shadow",
 }
 
 SC.db = {}
