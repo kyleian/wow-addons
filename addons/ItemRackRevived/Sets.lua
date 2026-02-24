@@ -103,15 +103,9 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
                 -- cursor — put it straight back into the now-empty bag slot so
                 -- the cursor is clean for the next swap in the same loop.
                 _PickupContainerItem(bag, bslot)
-                if slotId == 0 then
-                    -- Ammo slot: AutoEquipCursorItem goes straight to slot 0,
-                    -- no item is displaced onto the cursor.
-                    AutoEquipCursorItem()
-                else
-                    PickupInventoryItem(slotId)
-                    if GetCursorInfo() then
-                        _PickupContainerItem(bag, bslot)  -- bag slot is empty; drops cursor item there
-                    end
+                PickupInventoryItem(slotId)   -- slotId==0 puts old ammo on cursor
+                if GetCursorInfo() then
+                    _PickupContainerItem(bag, bslot)  -- bag slot is empty; drops cursor item there
                 end
                 return true
             end
@@ -124,13 +118,9 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
             -- Move item from slotDef.id -> slotId; any displaced item from slotId
             -- goes back into slotDef.id (which is now empty after step 1).
             PickupInventoryItem(slotDef.id)
-            if slotId == 0 then
-                AutoEquipCursorItem()
-            else
-                PickupInventoryItem(slotId)
-                if GetCursorInfo() then
-                    PickupInventoryItem(slotDef.id)  -- slot is empty; drops cursor item there
-                end
+            PickupInventoryItem(slotId)
+            if GetCursorInfo() then
+                PickupInventoryItem(slotDef.id)  -- slot is empty; drops cursor item there
             end
             return true
         end
@@ -185,7 +175,10 @@ function IRR_LoadSet(name)
                             if ammoInvType == "INVTYPE_AMMO" then
                                 if GetInventoryItemID("player", 0) ~= ammoId then
                                     _PickupContainerItem(bag, bslot)
-                                    AutoEquipCursorItem()
+                                    PickupInventoryItem(0)
+                                    if GetCursorInfo() then
+                                        _PickupContainerItem(bag, bslot)
+                                    end
                                 end
                                 found = true
                                 break
