@@ -134,6 +134,13 @@ local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
 local nitLockScrollOffset = 0
 local nitScrollInfoLabel  = nil
 local nitLayerLabel       = nil  -- FontString showing current layer
+local nitSubTab           = "locks"  -- "locks" | "guild"
+local nitLockContent      = nil  -- Frame containing lockout header+rows
+local nitGuildContent     = nil  -- Frame containing guild member rows
+local nitGuildRows        = {}
+local nitGuildHeaderFs    = nil  -- FontString for guild header (count)
+local nitSubLockBtn       = nil  -- sub-tab button widgets
+local nitSubGuildBtn      = nil
 
 -- ============================================================
 -- Themes
@@ -1626,43 +1633,86 @@ local function BuildNitRows(parent)
     divLine:SetColorTexture(0.20, 0.28, 0.50, 0.60)
 
     -- ── Lockout header + scroll info (shifted down 20px) ─────────────────────
-    local lh = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    -- ── Sub-tab strip: Lockouts | Guild ──────────────────────────────────────
+    local stHalf = math.floor(W / 2)
+
+    local subBarBg = parent:CreateTexture(nil, "BACKGROUND")
+    subBarBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -18)
+    subBarBg:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -18)
+    subBarBg:SetHeight(16)
+    subBarBg:SetColorTexture(0.05, 0.05, 0.09, 1)
+
+    local function MakeSubTab(label, xOff, key)
+        local btn = CreateFrame("Button", nil, parent)
+        btn:SetSize(stHalf, 16)
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, -18)
+        local bg = btn:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(btn) ; bg:SetColorTexture(0.06, 0.06, 0.10, 1)
+        local tx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tx:SetFont(tx:GetFont(), 8, "OUTLINE")
+        tx:SetAllPoints() ; tx:SetJustifyH("CENTER")
+        tx:SetText(label) ; tx:SetTextColor(0.45, 0.45, 0.55)
+        btn.bg = bg ; btn.tx = tx
+        btn:SetScript("OnClick", function()
+            nitSubTab = key
+            if key == "guild" then
+                if C_GuildInfo then C_GuildInfo.GuildRoster()
+                elseif GuildRoster then GuildRoster() end
+            end
+            SC_RefreshNIT()
+        end)
+        return btn
+    end
+
+    nitSubLockBtn  = MakeSubTab("Lockouts", 0,       "locks")
+    nitSubGuildBtn = MakeSubTab("Guild",    stHalf,  "guild")
+
+    -- thin separator below sub-tab strip
+    local subSep = parent:CreateTexture(nil, "ARTWORK")
+    subSep:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -34)
+    subSep:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -34)
+    subSep:SetHeight(1)
+    subSep:SetColorTexture(0.18, 0.18, 0.26, 1)
+
+    -- ── Lockout content (shown when nitSubTab == "locks") ────────────────────
+    local lockContent = CreateFrame("Frame", nil, parent)
+    lockContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -35)
+    lockContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
+    nitLockContent = lockContent
+
+    local lh = lockContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     lh:SetFont(lh:GetFont(), 10, "OUTLINE")
-    lh:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -18)
+    lh:SetPoint("TOPLEFT", lockContent, "TOPLEFT", 0, 0)
     lh:SetText("|cffffff99Alt Instance Lockouts|r")
 
-    local si = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local si = lockContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     si:SetFont(si:GetFont(), 8, "")
-    si:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -18)
+    si:SetPoint("TOPRIGHT", lockContent, "TOPRIGHT", 0, 0)
     si:SetJustifyH("RIGHT") ; si:SetTextColor(0.45, 0.45, 0.50)
     nitScrollInfoLabel = si
 
-    -- Scrollable lockout rows
     for i = 1, MAX_NIT_LOCK_ROWS do
-        local yOff = -(36 + (i-1)*18)
-        local row = CreateFrame("Frame", nil, parent)
+        local yOff = -(18 + (i-1)*18)
+        local row = CreateFrame("Frame", nil, lockContent)
         row:SetSize(W, 17)
-        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, yOff)
+        row:SetPoint("TOPLEFT", lockContent, "TOPLEFT", 0, yOff)
 
         local bg = row:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(row) ; bg:SetColorTexture(0, 0, 0, 0)
         row.bg = bg
 
-        -- name column (wide)
         local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         nm:SetFont(nm:GetFont(), 9, "")
         nm:SetPoint("LEFT", row, "LEFT", 2, 0)
         nm:SetJustifyH("LEFT") ; nm:SetWidth(148)
         row.nm = nm
 
-        -- difficulty column
         local df = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         df:SetFont(df:GetFont(), 8, "")
         df:SetPoint("LEFT", row, "LEFT", 155, 0)
         df:SetJustifyH("LEFT") ; df:SetWidth(70)
         row.df = df
 
-        -- time remaining column
         local tm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         tm:SetFont(tm:GetFont(), 8, "")
         tm:SetPoint("RIGHT", row, "RIGHT", -2, 0)
@@ -1671,6 +1721,55 @@ local function BuildNitRows(parent)
 
         row:Hide()
         nitLockRows[i] = row
+    end
+
+    -- ── Guild content (shown when nitSubTab == "guild") ───────────────────────
+    local guildContent = CreateFrame("Frame", nil, parent)
+    guildContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -35)
+    guildContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
+    guildContent:Hide()
+    nitGuildContent = guildContent
+
+    local gh = guildContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    gh:SetFont(gh:GetFont(), 10, "OUTLINE")
+    gh:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, 0)
+    gh:SetText("|cffffff99Online Guildies|r")
+    nitGuildHeaderFs = gh
+
+    for i = 1, MAX_NIT_LOCK_ROWS do
+        local yOff = -(18 + (i-1)*18)
+        local row = CreateFrame("Frame", nil, guildContent)
+        row:SetSize(W, 17)
+        row:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, yOff)
+
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row)
+        bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
+        row.bg = bg
+
+        -- layer number (compact left column)
+        local ly = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ly:SetFont(ly:GetFont(), 9, "OUTLINE")
+        ly:SetPoint("LEFT", row, "LEFT", 2, 0)
+        ly:SetJustifyH("CENTER") ; ly:SetWidth(22)
+        row.ly = ly
+
+        -- character name
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 26, 0)
+        nm:SetJustifyH("LEFT") ; nm:SetWidth(155)
+        row.nm = nm
+
+        -- zone (right-aligned, truncated)
+        local zn = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        zn:SetFont(zn:GetFont(), 8, "")
+        zn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        zn:SetJustifyH("RIGHT") ; zn:SetWidth(W - 26 - 155 - 4)
+        row.zn = zn
+
+        row:Hide()
+        nitGuildRows[i] = row
     end
 end
 
@@ -1732,8 +1831,108 @@ function SC_UpdateNITLayer(unit)
     end
 end
 
+-- ── Guild layer refresh ─────────────────────────────────────────────────────
+function SC_RefreshNITGuild()
+    for _, r in ipairs(nitGuildRows) do r:Hide() end
+    if not nitGuildContent or not nitGuildContent:IsShown() then return end
+
+    if not IsInGuild or not IsInGuild() then
+        if nitGuildHeaderFs then nitGuildHeaderFs:SetText("|cff888888Not in a guild|r") end
+        return
+    end
+
+    local realm = GetRealmName and GetRealmName() or ""
+
+    -- Collect online guild members
+    local numTotal = GetNumGuildMembers and GetNumGuildMembers() or 0
+    local members = {}
+    for i = 1, numTotal do
+        local name, _, _, level, _, zone, _, _, isOnline, _, classFile = GetGuildRosterInfo(i)
+        if isOnline and name then
+            local charName = name:match("^([^%-]+)") or name
+            -- Layer from NWB.hasL["CharName-Realm"] = "layerNum"
+            local layerNum = nil
+            if NWB and NWB.hasL then
+                local v = NWB.hasL[charName .. "-" .. realm]
+                if v then layerNum = tonumber(v) end
+            end
+            members[#members+1] = {
+                name  = charName,
+                class = (classFile or ""):upper(),
+                zone  = zone or "",
+                layer = layerNum,
+            }
+        end
+    end
+
+    -- Sort: known layers first (ascending), then alphabetical
+    table.sort(members, function(a, b)
+        local la, lb = a.layer or 999, b.layer or 999
+        if la ~= lb then return la < lb end
+        return a.name < b.name
+    end)
+
+    if nitGuildHeaderFs then
+        nitGuildHeaderFs:SetText(string.format(
+            "|cffffff99Online Guildies|r |cff888888(%d)|r", #members))
+    end
+
+    for i = 1, MAX_NIT_LOCK_ROWS do
+        local row = nitGuildRows[i]
+        local m   = members[i]
+        if m then
+            -- Layer cell
+            if m.layer then
+                row.ly:SetText(string.format("|cff00ee44%d|r", m.layer))
+            else
+                row.ly:SetText("|cff444455?|r")
+            end
+            -- Name with class color
+            local cc = "aaaaaa"
+            if RAID_CLASS_COLORS and RAID_CLASS_COLORS[m.class] then
+                local c = RAID_CLASS_COLORS[m.class]
+                cc = string.format("%02x%02x%02x",
+                    math.floor((c.r or 0)*255),
+                    math.floor((c.g or 0)*255),
+                    math.floor((c.b or 0)*255))
+            end
+            row.nm:SetText(string.format("|cff%s%s|r", cc, m.name))
+            -- Zone
+            row.zn:SetText("|cff555566" .. m.zone .. "|r")
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+end
+
 function SC_RefreshNIT()
     SC_UpdateNITLayer("target")
+
+    -- Style sub-tab buttons to reflect active selection
+    local function StyleSub(btn, active)
+        if not btn then return end
+        if active then
+            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1)
+            btn.tx:SetTextColor(0.75, 0.88, 1.00)
+        else
+            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1)
+            btn.tx:SetTextColor(0.40, 0.40, 0.50)
+        end
+    end
+    StyleSub(nitSubLockBtn,  nitSubTab == "locks")
+    StyleSub(nitSubGuildBtn, nitSubTab == "guild")
+
+    -- Show / hide the two content panels
+    if nitLockContent  then nitLockContent:SetShown(nitSubTab == "locks") end
+    if nitGuildContent then nitGuildContent:SetShown(nitSubTab == "guild") end
+
+    if nitSubTab == "guild" then
+        SC_RefreshNITGuild()
+        return
+    end
+
+    -- ── Lockouts sub-tab ──────────────────────────────────────────────────────
     for _, w in ipairs(nitLockRows) do w:Hide() end
     if nitScrollInfoLabel then nitScrollInfoLabel:SetText("") end
 
@@ -2459,7 +2658,7 @@ function SC_BuildMain()
 
     local nitCont = CreateFrame("Frame", nil, nitTab)
     nitCont:SetPoint("TOPLEFT", nitTab, "TOPLEFT", PAD, -4)
-    nitCont:SetSize(SIDE_W - PAD*2, 36 + 18 + MAX_NIT_LOCK_ROWS * 18)   -- 36px for layer row + divider
+    nitCont:SetSize(SIDE_W - PAD*2, 35 + 18 + MAX_NIT_LOCK_ROWS * 18)   -- 35px overhead: layer(17)+subtabs(16)+sep(1)+gap(1)
     BuildNitRows(nitCont)
 
     nitTab:EnableMouseWheel(true)

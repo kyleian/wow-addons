@@ -136,6 +136,7 @@ evFrame:RegisterEvent("UPDATE_FACTION")
 evFrame:RegisterEvent("SKILL_LINES_CHANGED")
 evFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 evFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+evFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
 
 evFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -200,6 +201,12 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             and SC.db.lastTab == "nit"
             and (not NWB_CurrentLayer or NWB_CurrentLayer == 0) then
             if SC_UpdateNITLayer then SC_UpdateNITLayer("mouseover") end
+        end
+
+    elseif event == "GUILD_ROSTER_UPDATE" then
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
+            and SC.db.lastTab == "nit" then
+            if SC_RefreshNITGuild then SC_RefreshNITGuild() end
         end
     end
 end)
