@@ -559,7 +559,14 @@ function SC_ShowGearPicker(slotId)
                 GameTooltip:Hide()
                 -- Guard: never equip if cursor is occupied or a spell is targeting
                 if not ci.equipped and not GetCursorInfo() and not SpellIsTargeting() then
-                    if ci.bag >= 0 then
+                    if cs == 0 then
+                        -- Ammo slot: PickupInventoryItem(0) is not valid in TBC Anniversary.
+                        -- Equip ammo by right-clicking the stack in the bag.
+                        if ci.bag >= 0 then
+                            local uc = C_Container and C_Container.UseContainerItem or UseContainerItem
+                            uc(ci.bag, ci.bslot)
+                        end
+                    elseif ci.bag >= 0 then
                         -- Item in a bag: pick it up then swap into equip slot
                         _PickupContainerItem(ci.bag, ci.bslot)
                         PickupInventoryItem(cs)
@@ -666,6 +673,8 @@ local function BuildSlot(parent, slotId, label, x, y)
     -- Drag OUT: lets the player drag equipped items to trade/bank/bags
     btn:RegisterForDrag("LeftButton")
     btn:SetScript("OnDragStart", function(self)
+        -- Ammo slot (0): can't be dragged via PickupInventoryItem(0) in TBC Anniversary
+        if slotId == 0 then return end
         -- Don't pick up while a weapon stone / spell is waiting for a target
         if SpellIsTargeting() or GetCursorInfo() then return end
         if IsInventoryItemLocked(slotId) then return end
@@ -677,7 +686,9 @@ local function BuildSlot(parent, slotId, label, x, y)
 
     -- Drop ON: equip whatever is on the cursor (dragged from bags/bank)
     -- Skip if cursor holds an enchant — protected action; use default char frame.
+    -- Ammo slot (0): PickupInventoryItem(0) is invalid; ammo is equipped via the picker.
     btn:SetScript("OnReceiveDrag", function(self)
+        if slotId == 0 then return end
         local ctype = GetCursorInfo()
         if not ctype then return end
         if ctype == "enchant" or ctype == "spell" then return end
@@ -700,15 +711,17 @@ local function BuildSlot(parent, slotId, label, x, y)
             end
             -- Weapon stone / temp enchant: stone use triggers SpellIsTargeting.
             -- Apply it to this slot by targeting with PickupInventoryItem.
-            if SpellIsTargeting() then
+            -- (Ammo slot 0 can't use PickupInventoryItem(0) — skip.)
+            if SpellIsTargeting() and slotId ~= 0 then
                 local ok = pcall(PickupInventoryItem, slotId)
                 if ok then UpdateSlot(slotWidgets[slotId], slotId) end
                 return
             end
             -- If cursor has an item (dragged from bag), equip it.
             -- Skip enchant/spell cursors — those are protected; use default char frame.
+            -- Ammo slot: can't equip via PickupInventoryItem(0); use the picker instead.
             local ctype = GetCursorInfo()
-            if ctype then
+            if ctype and slotId ~= 0 then
                 if ctype == "enchant" or ctype == "spell" then return end
                 local ok = pcall(PickupInventoryItem, slotId)
                 if ok then UpdateSlot(slotWidgets[slotId], slotId) end
