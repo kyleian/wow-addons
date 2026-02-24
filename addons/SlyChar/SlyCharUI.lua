@@ -115,6 +115,9 @@ local statRows      = {}
 local setRowWidgets = {}
 local repRows       = {}
 local skillRows     = {}
+local nitLockRows   = {}
+local nitRunRows    = {}
+local nitRunHeader  = nil
 local headerName    = nil
 local headerInfo    = nil
 
@@ -122,8 +125,10 @@ local MAX_STAT_ROWS  = 60
 local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
 local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
-local MAX_REP_ROWS   = 80
-local MAX_SKILL_ROWS = 60
+local MAX_REP_ROWS        = 80
+local MAX_SKILL_ROWS      = 60
+local MAX_NIT_LOCK_ROWS   = 10
+local MAX_NIT_RUN_ROWS    = 8
 
 -- Wing panel state (spellbook wing still built; side-panel tracker handles the rest)
 local wingFrame       = nil
@@ -1412,6 +1417,188 @@ function SC_RefreshSkills()
 end
 
 -- ============================================================
+-- NIT (NovaInstanceTracker) tab
+-- ============================================================
+local function BuildNitRows(parent)
+    local W = SIDE_W - PAD*2
+
+    -- "Instance Lockouts" section header
+    local lh = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    lh:SetFont(lh:GetFont(), 10, "OUTLINE")
+    lh:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+    lh:SetText("|cffffff99Instance Lockouts|r")
+
+    -- 10 lockout rows
+    for i = 1, MAX_NIT_LOCK_ROWS do
+        local yOff = -(18 + (i-1)*18)
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetSize(W, 17)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, yOff)
+
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row) ; bg:SetColorTexture(0, 0, 0, 0)
+        row.bg = bg
+
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 2, 0)
+        nm:SetJustifyH("LEFT") ; nm:SetWidth(160)
+        row.nm = nm
+
+        local df = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        df:SetFont(df:GetFont(), 9, "")
+        df:SetPoint("LEFT", row, "LEFT", 168, 0)
+        df:SetJustifyH("LEFT") ; df:SetWidth(80)
+        row.df = df
+
+        local tm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tm:SetFont(tm:GetFont(), 9, "")
+        tm:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        tm:SetJustifyH("RIGHT")
+        row.tm = tm
+
+        row:Hide()
+        nitLockRows[i] = row
+    end
+
+    -- "Session Runs" section header (stored for dynamic update)
+    local rh = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    rh:SetFont(rh:GetFont(), 10, "OUTLINE")
+    rh:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -(18 + MAX_NIT_LOCK_ROWS*18 + 6))
+    rh:SetText("|cffffff99Session Runs|r")
+    nitRunHeader = rh
+
+    -- 8 session run rows
+    for i = 1, MAX_NIT_RUN_ROWS do
+        local yOff = -(18 + MAX_NIT_LOCK_ROWS*18 + 6 + 18 + (i-1)*18)
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetSize(W, 17)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, yOff)
+
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row) ; bg:SetColorTexture(0, 0, 0, 0)
+        row.bg = bg
+
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 2, 0)
+        nm:SetJustifyH("LEFT") ; nm:SetWidth(110)
+        row.nm = nm
+
+        local mb = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        mb:SetFont(mb:GetFont(), 9, "")
+        mb:SetPoint("LEFT", row, "LEFT", 118, 0)
+        mb:SetJustifyH("LEFT") ; mb:SetWidth(55)
+        row.mb = mb
+
+        local xp = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        xp:SetFont(xp:GetFont(), 9, "")
+        xp:SetPoint("RIGHT", row, "RIGHT", -60, 0)
+        xp:SetJustifyH("RIGHT") ; xp:SetWidth(60)
+        row.xp = xp
+
+        local gd = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        gd:SetFont(gd:GetFont(), 9, "")
+        gd:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        gd:SetJustifyH("RIGHT") ; gd:SetWidth(55)
+        row.gd = gd
+
+        row:Hide()
+        nitRunRows[i] = row
+    end
+end
+
+local function FormatNITTime(secs)
+    if secs <= 0 then return "|cffff4444Expired|r" end
+    local d = math.floor(secs / 86400)
+    local h = math.floor((secs % 86400) / 3600)
+    local m = math.floor((secs % 3600) / 60)
+    if d > 0 then
+        local col = d >= 2 and "ff55ff55" or "ffffff55"
+        return string.format("|cff%s%dd %dh|r", col, d, h)
+    elseif h > 0 then
+        local col = h >= 4 and "ffffff55" or "ffff8800"
+        return string.format("|cff%s%dh %dm|r", col, h, m)
+    else
+        return string.format("|cffff4444%dm|r", m)
+    end
+end
+
+function SC_RefreshNIT()
+    -- Hide all rows first
+    for _, w in ipairs(nitLockRows) do w:Hide() end
+    for _, w in ipairs(nitRunRows)  do w:Hide() end
+
+    -- ---------- Instance Lockouts ----------
+    local numSaved = GetNumSavedInstances and GetNumSavedInstances() or 0
+    local now = time()
+    for i = 1, math.min(numSaved, MAX_NIT_LOCK_ROWS) do
+        local name, _, reset, _, locked, _, _, isRaid, maxPlayers, diffName =
+            GetSavedInstanceInfo(i)
+        local w = nitLockRows[i]
+        if w and name then
+            w:Show()
+            local dispName = name
+            if #dispName > 20 then dispName = string.sub(dispName, 1, 18) .. ".." end
+            local col = locked and "ffff8800" or "ff80ff80"
+            w.nm:SetText(string.format("|cff%s%s|r", col, dispName))
+            w.df:SetText("|cff888888" .. (diffName or "Normal") .. "|r")
+            w.tm:SetText(FormatNITTime(reset - now))
+            w.bg:SetColorTexture(0, 0, 0, i%2==0 and 0.10 or 0)
+        end
+    end
+    if numSaved == 0 then
+        local w = nitLockRows[1]
+        if w then
+            w:Show()
+            w.nm:SetText("|cff666666No saved instances|r")
+            w.df:SetText("") ; w.tm:SetText("")
+            w.bg:SetColorTexture(0, 0, 0, 0)
+        end
+    end
+
+    -- ---------- Session Runs (NIT) ----------
+    local hasNIT = NIT and NIT.data and NIT.data.instances
+    if nitRunHeader then
+        if hasNIT then
+            nitRunHeader:SetText("|cffffff99Session Runs|r")
+        else
+            nitRunHeader:SetText("|cffffff99Session Runs|r |cff666666(NIT not loaded)|r")
+        end
+    end
+
+    if hasNIT then
+        local ri = 0
+        for _, run in pairs(NIT.data.instances) do
+            ri = ri + 1
+            local w = nitRunRows[ri]
+            if not w then break end
+            w:Show()
+            local iname = run.instanceName or "?"
+            if #iname > 16 then iname = string.sub(iname, 1, 14) .. ".." end
+            w.nm:SetText("|cffcccccc" .. iname .. "|r")
+            local mobs = (run.mobCountFromKill or run.mobCount or 0)
+            w.mb:SetText(mobs > 0 and ("|cff88ddff" .. mobs .. " kills|r") or "")
+            local xpVal = run.xpFromChat or 0
+            w.xp:SetText(xpVal > 0 and ("|cff88ff88" .. math.floor(xpVal/1000) .. "k xp|r") or "")
+            local copper = run.rawMoneyCount or 0
+            if copper > 0 then
+                local gold = math.floor(copper / 10000)
+                local silver = math.floor((copper % 10000) / 100)
+                if gold > 0 then
+                    w.gd:SetText(string.format("|cffffd700%dg %ds|r", gold, silver))
+                else
+                    w.gd:SetText(string.format("|cffc0c0c0%ds|r", silver))
+                end
+            else
+                w.gd:SetText("")
+            end
+            w.bg:SetColorTexture(0, 0, 0, ri%2==0 and 0.10 or 0)
+        end
+    end
+end
+
+-- ============================================================
 -- Tab switching + master refresh
 -- ============================================================
 function SC_SwitchTab(name)
@@ -1434,6 +1621,7 @@ function SC_RefreshAll()
     elseif tab == "sets"   then SC_RefreshSets()
     elseif tab == "rep"    then SC_RefreshReputation()
     elseif tab == "skills" then SC_RefreshSkills()
+    elseif tab == "nit"    then SC_RefreshNIT()
     end
 end
 
@@ -1841,12 +2029,13 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 4)
+    local tbW = math.floor(SIDE_W / 5)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="rep",    label="Rep"},
         {key="skills", label="Skills"},
+        {key="nit",    label="NIT"},
     }
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
@@ -1978,6 +2167,18 @@ function SC_BuildMain()
     skillCont:SetSize(SIDE_W - PAD*2 - 22, MAX_SKILL_ROWS * 14)
     skillScroll:SetScrollChild(skillCont)
     BuildSkillRows(skillCont)
+
+    -- NIT tab
+    local nitTab = CreateFrame("Frame", nil, side)
+    nitTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
+    nitTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
+    nitTab:SetHeight(tcH) ; nitTab:Hide()
+    tabFrames["nit"] = nitTab
+
+    local nitCont = CreateFrame("Frame", nil, nitTab)
+    nitCont:SetPoint("TOPLEFT", nitTab, "TOPLEFT", PAD, -4)
+    nitCont:SetSize(SIDE_W - PAD*2, (18 + MAX_NIT_LOCK_ROWS*18 + 6 + 18 + MAX_NIT_RUN_ROWS*18))
+    BuildNitRows(nitCont)
 
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")
