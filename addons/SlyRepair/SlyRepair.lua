@@ -12,6 +12,7 @@ SR.frame = nil
 -- ── Defaults ────────────────────────────────────────────────────────────────
 local DB_DEFAULTS = {
     enabled   = true,
+    sellJunk  = true,     -- auto-sell grey (quality 0) items
     announce  = "auto",   -- auto | party | raid | say | none
     position  = { point = "CENTER", x = 0, y = 120 },
 }
@@ -60,7 +61,35 @@ local function Announce(msg)
     end
 end
 
--- ── Core repair logic ────────────────────────────────────────────────────────
+-- ── Core logic ──────────────────────────────────────────────────────────────
+local function DoSellJunk()
+    if not SlyRepairDB.sellJunk then return end
+    local total = 0
+    local count = 0
+    for bag = 0, NUM_BAG_SLOTS do
+        local slots = GetContainerNumSlots(bag)
+        for slot = 1, slots do
+            local texture, itemCount, locked, quality = GetContainerItemInfo(bag, slot)
+            if texture and quality == 0 then
+                local link = GetContainerItemLink(bag, slot)
+                if link then
+                    local _, _, _, _, _, _, _, _, _, _, sellPrice = GetItemInfo(link)
+                    if sellPrice and sellPrice > 0 then
+                        total = total + sellPrice * (itemCount or 1)
+                        count = count + 1
+                        UseContainerItem(bag, slot)
+                    end
+                end
+            end
+        end
+    end
+    if count > 0 then
+        local msg = "Sold " .. count .. " junk item" .. (count == 1 and "" or "s") .. " for " .. CopperToString(total)
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ff96[SlyRepair]|r " .. msg)
+        Announce(msg)
+    end
+end
+
 local function DoRepair()
     if not SlyRepairDB.enabled then return end
 
@@ -84,7 +113,7 @@ local function BuildUI()
     if SR.frame then SR.frame:Show(); return end
 
     local f = CreateFrame("Frame", "SlyRepairPanel", UIParent)
-    f:SetSize(280, 180)
+    f:SetSize(280, 210)
     f:SetFrameStrata("HIGH")
     f:SetMovable(true)
     f:EnableMouse(true)
@@ -125,9 +154,19 @@ local function BuildUI()
         SlyRepairDB.enabled = self:GetChecked()
     end)
 
+    -- Sell junk checkbox
+    local sellJunkCB = CreateFrame("CheckButton", "SlyRepairSellJunkCB", f, "UICheckButtonTemplate")
+    sellJunkCB:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -66)
+    sellJunkCB:SetSize(24, 24)
+    SlyRepairSellJunkCBText:SetText("Auto-sell junk (grey items)")
+    sellJunkCB:SetChecked(SlyRepairDB.sellJunk)
+    sellJunkCB:SetScript("OnClick", function(self)
+        SlyRepairDB.sellJunk = self:GetChecked()
+    end)
+
     -- Announce label
     local annLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    annLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -80)
+    annLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -106)
     annLabel:SetText("Announce channel:")
 
     -- Channel buttons
@@ -136,7 +175,7 @@ local function BuildUI()
     for i, ch in ipairs(channels) do
         local btn = CreateFrame("Button", "SlyRepairCh_"..ch, f, "UIPanelButtonTemplate")
         btn:SetSize(46, 22)
-        btn:SetPoint("TOPLEFT", f, "TOPLEFT", 8 + (i-1)*52, -102)
+        btn:SetPoint("TOPLEFT", f, "TOPLEFT", 8 + (i-1)*52, -128)
         btn:SetText(ch)
         btn.ch = ch
         btn:SetScript("OnClick", function(self)
@@ -179,6 +218,7 @@ local function Init()
     ev:RegisterEvent("MERCHANT_SHOW")
     ev:SetScript("OnEvent", function(self, event)
         if event == "MERCHANT_SHOW" then
+            DoSellJunk()
             DoRepair()
         end
     end)
@@ -198,8 +238,11 @@ local function Init()
         elseif msg == "disable" or msg == "off" then
             SlyRepairDB.enabled = false
             DEFAULT_CHAT_FRAME:AddMessage("|cff00ff96[SlyRepair]|r Auto-repair disabled.")
+        elseif msg == "junk" then
+            SlyRepairDB.sellJunk = not SlyRepairDB.sellJunk
+            DEFAULT_CHAT_FRAME:AddMessage("|cff00ff96[SlyRepair]|r Auto-sell junk " .. (SlyRepairDB.sellJunk and "enabled" or "disabled") .. ".")
         else
-            DEFAULT_CHAT_FRAME:AddMessage("|cff00ff96[SlyRepair]|r Commands: /slyrepair | auto | party | raid | say | none | enable | disable")
+            DEFAULT_CHAT_FRAME:AddMessage("|cff00ff96[SlyRepair]|r Commands: /slyrepair | auto | party | raid | say | none | enable | disable | junk")
         end
     end
 end
