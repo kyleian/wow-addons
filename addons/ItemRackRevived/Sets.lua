@@ -123,9 +123,17 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
                 -- cursor — drop it back into the now-empty bag slot so the
                 -- cursor is clean for the next swap in the same loop.
                 _PickupContainerItem(bag, bslot)
-                PickupInventoryItem(slotId)
+                local ok = pcall(PickupInventoryItem, slotId)
+                if not ok then
+                    -- equip failed (e.g. item locked); clear cursor to unblock future swaps
+                    ClearCursor()
+                    return false
+                end
                 if GetCursorInfo() then
-                    _PickupContainerItem(bag, bslot)
+                    -- Displaced item is on cursor; drop it into the now-empty bag slot.
+                    -- If that also fails, force-clear to keep cursor clean.
+                    local ok2 = pcall(_PickupContainerItem, bag, bslot)
+                    if not ok2 or GetCursorInfo() then ClearCursor() end
                 end
                 return true
             end
@@ -136,10 +144,13 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
     -- Skip slot 0 — ammo can't be swapped via PickupInventoryItem.
     for _, slotDef in ipairs(IRR.SLOTS) do
         if slotDef.id ~= 0 and GetInventoryItemID("player", slotDef.id) == targetItemId then
-            PickupInventoryItem(slotDef.id)
-            PickupInventoryItem(slotId)
+            local ok = pcall(PickupInventoryItem, slotDef.id)
+            if not ok then ClearCursor(); return false end
+            local ok2 = pcall(PickupInventoryItem, slotId)
+            if not ok2 then ClearCursor(); return false end
             if GetCursorInfo() then
-                PickupInventoryItem(slotDef.id)
+                local ok3 = pcall(PickupInventoryItem, slotDef.id)
+                if not ok3 or GetCursorInfo() then ClearCursor() end
             end
             return true
         end
@@ -211,8 +222,12 @@ function IRR_LoadSet(name)
     if linkedSpec and GetNumTalentGroups and GetNumTalentGroups() >= 2 then
         local active = GetActiveTalentGroup and GetActiveTalentGroup() or 1
         if active ~= linkedSpec then
-            SetActiveTalentGroup(linkedSpec)
-            print("|cff00ccff[ItemRack Revived]|r Switched to Spec " .. linkedSpec .. ".")
+            local ok, err = pcall(SetActiveTalentGroup, linkedSpec)
+            if ok then
+                print("|cff00ccff[ItemRack Revived]|r Switched to Spec " .. linkedSpec .. ".")
+            else
+                print("|cffff4444[ItemRack Revived]|r Spec switch failed: " .. tostring(err))
+            end
         end
     end
 
