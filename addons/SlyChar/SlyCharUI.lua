@@ -1632,10 +1632,10 @@ local function FormatNITTime(secs)
     local h = math.floor((secs % 86400) / 3600)
     local m = math.floor((secs % 3600) / 60)
     if d > 0 then
-        local col = d >= 2 and "ff55ff55" or "ffffff55"
+        local col = d >= 2 and "55ff55" or "ffff55"
         return string.format("|cff%s%dd %dh|r", col, d, h)
     elseif h > 0 then
-        local col = h >= 4 and "ffffff55" or "ffff8800"
+        local col = h >= 4 and "ffff55" or "ff8800"
         return string.format("|cff%s%dh %dm|r", col, h, m)
     else
         return string.format("|cffff4444%dm|r", m)
@@ -1729,7 +1729,7 @@ function SC_RefreshNIT()
         if not e then break end
         w:Show()
         if e.type == "char" then
-            local col = e.isMe and "ffd4a84f" or "ff8aaac8"
+            local col = e.isMe and "d4a84f" or "8aaac8"
             w.nm:SetText(string.format("|cff%s%s|r", col, e.name))
             w.df:SetText("")
             w.tm:SetText("")
@@ -1737,8 +1737,8 @@ function SC_RefreshNIT()
         else
             local n = e.name or "?"
             if #n > 22 then n = string.sub(n, 1, 20) .. ".." end
-            local lcol = (e.locked == false) and "ff80ff80" or "ffff8800"
-            w.nm:SetText("  |cff" .. lcol .. n .. "|r")
+            local lcol = (e.locked == false) and "80ff80" or "ff8800"
+            w.nm:SetText("|cff" .. lcol .. n .. "|r")
             w.df:SetText("|cff666666" .. (e.diff or "") .. "|r")
             w.tm:SetText(FormatNITTime((e.reset or 0) - now))
             w.bg:SetColorTexture(0, 0, 0, i%2==0 and 0.08 or 0)
@@ -2530,6 +2530,7 @@ function SC_BuildMain()
 
     BuildWingFrame(f)
     SlyCharMainFrame = f
+    tinsert(UISpecialFrames, "SlyCharMainFrame")
 
     SC_ApplyTheme(SC.db.theme or "shadow")
 end
