@@ -677,6 +677,263 @@ function SC_RefreshStats()
 end
 
 -- ============================================================
+-- Set Icon Picker
+-- ============================================================
+local IPICK_COLS  = 5
+local IPICK_ICO_S = 30
+local IPICK_GAP   = 2
+local IPICK_PAD   = 6
+local IPICK_HDR_H = 26
+local IPICK_VIS_H = 252
+local IPICK_MAX   = 120
+local IPICK_W     = IPICK_COLS*(IPICK_ICO_S+IPICK_GAP) - IPICK_GAP + IPICK_PAD*2 + 18
+
+local iconPickerFrame  = nil
+local iconPickerTarget = nil
+local iconBtnPool      = {}
+
+local STATIC_SET_ICONS = {
+    -- Warrior
+    "Interface\\Icons\\Ability_Warrior_BattleShout",
+    "Interface\\Icons\\Ability_Warrior_Charge",
+    "Interface\\Icons\\Ability_Warrior_Cleave",
+    "Interface\\Icons\\Ability_Warrior_DefensiveStance",
+    "Interface\\Icons\\Ability_Warrior_OffensiveStance",
+    "Interface\\Icons\\Ability_Warrior_BerserkerStance",
+    "Interface\\Icons\\Ability_Warrior_Revenge",
+    "Interface\\Icons\\Ability_Warrior_ShieldBash",
+    "Interface\\Icons\\Ability_Warrior_Sunderarmor",
+    "Interface\\Icons\\Ability_Warrior_Whirlwind",
+    "Interface\\Icons\\Ability_Warrior_Execute",
+    "Interface\\Icons\\Ability_Warrior_Disarm",
+    "Interface\\Icons\\Ability_Warrior_InnerRage",
+    "Interface\\Icons\\Ability_DualWield",
+    -- Weapons
+    "Interface\\Icons\\INV_Sword_04",
+    "Interface\\Icons\\INV_Sword_23",
+    "Interface\\Icons\\INV_Sword_27",
+    "Interface\\Icons\\INV_Axe_01",
+    "Interface\\Icons\\INV_Axe_06",
+    "Interface\\Icons\\INV_Axe_09",
+    "Interface\\Icons\\INV_Mace_01",
+    "Interface\\Icons\\INV_Mace_13",
+    "Interface\\Icons\\INV_Staff_13",
+    "Interface\\Icons\\INV_Weapon_ShortBlade_05",
+    "Interface\\Icons\\INV_Weapon_Bow_01",
+    "Interface\\Icons\\INV_Spear_04",
+    -- Armor
+    "Interface\\Icons\\INV_Chest_Plate04",
+    "Interface\\Icons\\INV_Helmet_01",
+    "Interface\\Icons\\INV_Helmet_03",
+    "Interface\\Icons\\INV_Shoulder_01",
+    "Interface\\Icons\\INV_Boots_05",
+    "Interface\\Icons\\INV_Bracer_01",
+    "Interface\\Icons\\INV_Gauntlets_01",
+    "Interface\\Icons\\INV_Belt_01",
+    "Interface\\Icons\\INV_Pants_01",
+    "Interface\\Icons\\INV_Shield_06",
+    "Interface\\Icons\\INV_Chest_Leather_01",
+    "Interface\\Icons\\INV_Chest_Mail_01",
+    "Interface\\Icons\\INV_Chest_Cloth_05",
+    -- Jewelry
+    "Interface\\Icons\\INV_Jewelry_Ring_01",
+    "Interface\\Icons\\INV_Jewelry_Necklace_01",
+    "Interface\\Icons\\INV_Jewelry_Trinket_01",
+    "Interface\\Icons\\INV_Jewelry_Amulet_06",
+    -- Other classes
+    "Interface\\Icons\\Ability_Paladin_HolyBolt",
+    "Interface\\Icons\\Ability_Hunter_SniperShot",
+    "Interface\\Icons\\Ability_Rogue_Sprint",
+    "Interface\\Icons\\Ability_Druid_Maul",
+    "Interface\\Icons\\Ability_Mage_ArcaneMissiles",
+    "Interface\\Icons\\Ability_Warlock_SoulLink",
+    "Interface\\Icons\\Ability_Shaman_ThunderBolt",
+    "Interface\\Icons\\Spell_Nature_LightningShield",
+    "Interface\\Icons\\Spell_Holy_Devotion",
+    "Interface\\Icons\\Spell_Fire_Fireball",
+    "Interface\\Icons\\Spell_Shadow_ShadowBolt",
+    "Interface\\Icons\\Spell_Frost_FrostBolt02",
+    "Interface\\Icons\\Spell_Holy_GuardianSpirit",
+    -- Misc
+    "Interface\\Icons\\Ability_Rogue_MasterOfSubtlety",
+    "Interface\\Icons\\INV_Misc_QuestionMark",
+    "Interface\\Icons\\INV_Misc_Coin_01",
+    "Interface\\Icons\\INV_Misc_Cape_05",
+    "Interface\\Icons\\INV_Misc_Rune_01",
+    "Interface\\Icons\\INV_Misc_Head_Dragon_01",
+    "Interface\\Icons\\PVPCurrency_Honor_Alliance",
+    "Interface\\Icons\\PVPCurrency_Honor_Horde",
+    "Interface\\Icons\\Achievement_Character_Warrior_Male",
+}
+
+local function SC_HideIconPicker()
+    if iconPickerFrame then iconPickerFrame:Hide() end
+    iconPickerTarget = nil
+end
+
+local function BuildIconPicker()
+    if iconPickerFrame then return end
+    local f = CreateFrame("Frame", "SlyCharIconPicker", UIParent)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetWidth(IPICK_W)
+    f:SetHeight(IPICK_HDR_H + IPICK_VIS_H)
+    f:SetMovable(true)
+    f:EnableMouse(false)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop",  f.StopMovingOrSizing)
+    f:SetClampedToScreen(true)
+    f:Hide()
+    f:SetScript("OnShow", function(self) self:EnableMouse(true) end)
+    f:SetScript("OnHide", function(self) self:EnableMouse(false) end)
+    f:SetScript("OnMouseDown", function(_, btn)
+        if btn == "RightButton" then SC_HideIconPicker() end
+    end)
+
+    local bg = f:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints() ; bg:SetColorTexture(0.06, 0.06, 0.09, 0.97)
+    local bord = f:CreateTexture(nil, "OVERLAY")
+    bord:SetAllPoints() ; bord:SetColorTexture(0.28, 0.28, 0.40, 1)
+    local inner = f:CreateTexture(nil, "BACKGROUND")
+    inner:SetPoint("TOPLEFT",     f, "TOPLEFT",      1, -1)
+    inner:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1,  1)
+    inner:SetColorTexture(0.07, 0.07, 0.10, 0.97)
+
+    local hdr = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hdr:SetFont(hdr:GetFont(), 10, "OUTLINE")
+    hdr:SetPoint("TOPLEFT", f, "TOPLEFT", IPICK_PAD, -5)
+    hdr:SetTextColor(0.70, 0.85, 1.00)
+    hdr:SetText("Choose Icon")
+
+    local hint = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hint:SetFont(hint:GetFont(), 8, "")
+    hint:SetPoint("TOPLEFT", f, "TOPLEFT", IPICK_PAD, -16)
+    hint:SetTextColor(0.40, 0.55, 0.40)
+    hint:SetText("top = your gear   right-click to close")
+
+    local xBtn = CreateFrame("Button", nil, f)
+    xBtn:SetSize(16, 16) ; xBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -3, -3)
+    xBtn:EnableMouse(true)
+    local xBg = xBtn:CreateTexture(nil, "BACKGROUND")
+    xBg:SetAllPoints() ; xBg:SetColorTexture(0.40, 0.10, 0.10, 0.90)
+    local xHl = xBtn:CreateTexture(nil, "HIGHLIGHT")
+    xHl:SetAllPoints() ; xHl:SetColorTexture(0.70, 0.20, 0.20, 0.60)
+    local xTx = xBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    xTx:SetAllPoints() ; xTx:SetJustifyH("CENTER") ; xTx:SetText("|cffff8888x|r")
+    xBtn:SetScript("OnClick", SC_HideIconPicker)
+
+    local sep = f:CreateTexture(nil, "ARTWORK")
+    sep:SetPoint("TOPLEFT",  f, "TOPLEFT",  1, -IPICK_HDR_H)
+    sep:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -IPICK_HDR_H)
+    sep:SetHeight(1) ; sep:SetColorTexture(0.25, 0.25, 0.38, 1)
+
+    local sf = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT",     f, "TOPLEFT",      1, -(IPICK_HDR_H+2))
+    sf:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -15, 2)
+
+    local innerW = IPICK_COLS*(IPICK_ICO_S+IPICK_GAP) - IPICK_GAP + IPICK_PAD*2
+    local cont = CreateFrame("Frame", nil, sf)
+    cont:SetWidth(innerW)
+    cont:SetHeight(50)
+    sf:SetScrollChild(cont)
+
+    for k = 1, IPICK_MAX do
+        local btn = CreateFrame("Button", nil, cont)
+        btn:SetSize(IPICK_ICO_S, IPICK_ICO_S)
+        btn:Hide()
+        local icTex = btn:CreateTexture(nil, "ARTWORK")
+        icTex:SetAllPoints() ; icTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        btn._ic = icTex
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints() ; hl:SetColorTexture(1, 1, 1, 0.35)
+        local selRing = btn:CreateTexture(nil, "OVERLAY")
+        selRing:SetAllPoints() ; selRing:SetColorTexture(0, 0, 0, 0)
+        btn._sel = selRing
+        btn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            local sn2 = (self._tex or ""):match("\\([^\\]+)$") or "?"
+            GameTooltip:SetText(sn2, 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function(self)
+            self._sel:SetColorTexture(0, 0, 0, 0)
+            GameTooltip:Hide()
+        end)
+        iconBtnPool[k] = btn
+    end
+
+    f._cont = cont
+    iconPickerFrame = f
+end
+
+local function SC_PopulateIconPicker()
+    local cont = iconPickerFrame._cont
+    for _, b in ipairs(iconBtnPool) do b:Hide() end
+
+    local list, seen = {}, {}
+    local function addTex(tex)
+        if not tex then return end
+        tex = tostring(tex)
+        if seen[tex] then return end
+        seen[tex] = true ; list[#list+1] = tex
+    end
+    for slot = 1, 19 do addTex(GetInventoryItemTexture("player", slot)) end
+    for bag = 0, 4 do
+        for slot = 1, (GetContainerNumSlots(bag) or 0) do
+            addTex((GetContainerItemInfo(bag, slot)))
+        end
+    end
+    for _, tex in ipairs(STATIC_SET_ICONS) do addTex(tex) end
+
+    local curIcon = iconPickerTarget and IRR_GetSetIcon and
+        IRR_GetSetIcon(iconPickerTarget.name)
+
+    local col, rowIdx = 0, 0
+    for idx = 1, math.min(#list, IPICK_MAX) do
+        local tex = list[idx]
+        local btn = iconBtnPool[idx]
+        local isSelected = curIcon and curIcon == tex
+        btn._tex = tex
+        btn._ic:SetTexture(tex)
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", cont, "TOPLEFT",
+            IPICK_PAD + col*(IPICK_ICO_S+IPICK_GAP),
+            -(rowIdx*(IPICK_ICO_S+IPICK_GAP) + IPICK_PAD))
+        btn._sel:SetColorTexture(
+            isSelected and 0.2 or 0,
+            isSelected and 0.7 or 0,
+            isSelected and 1.0 or 0,
+            isSelected and 0.6 or 0)
+        btn:SetScript("OnClick", function(self)
+            if not iconPickerTarget then SC_HideIconPicker(); return end
+            local sn  = iconPickerTarget.name
+            local ib  = iconPickerTarget.btn
+            if IRR_SetSetIcon then IRR_SetSetIcon(sn, self._tex) end
+            if ib then
+                ib._icTex:SetTexture(self._tex)
+                ib._icTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+            end
+            SC_HideIconPicker()
+        end)
+        btn:Show()
+        col = col + 1
+        if col >= IPICK_COLS then col = 0 ; rowIdx = rowIdx + 1 end
+    end
+    local totalRows = math.ceil(math.min(#list, IPICK_MAX) / IPICK_COLS)
+    cont:SetHeight(totalRows*(IPICK_ICO_S+IPICK_GAP) + IPICK_PAD*2)
+end
+
+local function SC_ShowIconPicker(setName, anchorBtn)
+    BuildIconPicker()
+    iconPickerTarget = { name = setName, btn = anchorBtn }
+    SC_PopulateIconPicker()
+    iconPickerFrame:ClearAllPoints()
+    iconPickerFrame:SetPoint("BOTTOMLEFT", anchorBtn, "TOPLEFT", 0, 4)
+    iconPickerFrame:Show()
+    iconPickerFrame:Raise()
+end
+
+-- ============================================================
 -- Sets tab
 -- ============================================================
 local function BuildSetRows(parent)
@@ -744,11 +1001,26 @@ local function BuildSetRows(parent)
         specTx:SetJustifyH("CENTER") ; specTx:SetText("--")
         specBtn.tx = specTx
 
+        -- Icon button (click opens icon picker)
+        local iconBtn = CreateFrame("Button", nil, row)
+        iconBtn:SetSize(20, 20)
+        iconBtn:SetPoint("LEFT", row, "LEFT", 0, 0)
+        iconBtn:EnableMouse(false)
+        local iconBg2 = iconBtn:CreateTexture(nil, "BACKGROUND")
+        iconBg2:SetAllPoints() ; iconBg2:SetColorTexture(0.12, 0.12, 0.16, 0.90)
+        local iconTex = iconBtn:CreateTexture(nil, "ARTWORK")
+        iconTex:SetAllPoints()
+        iconTex:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+        iconTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        iconBtn._icTex = iconTex
+        local iconHl = iconBtn:CreateTexture(nil, "HIGHLIGHT")
+        iconHl:SetAllPoints() ; iconHl:SetColorTexture(1, 1, 1, 0.30)
+
         local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         nm:SetFont(nm:GetFont(), 10, "")
-        nm:SetPoint("LEFT", row, "LEFT", 0, 0)
+        nm:SetPoint("LEFT", row, "LEFT", 24, 0)
         nm:SetJustifyH("LEFT")
-        nm:SetWidth(160)
+        nm:SetWidth(138)
 
         local cnt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         cnt:SetFont(cnt:GetFont(), 9, "")
@@ -757,7 +1029,7 @@ local function BuildSetRows(parent)
         cnt:SetTextColor(0.4, 0.4, 0.4)
 
         row:Hide()
-        setRowWidgets[i] = {row=row, nm=nm, cnt=cnt, specBtn=specBtn, eqBtn=eqBtn, saveBtn=saveBtn, delBtn=delBtn}
+        setRowWidgets[i] = {row=row, nm=nm, cnt=cnt, iconBtn=iconBtn, specBtn=specBtn, eqBtn=eqBtn, saveBtn=saveBtn, delBtn=delBtn}
     end
 end
 
@@ -794,6 +1066,23 @@ function SC_RefreshSets()
 
         w.nm:SetText("|cffdddddd" .. name .. "|r")
         w.cnt:SetText(string.format("|cff555555(%d)|r", n))
+
+        -- Icon button
+        local ic = IRR_GetSetIcon and IRR_GetSetIcon(name)
+        w.iconBtn._icTex:SetTexture(ic or "Interface\\Icons\\INV_Misc_QuestionMark")
+        w.iconBtn._icTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        w.iconBtn:EnableMouse(true)
+        w.iconBtn:SetScript("OnClick", function(self)
+            SC_ShowIconPicker(name, self)
+        end)
+        w.iconBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Set Icon", 1, 0.82, 0)
+            GameTooltip:AddLine("Click to choose an icon for this set.", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        w.iconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        w.iconBtn:Show()
 
         -- Spec-link toggle
         local function UpdateSpecBtn()
@@ -1652,13 +1941,16 @@ function SC_BuildMain()
           end },
         { tip="Guild",     desc="Open Guild panel",           lbl="G",   r=0.25, g=1.00, b=0.55,
           fn=function()
-              -- GuildFrame is always loaded in TBC (not a separate LoD addon)
-              if GuildFrame then
-                  SC_ToggleSidePanel(GuildFrame)
-              elseif GuildFrame_Toggle then
-                  GuildFrame_Toggle()
+              if not GuildFrame then return end
+              if GuildFrame:IsShown() then
+                  HideUIPanel(GuildFrame)
               else
-                  pcall(function() ToggleGuildFrame() end)
+                  -- Must use ShowUIPanel/ToggleGuildFrame to initialise tabs
+                  ShowUIPanel(GuildFrame)
+                  -- Reposition next to SlyChar after Blizzard's panel manager settles
+                  C_Timer.After(0, function()
+                      SC_AnchorRight(GuildFrame)
+                  end)
               end
           end },
         { tip="Achievements", desc="Open Achievements panel", lbl="A",   r=1.00, g=0.70, b=0.20,

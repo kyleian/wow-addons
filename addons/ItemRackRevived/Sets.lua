@@ -187,6 +187,21 @@ function IRR_GetSpecLink(name)
 end
 
 -- -------------------------------------------------------
+-- IRR_SetSetIcon(name, icon) / IRR_GetSetIcon(name)
+-- Store or retrieve a texture path for a set's display icon.
+-- -------------------------------------------------------
+function IRR_SetSetIcon(name, icon)
+    if not IRR or not IRR.db then return end
+    IRR.db.setIcons = IRR.db.setIcons or {}
+    IRR.db.setIcons[name] = icon
+end
+
+function IRR_GetSetIcon(name)
+    if not IRR or not IRR.db or not IRR.db.setIcons then return nil end
+    return IRR.db.setIcons[name]
+end
+
+-- -------------------------------------------------------
 -- IRR_SetExists(name)
 -- Returns true if a set with that name is saved.
 -- -------------------------------------------------------

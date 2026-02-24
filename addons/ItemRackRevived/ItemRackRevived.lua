@@ -60,6 +60,7 @@ IRR.QUALITY_COLORS = {
 local DB_DEFAULTS = {
     sets      = {},                             -- { [setName] = { [slotId] = itemId, ... } }
     specLinks = {},                             -- { [setName] = 1 or 2 }  dual-spec link
+    setIcons  = {},                             -- { [setName] = texture path }
     position  = { point="CENTER", x=0, y=0 },
     options  = {
         showTooltips  = true,
