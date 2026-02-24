@@ -99,10 +99,14 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
         local slots = _GetContainerNumSlots(bag)
         for bslot = 1, slots do
             if _GetContainerItemID(bag, bslot) == targetItemId then
-                -- Pick up from bag, then swap into equip slot
-                -- (matches real ItemRack: PickupContainerItem + PickupInventoryItem)
+                -- Pick up from bag, equip to slot; any displaced item ends up on
+                -- cursor — put it straight back into the now-empty bag slot so
+                -- the cursor is clean for the next swap in the same loop.
                 _PickupContainerItem(bag, bslot)
                 PickupInventoryItem(slotId)
+                if GetCursorInfo() then
+                    _PickupContainerItem(bag, bslot)  -- bag slot is empty; drops cursor item there
+                end
                 return true
             end
         end
@@ -111,8 +115,13 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
     -- Item may be in another equipment slot (swap scenario)
     for _, slotDef in ipairs(IRR.SLOTS) do
         if GetInventoryItemID("player", slotDef.id) == targetItemId then
+            -- Move item from slotDef.id -> slotId; any displaced item from slotId
+            -- goes back into slotDef.id (which is now empty after step 1).
             PickupInventoryItem(slotDef.id)
             PickupInventoryItem(slotId)
+            if GetCursorInfo() then
+                PickupInventoryItem(slotDef.id)  -- slot is empty; drops cursor item there
+            end
             return true
         end
     end
