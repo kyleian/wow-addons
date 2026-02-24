@@ -132,6 +132,7 @@ function IRR_LoadSet(name)
         print("|cff00ccff[ItemRack Revived]|r Set |cffff4444" .. name .. "|r not found.")
         return
     end
+    print("|cff00ccff[ItemRack Revived]|r Loading set: |cffffcc00" .. name .. "|r")
 
     local equipped  = 0
     local missing   = {}

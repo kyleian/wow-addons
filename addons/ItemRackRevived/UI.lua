@@ -295,14 +295,10 @@ local function CreateSetsPanel(parent, xOff, yOff, availableH)
         countTxt:SetTextColor(0.55, 0.55, 0.55)
         row.countTxt = countTxt
 
-        -- Left-click: select + load; Right-click: select only
+        -- Left-click: select only; Right-click: select only
+        -- Use the Equip button to actually load a set (prevents accidental equip)
         row:SetScript("OnClick", function(self, btn)
-            if btn == "LeftButton" and self.setName then
-                selectedSet = self.setName
-                if editBox then editBox:SetText(self.setName) end
-                IRR_UpdateSetsList()
-                IRR_LoadSet(self.setName)
-            elseif btn == "RightButton" and self.setName then
+            if self.setName then
                 selectedSet = self.setName
                 if editBox then editBox:SetText(self.setName) end
                 IRR_UpdateSetsList()
