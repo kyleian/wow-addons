@@ -39,15 +39,45 @@ Disabling an addon in the panel suppresses its initialization — a full `/reloa
 
 ## Installation
 
-### From CurseForge / GitHub Releases
-Download the latest `SlySuite-x.x.x.zip` from the [Releases](../../releases) page and extract it into:
-```
-World of Warcraft\_anniversary_\Interface\AddOns\
-```
-This drops all `Sly*` addon folders into AddOns at once. Enable/disable individual modules using `/sly` inside the game.
+### Option A — GitHub Releases (recommended, no CurseForge needed)
 
-### Manual (from source)
-Clone this repo and copy all folders from `addons/` into your AddOns directory.
+1. Go to the [Releases page](../../releases) and click the latest release
+2. Under **Assets**, download `SlySuite-x.x.x.zip`
+3. Extract the zip — you'll get a folder called `SlySuite-x.x.x/` containing all the `Sly*` addon folders inside it
+4. Copy **the contents** of that folder (all the `Sly*` folders) into your AddOns directory:
+
+   **Windows (most common):**
+   ```
+   C:\Program Files (x86)\World of Warcraft\_anniversary_\Interface\AddOns\
+   ```
+   After copying it should look like:
+   ```
+   AddOns\
+     SlySuite\
+     SlyChar\
+     SlyBag\
+     SlyMount\
+     ... etc
+   ```
+5. Launch (or reload) WoW — you should see **Sly Suite** in your addon list
+6. Type `/sly` in-game to open the suite manager and enable/disable individual modules
+
+> **Tip:** If you see "Out of date" warnings in the addon list, tick **"Load out of date AddOns"** — TBC Anniversary sometimes bumps the interface version between patches.
+
+---
+
+### Option B — CurseForge App
+
+Install via the CurseForge desktop app by searching for **Sly Suite** in the WoW addon browser.
+
+---
+
+### Option C — Manual (from source)
+
+```bash
+git clone https://github.com/kyleian/wow-addons.git
+```
+Then copy all folders from `addons/` into your AddOns directory (same destination as above).
 
 ## Releasing
 
