@@ -219,7 +219,9 @@ function IRR_LoadSet(name)
 
     -- Switch dual spec if linked
     local linkedSpec = IRR_GetSpecLink(name)
-    if linkedSpec and GetNumTalentGroups and GetNumTalentGroups() >= 2 then
+    if linkedSpec
+        and SetActiveTalentGroup          -- function must exist (dual-spec unlocked)
+        and GetNumTalentGroups and GetNumTalentGroups() >= 2 then
         local active = GetActiveTalentGroup and GetActiveTalentGroup() or 1
         if active ~= linkedSpec then
             local ok, err = pcall(SetActiveTalentGroup, linkedSpec)
