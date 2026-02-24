@@ -86,7 +86,27 @@ end
 -- and equips it to slotId. Returns true on success.
 -- Player must trigger this via a UI button (not automated).
 -- -------------------------------------------------------
+local _UseContainerItem = C_Container and C_Container.UseContainerItem or UseContainerItem
+
 local function IRR_EquipItemInSlot(targetItemId, slotId)
+    -- Ammo slot (0): PickupInventoryItem(0) is not a valid API in TBC Anniversary.
+    -- Ammo is equipped by right-clicking the stack (UseContainerItem).
+    -- Just scan bags and UseContainerItem on the matching stack.
+    if slotId == 0 then
+        local currentId = GetInventoryItemID and GetInventoryItemID("player", 0)
+        if currentId == targetItemId then return true end
+        for bag = 0, 4 do
+            local slots = _GetContainerNumSlots(bag)
+            for bslot = 1, slots do
+                if _GetContainerItemID(bag, bslot) == targetItemId then
+                    _UseContainerItem(bag, bslot)
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
     -- Already wearing it?
     local currentId = GetInventoryItemID("player", slotId)
     if currentId == targetItemId then return true end
@@ -99,28 +119,27 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
         local slots = _GetContainerNumSlots(bag)
         for bslot = 1, slots do
             if _GetContainerItemID(bag, bslot) == targetItemId then
-                -- Pick up from bag, equip to slot; any displaced item ends up on
-                -- cursor — put it straight back into the now-empty bag slot so
-                -- the cursor is clean for the next swap in the same loop.
+                -- Pick up from bag, equip to slot; any displaced item lands on
+                -- cursor — drop it back into the now-empty bag slot so the
+                -- cursor is clean for the next swap in the same loop.
                 _PickupContainerItem(bag, bslot)
-                PickupInventoryItem(slotId)   -- slotId==0 puts old ammo on cursor
+                PickupInventoryItem(slotId)
                 if GetCursorInfo() then
-                    _PickupContainerItem(bag, bslot)  -- bag slot is empty; drops cursor item there
+                    _PickupContainerItem(bag, bslot)
                 end
                 return true
             end
         end
     end
 
-    -- Item may be in another equipment slot (swap scenario)
+    -- Item may already be equipped in a different slot (swap scenario).
+    -- Skip slot 0 — ammo can't be swapped via PickupInventoryItem.
     for _, slotDef in ipairs(IRR.SLOTS) do
-        if GetInventoryItemID("player", slotDef.id) == targetItemId then
-            -- Move item from slotDef.id -> slotId; any displaced item from slotId
-            -- goes back into slotDef.id (which is now empty after step 1).
+        if slotDef.id ~= 0 and GetInventoryItemID("player", slotDef.id) == targetItemId then
             PickupInventoryItem(slotDef.id)
             PickupInventoryItem(slotId)
             if GetCursorInfo() then
-                PickupInventoryItem(slotDef.id)  -- slot is empty; drops cursor item there
+                PickupInventoryItem(slotDef.id)
             end
             return true
         end
@@ -174,11 +193,7 @@ function IRR_LoadSet(name)
                             local _, _, _, _, _, _, _, _, ammoInvType = GetItemInfo(ammoId)
                             if ammoInvType == "INVTYPE_AMMO" then
                                 if GetInventoryItemID("player", 0) ~= ammoId then
-                                    _PickupContainerItem(bag, bslot)
-                                    PickupInventoryItem(0)
-                                    if GetCursorInfo() then
-                                        _PickupContainerItem(bag, bslot)
-                                    end
+                                    _UseContainerItem(bag, bslot)
                                 end
                                 found = true
                                 break
