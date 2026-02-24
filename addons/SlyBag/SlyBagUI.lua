@@ -44,21 +44,22 @@ local searchText  = ""
 -- â”€â”€ C_Container shims â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 local _NumSlots, _ItemLink, _ItemInfo, _UseItem, _PickupItem
 if C_Container then
-    _NumSlots   = C_Container.GetContainerNumSlots
-    _ItemLink   = C_Container.GetContainerItemLink
+    _NumSlots   = C_Container.GetContainerNumSlots  or GetContainerNumSlots
+    _ItemLink   = C_Container.GetContainerItemLink  or GetContainerItemLink
     _ItemInfo   = function(bag, slot)
         local info = C_Container.GetContainerItemInfo(bag, slot)
         if not info then return nil end
-        return info.iconFileID, info.stackCount, info.isLocked, info.quality
+        -- hyperlink carries the item link; iconFileID is the texture
+        return info.iconFileID, info.stackCount, info.isLocked, info.quality, info.hyperlink
     end
-    _UseItem    = C_Container.UseContainerItem
-    _PickupItem = C_Container.PickupContainerItem
+    _UseItem    = C_Container.UseContainerItem    or UseContainerItem
+    _PickupItem = C_Container.PickupContainerItem or PickupContainerItem
 else
     _NumSlots   = GetContainerNumSlots
     _ItemLink   = GetContainerItemLink
     _ItemInfo   = function(bag, slot)
-        local tex, cnt, locked, qual = GetContainerItemInfo(bag, slot)
-        return tex, cnt, locked, qual
+        local tex, cnt, locked, qual, _, _, link = GetContainerItemInfo(bag, slot)
+        return tex, cnt, locked, qual, link
     end
     _UseItem    = UseContainerItem
     _PickupItem = PickupContainerItem
@@ -201,8 +202,11 @@ function SlyBag_Refresh()
         local n = _NumSlots(bag) or 0
         for slot = 1, n do
             total = total + 1
-            local link   = _ItemLink(bag, slot)
-            local tex, stackCnt, _, quality = _ItemInfo(bag, slot)
+            local tex, stackCnt, _, quality, link = _ItemInfo(bag, slot)
+            -- Fallback: try _ItemLink if _ItemInfo didn't provide a link
+            if not link and tex then
+                link = _ItemLink and _ItemLink(bag, slot) or nil
+            end
             local itemId   = ItemIdFromLink(link)
             local itemName = ""
             if link then
