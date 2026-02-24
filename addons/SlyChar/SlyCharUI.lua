@@ -119,7 +119,9 @@ local headerName    = nil
 local headerInfo    = nil
 
 local MAX_STAT_ROWS  = 60
-local MAX_SET_ROWS   = 30
+local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
+local setsScrollOffset    = 0    -- first visible set index (0-based)
+local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local MAX_REP_ROWS   = 80
 local MAX_SKILL_ROWS = 60
 
@@ -1099,9 +1101,15 @@ function SC_RefreshSets()
         return
     end
 
-    for i, name in ipairs(names) do
+    -- clamp offset
+    local total = #names
+    setsScrollOffset = math.max(0, math.min(setsScrollOffset, math.max(0, total - MAX_SET_ROWS)))
+
+    for i = 1, MAX_SET_ROWS do
         local w = setRowWidgets[i]
         if not w then break end
+        local name = names[setsScrollOffset + i]
+        if not name then break end
         local setData = IRR and IRR.db and IRR.db.sets and IRR.db.sets[name]
         local n = 0
         if setData then for _ in pairs(setData) do n = n + 1 end end
@@ -1205,6 +1213,18 @@ function SC_RefreshSets()
 
         w.eqBtn:Show() ; w.saveBtn:Show() ; w.delBtn:Show()
         w.row:Show()
+    end
+
+    -- scroll indicator
+    if setsScrollInfoLabel then
+        local total2 = #names
+        if total2 > MAX_SET_ROWS then
+            local lo = setsScrollOffset + 1
+            local hi = math.min(setsScrollOffset + MAX_SET_ROWS, total2)
+            setsScrollInfoLabel:SetText(lo .. "-" .. hi .. " / " .. total2 .. "  ⇕ scroll")
+        else
+            setsScrollInfoLabel:SetText("")
+        end
     end
 end
 
@@ -1907,21 +1927,27 @@ function SC_BuildMain()
     setSep:SetPoint("TOPLEFT", saveInput, "BOTTOMLEFT", 0, -4)
     setSep:SetColorTexture(0.18, 0.18, 0.24, 1)
 
-    local setsScroll = CreateFrame("ScrollFrame", nil, setsTab)
-    setsScroll:SetPoint("TOPLEFT",     setsTab, "TOPLEFT",     PAD, -48)
-    setsScroll:SetPoint("BOTTOMRIGHT", setsTab, "BOTTOMRIGHT", -4,    2)
-    local setsCont = CreateFrame("Frame", nil, setsScroll)
-    setsCont:SetSize(SIDE_W - PAD*2 - 4, MAX_SET_ROWS * 22)
-    setsScroll:SetScrollChild(setsCont)
+    -- Rows live directly on a plain Frame (no ScrollFrame) — avoids TBC click-intercept bug
+    local setsCont = CreateFrame("Frame", nil, setsTab)
+    setsCont:SetPoint("TOPLEFT", setsTab, "TOPLEFT", PAD, -48)
+    setsCont:SetSize(SIDE_W - PAD*2, MAX_SET_ROWS * 22)
     BuildSetRows(setsCont)
 
-    -- Mouse-wheel scrolling (no template scrollbar needed)
-    setsScroll:EnableMouseWheel(true)
-    setsScroll:SetScript("OnMouseWheel", function(self, delta)
-        local cur = self:GetVerticalScroll()
-        local max = self:GetVerticalScrollRange()
-        self:SetVerticalScroll(math.max(0, math.min(cur - delta * 22 * 3, max)))
+    -- Mouse-wheel virtual scroll
+    setsTab:EnableMouseWheel(true)
+    setsTab:SetScript("OnMouseWheel", function(self, delta)
+        local names2 = IRR_GetSetNames and IRR_GetSetNames() or {}
+        local maxOffset = math.max(0, #names2 - MAX_SET_ROWS)
+        setsScrollOffset = math.max(0, math.min(setsScrollOffset - delta, maxOffset))
+        SC_RefreshSets()
     end)
+
+    -- Scroll position indicator
+    local setsInfo = setsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    setsInfo:SetFont(setsInfo:GetFont(), 8, "")
+    setsInfo:SetPoint("BOTTOMRIGHT", setsTab, "BOTTOMRIGHT", -4, 4)
+    setsInfo:SetTextColor(0.40, 0.40, 0.50)
+    setsScrollInfoLabel = setsInfo
 
     -- Reputation tab
     local repTab = CreateFrame("Frame", nil, side)
