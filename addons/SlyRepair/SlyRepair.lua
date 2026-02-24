@@ -61,23 +61,33 @@ local function Announce(msg)
     end
 end
 
+-- ── C_Container shims (TBC Anniversary uses C_Container API) ─────────────────
+local _GetNumSlots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
+local _GetItemInfo = C_Container and function(bag, slot)
+    local info = C_Container.GetContainerItemInfo(bag, slot)
+    if not info then return nil end
+    return info.iconFileID, info.stackCount, info.isLocked, info.quality, nil, nil, info.hyperlink
+end or GetContainerItemInfo
+local _GetItemLink = C_Container and C_Container.GetContainerItemLink or GetContainerItemLink
+local _UseItem     = C_Container and C_Container.UseContainerItem     or UseContainerItem
+
 -- ── Core logic ──────────────────────────────────────────────────────────────
 local function DoSellJunk()
     if not SlyRepairDB.sellJunk then return end
     local total = 0
     local count = 0
-    for bag = 0, NUM_BAG_SLOTS do
-        local slots = GetContainerNumSlots(bag)
+    for bag = 0, 4 do
+        local slots = _GetNumSlots(bag) or 0
         for slot = 1, slots do
-            local texture, itemCount, locked, quality = GetContainerItemInfo(bag, slot)
+            local texture, itemCount, _, quality = _GetItemInfo(bag, slot)
             if texture and quality == 0 then
-                local link = GetContainerItemLink(bag, slot)
+                local link = _GetItemLink(bag, slot)
                 if link then
                     local _, _, _, _, _, _, _, _, _, _, sellPrice = GetItemInfo(link)
                     if sellPrice and sellPrice > 0 then
                         total = total + sellPrice * (itemCount or 1)
                         count = count + 1
-                        UseContainerItem(bag, slot)
+                        _UseItem(bag, slot)
                     end
                 end
             end
