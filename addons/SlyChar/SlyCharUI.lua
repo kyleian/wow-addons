@@ -680,17 +680,20 @@ end
 -- Set Icon Picker
 -- ============================================================
 local IPICK_COLS  = 5
+local IPICK_ROWS  = 5
+local IPICK_PAGE  = IPICK_COLS * IPICK_ROWS   -- 25 icons per page
 local IPICK_ICO_S = 30
 local IPICK_GAP   = 2
 local IPICK_PAD   = 6
 local IPICK_HDR_H = 26
-local IPICK_VIS_H = 252
-local IPICK_MAX   = 120
-local IPICK_W     = IPICK_COLS*(IPICK_ICO_S+IPICK_GAP) - IPICK_GAP + IPICK_PAD*2 + 18
+local IPICK_FOT_H = 26
+local IPICK_W     = IPICK_COLS*(IPICK_ICO_S+IPICK_GAP) - IPICK_GAP + IPICK_PAD*2
 
 local iconPickerFrame  = nil
 local iconPickerTarget = nil
 local iconBtnPool      = {}
+local iconList         = {}
+local iconCurrentPage  = 1
 
 local STATIC_SET_ICONS = {
     -- Warrior
@@ -771,24 +774,23 @@ local function SC_HideIconPicker()
     iconPickerTarget = nil
 end
 
+local function SC_ShowPage(page) end  -- forward decl, defined after BuildIconPicker
+
 local function BuildIconPicker()
     if iconPickerFrame then return end
+    local gridH = IPICK_ROWS*(IPICK_ICO_S+IPICK_GAP) + IPICK_PAD*2
+    local totalH = IPICK_HDR_H + gridH + IPICK_FOT_H
     local f = CreateFrame("Frame", "SlyCharIconPicker", UIParent)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetWidth(IPICK_W)
-    f:SetHeight(IPICK_HDR_H + IPICK_VIS_H)
+    f:SetHeight(totalH)
     f:SetMovable(true)
-    f:EnableMouse(false)
+    f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop",  f.StopMovingOrSizing)
     f:SetClampedToScreen(true)
     f:Hide()
-    f:SetScript("OnShow", function(self) self:EnableMouse(true) end)
-    f:SetScript("OnHide", function(self) self:EnableMouse(false) end)
-    f:SetScript("OnMouseDown", function(_, btn)
-        if btn == "RightButton" then SC_HideIconPicker() end
-    end)
 
     local bg = f:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints() ; bg:SetColorTexture(0.06, 0.06, 0.09, 0.97)
@@ -805,41 +807,34 @@ local function BuildIconPicker()
     hdr:SetTextColor(0.70, 0.85, 1.00)
     hdr:SetText("Choose Icon")
 
-    local hint = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    hint:SetFont(hint:GetFont(), 8, "")
-    hint:SetPoint("TOPLEFT", f, "TOPLEFT", IPICK_PAD, -16)
-    hint:SetTextColor(0.40, 0.55, 0.40)
-    hint:SetText("top = your gear   right-click to close")
-
     local xBtn = CreateFrame("Button", nil, f)
     xBtn:SetSize(16, 16) ; xBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -3, -3)
     xBtn:EnableMouse(true)
+    xBtn:RegisterForClicks("LeftButtonUp")
     local xBg = xBtn:CreateTexture(nil, "BACKGROUND")
     xBg:SetAllPoints() ; xBg:SetColorTexture(0.40, 0.10, 0.10, 0.90)
     local xHl = xBtn:CreateTexture(nil, "HIGHLIGHT")
     xHl:SetAllPoints() ; xHl:SetColorTexture(0.70, 0.20, 0.20, 0.60)
     local xTx = xBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     xTx:SetAllPoints() ; xTx:SetJustifyH("CENTER") ; xTx:SetText("|cffff8888x|r")
-    xBtn:SetScript("OnClick", SC_HideIconPicker)
+    xBtn:SetScript("OnClick", function() SC_HideIconPicker() end)
 
     local sep = f:CreateTexture(nil, "ARTWORK")
     sep:SetPoint("TOPLEFT",  f, "TOPLEFT",  1, -IPICK_HDR_H)
     sep:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -IPICK_HDR_H)
     sep:SetHeight(1) ; sep:SetColorTexture(0.25, 0.25, 0.38, 1)
 
-    local sf = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-    sf:SetPoint("TOPLEFT",     f, "TOPLEFT",      1, -(IPICK_HDR_H+2))
-    sf:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -15, 2)
-
-    local innerW = IPICK_COLS*(IPICK_ICO_S+IPICK_GAP) - IPICK_GAP + IPICK_PAD*2
-    local cont = CreateFrame("Frame", nil, sf)
-    cont:SetWidth(innerW)
-    cont:SetHeight(50)
-    sf:SetScrollChild(cont)
-
-    for k = 1, IPICK_MAX do
-        local btn = CreateFrame("Button", nil, cont)
+    -- Icon buttons placed directly on frame (no scroll frame)
+    for k = 1, IPICK_PAGE do
+        local col = (k-1) % IPICK_COLS
+        local row = math.floor((k-1) / IPICK_COLS)
+        local btn = CreateFrame("Button", nil, f)
         btn:SetSize(IPICK_ICO_S, IPICK_ICO_S)
+        btn:EnableMouse(true)
+        btn:RegisterForClicks("LeftButtonUp")
+        btn:SetPoint("TOPLEFT", f, "TOPLEFT",
+            IPICK_PAD + col*(IPICK_ICO_S+IPICK_GAP),
+            -(IPICK_HDR_H + IPICK_PAD + row*(IPICK_ICO_S+IPICK_GAP)))
         btn:Hide()
         local icTex = btn:CreateTexture(nil, "ARTWORK")
         icTex:SetAllPoints() ; icTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
@@ -862,20 +857,54 @@ local function BuildIconPicker()
         iconBtnPool[k] = btn
     end
 
-    f._cont = cont
+    -- Footer: prev / page label / next
+    local prevBtn = CreateFrame("Button", nil, f)
+    prevBtn:SetSize(40, 20)
+    prevBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", IPICK_PAD, 4)
+    prevBtn:EnableMouse(true)
+    prevBtn:RegisterForClicks("LeftButtonUp")
+    local prevBg = prevBtn:CreateTexture(nil, "BACKGROUND")
+    prevBg:SetAllPoints() ; prevBg:SetColorTexture(0.18, 0.18, 0.28, 0.90)
+    local prevHl = prevBtn:CreateTexture(nil, "HIGHLIGHT")
+    prevHl:SetAllPoints() ; prevHl:SetColorTexture(1, 1, 1, 0.15)
+    local prevTx = prevBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    prevTx:SetAllPoints() ; prevTx:SetJustifyH("CENTER") ; prevTx:SetText("< Prev")
+    prevBtn:SetScript("OnClick", function()
+        SC_ShowPage(iconCurrentPage - 1)
+    end)
+
+    local nextBtn = CreateFrame("Button", nil, f)
+    nextBtn:SetSize(40, 20)
+    nextBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -IPICK_PAD, 4)
+    nextBtn:EnableMouse(true)
+    nextBtn:RegisterForClicks("LeftButtonUp")
+    local nextBg = nextBtn:CreateTexture(nil, "BACKGROUND")
+    nextBg:SetAllPoints() ; nextBg:SetColorTexture(0.18, 0.18, 0.28, 0.90)
+    local nextHl = nextBtn:CreateTexture(nil, "HIGHLIGHT")
+    nextHl:SetAllPoints() ; nextHl:SetColorTexture(1, 1, 1, 0.15)
+    local nextTx = nextBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    nextTx:SetAllPoints() ; nextTx:SetJustifyH("CENTER") ; nextTx:SetText("Next >")
+    nextBtn:SetScript("OnClick", function()
+        SC_ShowPage(iconCurrentPage + 1)
+    end)
+
+    local pageLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    pageLabel:SetPoint("BOTTOM", f, "BOTTOM", 0, 8)
+    pageLabel:SetTextColor(0.60, 0.60, 0.70)
+    f._pageLabel = pageLabel
+    f._prevBtn   = prevBtn
+    f._nextBtn   = nextBtn
     iconPickerFrame = f
 end
 
 local function SC_PopulateIconPicker()
-    local cont = iconPickerFrame._cont
-    for _, b in ipairs(iconBtnPool) do b:Hide() end
-
-    local list, seen = {}, {}
+    local seen = {}
+    iconList = {}
     local function addTex(tex)
         if not tex then return end
         tex = tostring(tex)
         if seen[tex] then return end
-        seen[tex] = true ; list[#list+1] = tex
+        seen[tex] = true ; iconList[#iconList+1] = tex
     end
     for slot = 1, 19 do addTex(GetInventoryItemTexture("player", slot)) end
     for bag = 0, 4 do
@@ -884,49 +913,57 @@ local function SC_PopulateIconPicker()
         end
     end
     for _, tex in ipairs(STATIC_SET_ICONS) do addTex(tex) end
+end
+
+SC_ShowPage = function(page)
+    local totalPages = math.max(1, math.ceil(#iconList / IPICK_PAGE))
+    page = math.max(1, math.min(page, totalPages))
+    iconCurrentPage = page
 
     local curIcon = iconPickerTarget and IRR_GetSetIcon and
         IRR_GetSetIcon(iconPickerTarget.name)
 
-    local col, rowIdx = 0, 0
-    for idx = 1, math.min(#list, IPICK_MAX) do
-        local tex = list[idx]
-        local btn = iconBtnPool[idx]
-        local isSelected = curIcon and curIcon == tex
-        btn._tex = tex
-        btn._ic:SetTexture(tex)
-        btn:ClearAllPoints()
-        btn:SetPoint("TOPLEFT", cont, "TOPLEFT",
-            IPICK_PAD + col*(IPICK_ICO_S+IPICK_GAP),
-            -(rowIdx*(IPICK_ICO_S+IPICK_GAP) + IPICK_PAD))
-        btn._sel:SetColorTexture(
-            isSelected and 0.2 or 0,
-            isSelected and 0.7 or 0,
-            isSelected and 1.0 or 0,
-            isSelected and 0.6 or 0)
-        btn:SetScript("OnClick", function(self)
-            if not iconPickerTarget then SC_HideIconPicker(); return end
-            local sn  = iconPickerTarget.name
-            local ib  = iconPickerTarget.btn
-            if IRR_SetSetIcon then IRR_SetSetIcon(sn, self._tex) end
-            if ib then
-                ib._icTex:SetTexture(self._tex)
-                ib._icTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-            end
-            SC_HideIconPicker()
-        end)
-        btn:Show()
-        col = col + 1
-        if col >= IPICK_COLS then col = 0 ; rowIdx = rowIdx + 1 end
+    for k = 1, IPICK_PAGE do
+        local btn = iconBtnPool[k]
+        local idx = (page-1)*IPICK_PAGE + k
+        local tex = iconList[idx]
+        if tex then
+            btn._tex = tex
+            btn._ic:SetTexture(tex)
+            local isSelected = curIcon and curIcon == tex
+            btn._sel:SetColorTexture(
+                isSelected and 0.2 or 0,
+                isSelected and 0.7 or 0,
+                isSelected and 1.0 or 0,
+                isSelected and 0.6 or 0)
+            btn:SetScript("OnClick", function(self)
+                if not iconPickerTarget then SC_HideIconPicker(); return end
+                local sn = iconPickerTarget.name
+                local ib = iconPickerTarget.btn
+                if IRR_SetSetIcon then IRR_SetSetIcon(sn, self._tex) end
+                if ib then
+                    ib._icTex:SetTexture(self._tex)
+                    ib._icTex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+                end
+                SC_HideIconPicker()
+            end)
+            btn:Show()
+        else
+            btn:Hide()
+        end
     end
-    local totalRows = math.ceil(math.min(#list, IPICK_MAX) / IPICK_COLS)
-    cont:SetHeight(totalRows*(IPICK_ICO_S+IPICK_GAP) + IPICK_PAD*2)
+
+    iconPickerFrame._pageLabel:SetText(page .. " / " .. totalPages)
+    iconPickerFrame._prevBtn:SetShown(page > 1)
+    iconPickerFrame._nextBtn:SetShown(page < totalPages)
 end
 
 local function SC_ShowIconPicker(setName, anchorBtn)
     BuildIconPicker()
     iconPickerTarget = { name = setName, btn = anchorBtn }
     SC_PopulateIconPicker()
+    iconCurrentPage = 1
+    SC_ShowPage(1)
     iconPickerFrame:ClearAllPoints()
     iconPickerFrame:SetPoint("BOTTOMLEFT", anchorBtn, "TOPLEFT", 0, 4)
     iconPickerFrame:Show()
