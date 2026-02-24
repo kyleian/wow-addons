@@ -55,10 +55,38 @@ jobs:
             echo "CF secrets not set — skipping CurseForge upload."
             exit 0
           fi
-          # TBC Anniversary game version ID on CurseForge = 9551 (update if wrong)
-          GAME_VERSION_ID=9551
-          curl -sf -X POST \
+          # Look up the CurseForge game version ID for TBC Anniversary (interface 20505)
+          echo "Fetching CurseForge game versions..."
+          VERSIONS=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
+            "https://wow.curseforge.com/api/game/versions")
+          echo "Available versions: $VERSIONS"
+          # Find the version ID matching "2.5" (TBC Anniversary)
+          GAME_VERSION_ID=$(echo "$VERSIONS" | python3 -c "
+          import sys, json
+          versions = json.load(sys.stdin)
+          # Try to find TBC Anniversary version (2.5.x)
+          for v in versions:
+              if '2.5' in str(v.get('name','')) or '2.5' in str(v.get('slug','')):
+                  print(v['id'])
+                  break
+          " 2>/dev/null || echo "")
+          if [ -z "$GAME_VERSION_ID" ]; then
+            echo "WARNING: Could not auto-detect TBC version ID, using known fallback 9551"
+            GAME_VERSION_ID=9551
+          fi
+          echo "Using game version ID: $GAME_VERSION_ID"
+          echo "Uploading $ZIP to CurseForge project $CF_PROJECT_ID..."
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
             -H "X-Api-Token: $CF_API_KEY" \
             -F "metadata={\"changelog\":\"See GitHub release notes\",\"changelogType\":\"text\",\"displayName\":\"SlySuite $TAG\",\"gameVersions\":[$GAME_VERSION_ID],\"releaseType\":\"release\"}" \
             -F "file=@$ZIP" \
-            "https://www.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file"
+            "https://wow.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file")
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          BODY=$(echo "$RESPONSE" | grep -v "HTTP_STATUS:")
+          echo "Response: $BODY"
+          echo "HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -gt 299 ]; then
+            echo "CurseForge upload failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi
+          echo "CurseForge upload successful!"
