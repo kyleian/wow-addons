@@ -134,6 +134,8 @@ evFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 evFrame:RegisterEvent("CHARACTER_POINTS_CHANGED")
 evFrame:RegisterEvent("UPDATE_FACTION")
 evFrame:RegisterEvent("SKILL_LINES_CHANGED")
+evFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+evFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 
 evFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -184,6 +186,20 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
         if SlyCharMainFrame and SlyCharMainFrame:IsShown()
             and SC.db.lastTab == "skills" then
             SC_RefreshSkills()
+        end
+
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
+            and SC.db.lastTab == "nit" then
+            if SC_UpdateNITLayer then SC_UpdateNITLayer("target") end
+        end
+
+    elseif event == "UPDATE_MOUSEOVER_UNIT" then
+        -- Only bother with mouseover if NWB hasn't already set a layer value
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
+            and SC.db.lastTab == "nit"
+            and (not NWB_CurrentLayer or NWB_CurrentLayer == 0) then
+            if SC_UpdateNITLayer then SC_UpdateNITLayer("mouseover") end
         end
     end
 end)

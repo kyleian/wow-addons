@@ -129,10 +129,11 @@ local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
-local MAX_NIT_LOCK_ROWS   = 17
+local MAX_NIT_LOCK_ROWS   = 15   -- reduced by 2 to make room for layer display
 local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
 local nitLockScrollOffset = 0
 local nitScrollInfoLabel  = nil
+local nitLayerLabel       = nil  -- FontString showing current layer
 
 -- ============================================================
 -- Themes
@@ -1592,21 +1593,53 @@ end
 local function BuildNitRows(parent)
     local W = SIDE_W - PAD*2
 
-    -- Header + scroll info
+    -- ── Layer display (NWB integration) ──────────────────────────────────────
+    local layerBg = parent:CreateTexture(nil, "BACKGROUND")
+    layerBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0,  0)
+    layerBg:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0,  0)
+    layerBg:SetHeight(17)
+    layerBg:SetColorTexture(0.06, 0.09, 0.16, 0.85)
+
+    local layerIcon = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    layerIcon:SetFont(layerIcon:GetFont(), 9, "OUTLINE")
+    layerIcon:SetPoint("LEFT", parent, "LEFT", 2, -8)
+    layerIcon:SetText("|cff6688bbLayer|r")
+
+    local layerVal = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    layerVal:SetFont(layerVal:GetFont(), 10, "OUTLINE")
+    layerVal:SetPoint("LEFT", parent, "LEFT", 42, -8)
+    layerVal:SetText("|cff444466—|r")
+    nitLayerLabel = layerVal
+
+    local layerHint = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    layerHint:SetFont(layerHint:GetFont(), 8, "")
+    layerHint:SetPoint("RIGHT", parent, "RIGHT", -2, -8)
+    layerHint:SetJustifyH("RIGHT")
+    layerHint:SetTextColor(0.35, 0.35, 0.42)
+    layerHint:SetText("target any NPC")
+
+    -- thin divider
+    local divLine = parent:CreateTexture(nil, "ARTWORK")
+    divLine:SetPoint("BOTTOMLEFT",  layerBg, "BOTTOMLEFT",  0, 0)
+    divLine:SetPoint("BOTTOMRIGHT", layerBg, "BOTTOMRIGHT", 0, 0)
+    divLine:SetHeight(1)
+    divLine:SetColorTexture(0.20, 0.28, 0.50, 0.60)
+
+    -- ── Lockout header + scroll info (shifted down 20px) ─────────────────────
     local lh = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     lh:SetFont(lh:GetFont(), 10, "OUTLINE")
-    lh:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+    lh:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -18)
     lh:SetText("|cffffff99Alt Instance Lockouts|r")
 
     local si = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     si:SetFont(si:GetFont(), 8, "")
-    si:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
+    si:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -18)
     si:SetJustifyH("RIGHT") ; si:SetTextColor(0.45, 0.45, 0.50)
     nitScrollInfoLabel = si
 
     -- Scrollable lockout rows
     for i = 1, MAX_NIT_LOCK_ROWS do
-        local yOff = -(18 + (i-1)*18)
+        local yOff = -(36 + (i-1)*18)
         local row = CreateFrame("Frame", nil, parent)
         row:SetSize(W, 17)
         row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, yOff)
@@ -1657,7 +1690,50 @@ local function FormatNITTime(secs)
     end
 end
 
+-- ── Layer detection (mirrors NWB:setCurrentLayerText) ──────────────────────
+function SC_UpdateNITLayer(unit)
+    if not nitLayerLabel then return end
+
+    -- Prefer NWB's already-computed value (most accurate).
+    -- NWB sets the global NWB_CurrentLayer and NWB.currentLayer whenever
+    -- you target or mouseover a creature; we just read it.
+    local layerNum = (NWB_CurrentLayer and NWB_CurrentLayer > 0 and NWB_CurrentLayer)
+                  or (NWB and NWB.currentLayer and NWB.currentLayer > 0 and NWB.currentLayer)
+                  or (NWB and NWB.lastKnownLayer and NWB.lastKnownLayer > 0 and NWB.lastKnownLayer)
+
+    -- Fallback: if NWB is loaded but hasn't set a value yet, parse the GUID
+    -- ourselves using NWB's own layer dataset (same logic NWB:setCurrentLayerText uses).
+    if not layerNum and unit and NWB and NWB.data and NWB.data.layers then
+        local GUID = UnitGUID(unit)
+        if GUID then
+            local unitType, _, _, _, zoneID = strsplit("-", GUID)
+            if unitType == "Creature" and zoneID then
+                local zID = tonumber(zoneID)
+                if zID then
+                    local count = 0
+                    -- NWB iterates with pairsByKeys (sorted); replicate that here
+                    local sortedKeys = {}
+                    for k in pairs(NWB.data.layers) do sortedKeys[#sortedKeys+1] = k end
+                    table.sort(sortedKeys)
+                    for _, k in ipairs(sortedKeys) do
+                        count = count + 1
+                        if k == zID then layerNum = count; break end
+                    end
+                end
+            end
+        end
+    end
+
+    if layerNum and layerNum > 0 then
+        local src = (NWB_CurrentLayer and NWB_CurrentLayer > 0) and "|cff2255aa[NWB]|r" or ""
+        nitLayerLabel:SetText(string.format("|cff00ff00%d|r %s", layerNum, src))
+    else
+        nitLayerLabel:SetText("|cff444466—|r")
+    end
+end
+
 function SC_RefreshNIT()
+    SC_UpdateNITLayer("target")
     for _, w in ipairs(nitLockRows) do w:Hide() end
     if nitScrollInfoLabel then nitScrollInfoLabel:SetText("") end
 
@@ -2383,7 +2459,7 @@ function SC_BuildMain()
 
     local nitCont = CreateFrame("Frame", nil, nitTab)
     nitCont:SetPoint("TOPLEFT", nitTab, "TOPLEFT", PAD, -4)
-    nitCont:SetSize(SIDE_W - PAD*2, 18 + MAX_NIT_LOCK_ROWS * 18)
+    nitCont:SetSize(SIDE_W - PAD*2, 36 + 18 + MAX_NIT_LOCK_ROWS * 18)   -- 36px for layer row + divider
     BuildNitRows(nitCont)
 
     nitTab:EnableMouseWheel(true)
