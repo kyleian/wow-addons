@@ -27,7 +27,7 @@ SlyCharMainFrame = nil   -- global ref, set at end of SC_BuildMain
 
 -- ---- Layout ----
 local FRAME_W      = 732
-local FRAME_H      = 448
+local FRAME_H      = 404
 local HDR_H        = 30
 local FOOT_H       = 20
 local CHAR_W       = 370
