@@ -910,16 +910,32 @@ local function SC_PopulateIconPicker()
     local function addTex(tex)
         if not tex then return end
         tex = tostring(tex)
+        if tex == "" or tex:find("^table:") then return end  -- skip invalid/table values
         if seen[tex] then return end
         seen[tex] = true ; iconList[#iconList+1] = tex
     end
+
+    -- Static icons first so page 1 is always populated
+    for _, tex in ipairs(STATIC_SET_ICONS) do addTex(tex) end
+
+    -- Equipped item textures
     for slot = 1, 19 do addTex(GetInventoryItemTexture("player", slot)) end
+
+    -- Bag item icons (C_Container-safe)
+    local _GetNumSlots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
     for bag = 0, 4 do
-        for slot = 1, (GetContainerNumSlots(bag) or 0) do
-            addTex((GetContainerItemInfo(bag, slot)))
+        local numSlots = _GetNumSlots and _GetNumSlots(bag) or 0
+        for slot = 1, numSlots do
+            local icon
+            if C_Container and C_Container.GetContainerItemInfo then
+                local info = C_Container.GetContainerItemInfo(bag, slot)
+                icon = info and info.iconFileID
+            else
+                icon = (GetContainerItemInfo(bag, slot))
+            end
+            addTex(icon)
         end
     end
-    for _, tex in ipairs(STATIC_SET_ICONS) do addTex(tex) end
 end
 
 SC_ShowPage = function(page)
