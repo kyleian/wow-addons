@@ -113,7 +113,16 @@ local function DoRepair()
     if not SlyRepairDB.enabled then return end
 
     local cost, canRepair = GetRepairAllCost()
-    if not canRepair or cost == 0 then return end
+    if not canRepair then
+        -- canRepair is false when the vendor doesn't repair, or the data
+        -- hasn't loaded yet (try increasing the C_Timer delay if you see this).
+        -- Silently ignore if cost is also nil or 0 (most vendors don't repair).
+        if cost and cost > 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff6060[SlyRepair]|r Vendor cannot repair — GetRepairAllCost returned canRepair=false (cost=" .. tostring(cost) .. ").")
+        end
+        return
+    end
+    if cost == 0 then return end  -- gear is undamaged, nothing to do
 
     local myGold = GetMoney()
     if myGold < cost then
@@ -241,7 +250,11 @@ local function Init()
             -- after MERCHANT_SHOW fires, so GetRepairAllCost() is 0 if called
             -- immediately.
             C_Timer.After(0.3, function()
-                DoSellJunk()
+                -- Protect independently: a junk-sell error must not prevent repair
+                local ok, err = pcall(DoSellJunk)
+                if not ok then
+                    DEFAULT_CHAT_FRAME:AddMessage("|cffff6060[SlyRepair]|r DoSellJunk error: " .. tostring(err))
+                end
                 DoRepair()
             end)
         end
