@@ -46,7 +46,7 @@ local MODEL_W  = COL_R - PAD - MODEL_X
 local MODEL_H  = 280
 
 local COL_H     = 8 * SLOT_S + 7 * SLOT_GAP
-local WPN_Y     = SLOT_TOP - COL_H - 6
+local WPN_Y     = SLOT_TOP - 7 * (SLOT_S + SLOT_GAP)   -- aligns with col row 8
 local WPN_GAP   = 10
 local WPN_TOTAL = 3 * SLOT_S + 2 * WPN_GAP
 local WPN_START = math.floor((CHAR_W - WPN_TOTAL) / 2)
