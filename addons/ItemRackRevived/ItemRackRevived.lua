@@ -34,7 +34,7 @@ IRR.SLOT_PAIRS = {
     { { id=16, slot="MainHandSlot",      label="Main Hand" },
       { id=17, slot="SecondaryHandSlot", label="Off Hand"  } },
     { { id=18, slot="RangedSlot",        label="Ranged"    },
-      nil },
+      { id=0,  slot="AmmoSlot",          label="Ammo"       } },
 }
 
 -- Flat list for iteration

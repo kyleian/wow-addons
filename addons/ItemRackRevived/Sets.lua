@@ -103,9 +103,15 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
                 -- cursor — put it straight back into the now-empty bag slot so
                 -- the cursor is clean for the next swap in the same loop.
                 _PickupContainerItem(bag, bslot)
-                PickupInventoryItem(slotId)
-                if GetCursorInfo() then
-                    _PickupContainerItem(bag, bslot)  -- bag slot is empty; drops cursor item there
+                if slotId == 0 then
+                    -- Ammo slot: AutoEquipCursorItem goes straight to slot 0,
+                    -- no item is displaced onto the cursor.
+                    AutoEquipCursorItem()
+                else
+                    PickupInventoryItem(slotId)
+                    if GetCursorInfo() then
+                        _PickupContainerItem(bag, bslot)  -- bag slot is empty; drops cursor item there
+                    end
                 end
                 return true
             end
@@ -118,9 +124,13 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
             -- Move item from slotDef.id -> slotId; any displaced item from slotId
             -- goes back into slotDef.id (which is now empty after step 1).
             PickupInventoryItem(slotDef.id)
-            PickupInventoryItem(slotId)
-            if GetCursorInfo() then
-                PickupInventoryItem(slotDef.id)  -- slot is empty; drops cursor item there
+            if slotId == 0 then
+                AutoEquipCursorItem()
+            else
+                PickupInventoryItem(slotId)
+                if GetCursorInfo() then
+                    PickupInventoryItem(slotDef.id)  -- slot is empty; drops cursor item there
+                end
             end
             return true
         end
@@ -154,6 +164,37 @@ function IRR_LoadSet(name)
         else
             local itemName = GetItemInfo(itemId) or ("Item #" .. itemId)
             table.insert(missing, itemName)
+        end
+    end
+
+    -- Auto-equip ammo if a ranged weapon (bow/gun/crossbow) is equipped but
+    -- the set had no explicit ammo entry (slot 0).  INVTYPE_RANGED covers
+    -- bows, guns and crossbows; wands (INVTYPE_RANGEDRIGHT) don't use ammo.
+    if not setData[0] then
+        local rangedId = GetInventoryItemID("player", 18)
+        if rangedId then
+            local _, _, _, _, _, _, _, _, rangedInvType = GetItemInfo(rangedId)
+            if rangedInvType == "INVTYPE_RANGED" then
+                for bag = 0, 4 do
+                    local bagSlots = _GetContainerNumSlots(bag)
+                    local found = false
+                    for bslot = 1, bagSlots do
+                        local ammoId = _GetContainerItemID(bag, bslot)
+                        if ammoId then
+                            local _, _, _, _, _, _, _, _, ammoInvType = GetItemInfo(ammoId)
+                            if ammoInvType == "INVTYPE_AMMO" then
+                                if GetInventoryItemID("player", 0) ~= ammoId then
+                                    _PickupContainerItem(bag, bslot)
+                                    AutoEquipCursorItem()
+                                end
+                                found = true
+                                break
+                            end
+                        end
+                    end
+                    if found then break end
+                end
+            end
         end
     end
 

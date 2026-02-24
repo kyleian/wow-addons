@@ -48,7 +48,7 @@ local MODEL_H  = 280
 local COL_H     = 8 * SLOT_S + 7 * SLOT_GAP
 local WPN_Y     = SLOT_TOP - 7 * (SLOT_S + SLOT_GAP)   -- aligns with col row 8
 local WPN_GAP   = 10
-local WPN_TOTAL = 3 * SLOT_S + 2 * WPN_GAP
+local WPN_TOTAL = 4 * SLOT_S + 3 * WPN_GAP
 local WPN_START = math.floor((CHAR_W - WPN_TOTAL) / 2)
 
 -- ---- Slot lists ----
@@ -68,6 +68,7 @@ local WEAPON_SLOTS = {
     {id=16, label="Main Hand"},
     {id=17, label="Off Hand"},
     {id=18, label="Ranged"},
+    {id=0,  label="Ammo"},
 }
 
 local QUALITY_COLORS = {
@@ -105,6 +106,7 @@ local SLOT_INVTYPES = {
     [17]={INVTYPE_WEAPONOFFHAND=true, INVTYPE_SHIELD=true, INVTYPE_HOLDABLE=true, INVTYPE_WEAPON=true},
     [18]={INVTYPE_RANGED=true, INVTYPE_RANGEDRIGHT=true, INVTYPE_THROWN=true, INVTYPE_RELIC=true},
     [19]={INVTYPE_TABARD=true},
+    [0] ={INVTYPE_AMMO=true},
 }
 
 -- ---- Widget refs (module-level) ----
