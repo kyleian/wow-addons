@@ -118,7 +118,7 @@ local function DoRepair()
         -- hasn't loaded yet (try increasing the C_Timer delay if you see this).
         -- Silently ignore if cost is also nil or 0 (most vendors don't repair).
         if cost and cost > 0 then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffff6060[SlyRepair]|r Vendor cannot repair — GetRepairAllCost returned canRepair=false (cost=" .. tostring(cost) .. ").")
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff6060[SlyRepair]|r Vendor cannot repair -- GetRepairAllCost returned canRepair=false (cost=" .. tostring(cost) .. ").")
         end
         return
     end
