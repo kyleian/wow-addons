@@ -45,8 +45,8 @@ end
 local function GetAnnounceChannel()
     local ch = SlyRepairDB.announce
     if ch == "auto" then
-        if GetNumRaidMembers() > 0 then return "RAID"
-        elseif GetNumPartyMembers() > 0 then return "PARTY"
+        if IsInRaid and IsInRaid() then return "RAID"
+        elseif IsInGroup and IsInGroup() then return "PARTY"
         else return "SAY" end
     elseif ch == "party" then return "PARTY"
     elseif ch == "raid"  then return "RAID"
@@ -228,8 +228,13 @@ local function Init()
     ev:RegisterEvent("MERCHANT_SHOW")
     ev:SetScript("OnEvent", function(self, event)
         if event == "MERCHANT_SHOW" then
-            DoSellJunk()
-            DoRepair()
+            -- Small delay: merchant frame initialises repair data one frame
+            -- after MERCHANT_SHOW fires, so GetRepairAllCost() is 0 if called
+            -- immediately.
+            C_Timer.After(0.3, function()
+                DoSellJunk()
+                DoRepair()
+            end)
         end
     end)
 
