@@ -79,16 +79,25 @@ local function DoSellJunk()
     for bag = 0, 4 do
         local slots = _GetNumSlots(bag) or 0
         for slot = 1, slots do
-            local texture, itemCount, _, quality = _GetItemInfo(bag, slot)
-            if texture and quality == 0 then
-                local link = _GetItemLink(bag, slot)
-                if link then
-                    local _, _, _, _, _, _, _, _, _, _, sellPrice = GetItemInfo(link)
-                    if sellPrice and sellPrice > 0 then
-                        total = total + sellPrice * (itemCount or 1)
-                        count = count + 1
-                        _UseItem(bag, slot)
+            -- Get the item link first; skip empty slots
+            local link = _GetItemLink(bag, slot)
+            if link then
+                -- GetItemInfo from the link is authoritative for quality and
+                -- sell price — avoids the C_Container quality=nil caching issue
+                local _, _, quality, _, _, _, _, _, _, _, sellPrice = GetItemInfo(link)
+                if quality == 0 and sellPrice and sellPrice > 0 then
+                    -- Count from container info (stack size)
+                    local stackSize = 1
+                    if C_Container then
+                        local info = C_Container.GetContainerItemInfo(bag, slot)
+                        if info then stackSize = info.stackCount or 1 end
+                    else
+                        local _, sc = GetContainerItemInfo(bag, slot)
+                        stackSize = sc or 1
                     end
+                    total = total + sellPrice * stackSize
+                    count = count + 1
+                    _UseItem(bag, slot)
                 end
             end
         end
