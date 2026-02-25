@@ -2162,6 +2162,33 @@ local function BuildNitRows(parent)
     fh:SetText("|cffffff99Friends|r")
     nitFriendsHeaderFs = fh
 
+    -- Small manual refresh button next to the header
+    local frRefreshBtn = CreateFrame("Button", nil, friendsContent)
+    frRefreshBtn:SetSize(36, 14)
+    frRefreshBtn:SetPoint("TOPRIGHT", friendsContent, "TOPRIGHT", 0, 0)
+    local frRBg = frRefreshBtn:CreateTexture(nil, "BACKGROUND")
+    frRBg:SetAllPoints() ; frRBg:SetColorTexture(0.10, 0.20, 0.35, 0.85)
+    local frRHl = frRefreshBtn:CreateTexture(nil, "HIGHLIGHT")
+    frRHl:SetAllPoints() ; frRHl:SetColorTexture(0.25, 0.50, 0.80, 0.40)
+    local frRTx = frRefreshBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    frRTx:SetFont(frRTx:GetFont(), 8, "OUTLINE")
+    frRTx:SetAllPoints() ; frRTx:SetJustifyH("CENTER") ; frRTx:SetText("|cffaaddffRefresh|r")
+    frRefreshBtn:SetScript("OnClick", function()
+        -- Request a fresh friends list from server
+        if C_FriendList and C_FriendList.ShowFriends then
+            C_FriendList.ShowFriends()
+        elseif ShowFriends then
+            ShowFriends()
+        end
+        -- Print raw API values to chat for debugging
+        local n = (C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetNumFriends())
+               or (GetNumFriends and GetNumFriends()) or 0
+        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Friends API count: " .. tostring(n)
+            .. "  (C_FriendList=" .. tostring(C_FriendList ~= nil) .. ")")
+        -- Refresh will happen when FRIENDLIST_UPDATE fires; also try immediately
+        SC_RefreshNITFriends()
+    end)
+
     for i = 1, MAX_NIT_LOCK_ROWS do
         local yOff = -(18 + (i-1)*18)
         local row = CreateFrame("Button", nil, friendsContent)
