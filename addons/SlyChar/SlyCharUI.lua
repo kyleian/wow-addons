@@ -2807,14 +2807,8 @@ function SC_BuildMain()
 
     headerName = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     headerName:SetFont(headerName:GetFont(), 13, "OUTLINE")
-    headerName:SetPoint("LEFT", hdr, "LEFT", PAD, 7)
+    headerName:SetPoint("LEFT", hdr, "LEFT", PAD, 0)
     headerName:SetText("...")
-
-    headerGS = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    headerGS:SetFont(headerGS:GetFont(), 9, "")
-    headerGS:SetPoint("LEFT", hdr, "LEFT", PAD, -7)
-    headerGS:SetTextColor(1.00, 0.80, 0.10)
-    headerGS:SetText("")
 
     headerInfo = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     headerInfo:SetFont(headerInfo:GetFont(), 10, "")
@@ -2885,6 +2879,13 @@ function SC_BuildMain()
     div:SetPoint("TOPLEFT", f, "TOPLEFT", CHAR_W, -HDR_H)
     div:SetColorTexture(0.20, 0.20, 0.27, 1)
     themeRefs.charDiv = div
+
+    -- GearScore label — top-centre of character pane, between gear columns
+    headerGS = charBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    headerGS:SetFont(headerGS:GetFont(), 10, "OUTLINE")
+    headerGS:SetPoint("TOP", charBody, "TOP", 0, -4)
+    headerGS:SetTextColor(1.00, 0.80, 0.10)
+    headerGS:SetText("")
 
     for i, s in ipairs(LEFT_SLOTS) do
         BuildSlot(charBody, s.id, s.label,
