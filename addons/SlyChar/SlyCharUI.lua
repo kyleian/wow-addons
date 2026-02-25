@@ -134,9 +134,12 @@ local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
 local nitLockScrollOffset = 0
 local nitScrollInfoLabel  = nil
 local nitLayerLabel       = nil  -- FontString showing current layer
-local nitSubTab           = "locks"  -- "locks" | "guild"
+local nitSubTab           = "locks"  -- "locks" | "guild" | "layer"
 local nitLockContent      = nil  -- Frame containing lockout header+rows
 local nitGuildContent     = nil  -- Frame containing guild member rows
+local nitLayerContent     = nil  -- Frame containing layer number display
+local nitLayerSrcLabel    = nil  -- FontString for source info in layer tab
+local nitSubLayerBtn      = nil
 local nitGuildRows        = {}
 local nitGuildHeaderFs    = nil  -- FontString for guild header (count)
 local nitSubLockBtn       = nil  -- sub-tab button widgets
@@ -1651,52 +1654,19 @@ end
 local function BuildNitRows(parent)
     local W = SIDE_W - PAD*2
 
-    -- ── Layer display (NWB integration) ──────────────────────────────────────
-    local layerBg = parent:CreateTexture(nil, "BACKGROUND")
-    layerBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0,  0)
-    layerBg:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0,  0)
-    layerBg:SetHeight(17)
-    layerBg:SetColorTexture(0.06, 0.09, 0.16, 0.85)
-
-    local layerIcon = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    layerIcon:SetFont(layerIcon:GetFont(), 9, "OUTLINE")
-    layerIcon:SetPoint("LEFT", parent, "LEFT", 2, -8)
-    layerIcon:SetText("|cff6688bbLayer|r")
-
-    local layerVal = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    layerVal:SetFont(layerVal:GetFont(), 10, "OUTLINE")
-    layerVal:SetPoint("LEFT", parent, "LEFT", 42, -8)
-    layerVal:SetText("|cff444466—|r")
-    nitLayerLabel = layerVal
-
-    local layerHint = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    layerHint:SetFont(layerHint:GetFont(), 8, "")
-    layerHint:SetPoint("RIGHT", parent, "RIGHT", -2, -8)
-    layerHint:SetJustifyH("RIGHT")
-    layerHint:SetTextColor(0.35, 0.35, 0.42)
-    layerHint:SetText("target any NPC")
-
-    -- thin divider
-    local divLine = parent:CreateTexture(nil, "ARTWORK")
-    divLine:SetPoint("BOTTOMLEFT",  layerBg, "BOTTOMLEFT",  0, 0)
-    divLine:SetPoint("BOTTOMRIGHT", layerBg, "BOTTOMRIGHT", 0, 0)
-    divLine:SetHeight(1)
-    divLine:SetColorTexture(0.20, 0.28, 0.50, 0.60)
-
-    -- ── Lockout header + scroll info (shifted down 20px) ─────────────────────
-    -- ── Sub-tab strip: Lockouts | Guild ──────────────────────────────────────
-    local stHalf = math.floor(W / 2)
+    -- ── Sub-tab strip: Lockouts | Guild | Layer ──────────────────────────────
+    local stThird = math.floor(W / 3)
 
     local subBarBg = parent:CreateTexture(nil, "BACKGROUND")
-    subBarBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -18)
-    subBarBg:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -18)
+    subBarBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, 0)
+    subBarBg:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
     subBarBg:SetHeight(16)
     subBarBg:SetColorTexture(0.05, 0.05, 0.09, 1)
 
     local function MakeSubTab(label, xOff, key)
         local btn = CreateFrame("Button", nil, parent)
-        btn:SetSize(stHalf, 16)
-        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, -18)
+        btn:SetSize(stThird, 16)
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, 0)
         local bg = btn:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(btn) ; bg:SetColorTexture(0.06, 0.06, 0.10, 1)
         local tx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1715,19 +1685,20 @@ local function BuildNitRows(parent)
         return btn
     end
 
-    nitSubLockBtn  = MakeSubTab("Lockouts", 0,       "locks")
-    nitSubGuildBtn = MakeSubTab("Guild",    stHalf,  "guild")
+    nitSubLockBtn  = MakeSubTab("Lockouts", 0,           "locks")
+    nitSubGuildBtn = MakeSubTab("Guild",    stThird,     "guild")
+    nitSubLayerBtn = MakeSubTab("Layer",    stThird * 2, "layer")
 
     -- thin separator below sub-tab strip
     local subSep = parent:CreateTexture(nil, "ARTWORK")
-    subSep:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -34)
-    subSep:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -34)
+    subSep:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -16)
+    subSep:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -16)
     subSep:SetHeight(1)
     subSep:SetColorTexture(0.18, 0.18, 0.26, 1)
 
     -- ── Lockout content (shown when nitSubTab == "locks") ────────────────────
     local lockContent = CreateFrame("Frame", nil, parent)
-    lockContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -35)
+    lockContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
     lockContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
     nitLockContent = lockContent
 
@@ -1776,7 +1747,7 @@ local function BuildNitRows(parent)
 
     -- ── Guild content (shown when nitSubTab == "guild") ───────────────────────
     local guildContent = CreateFrame("Frame", nil, parent)
-    guildContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -35)
+    guildContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
     guildContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
     guildContent:Hide()
     nitGuildContent = guildContent
@@ -1822,6 +1793,39 @@ local function BuildNitRows(parent)
         row:Hide()
         nitGuildRows[i] = row
     end
+
+    -- ── Layer content (shown when nitSubTab == "layer") ──────────────────────
+    local layerContent = CreateFrame("Frame", nil, parent)
+    layerContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
+    layerContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
+    layerContent:Hide()
+    nitLayerContent = layerContent
+
+    local layerNumBig = layerContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    layerNumBig:SetFont(layerNumBig:GetFont(), 48, "OUTLINE")
+    layerNumBig:SetPoint("TOP", layerContent, "TOP", 0, -24)
+    layerNumBig:SetText("|cff444466--|r")
+    nitLayerLabel = layerNumBig
+
+    local layerCaption = layerContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    layerCaption:SetFont(layerCaption:GetFont(), 10, "OUTLINE")
+    layerCaption:SetPoint("TOP", layerNumBig, "BOTTOM", 0, -4)
+    layerCaption:SetText("|cff6688bbyour current layer|r")
+
+    local layerSrcFs = layerContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    layerSrcFs:SetFont(layerSrcFs:GetFont(), 8, "")
+    layerSrcFs:SetPoint("TOP", layerCaption, "BOTTOM", 0, -6)
+    layerSrcFs:SetTextColor(0.40, 0.40, 0.50)
+    layerSrcFs:SetText("")
+    nitLayerSrcLabel = layerSrcFs
+
+    local layerHintFs = layerContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    layerHintFs:SetFont(layerHintFs:GetFont(), 9, "")
+    layerHintFs:SetPoint("TOP", layerSrcFs, "BOTTOM", 0, -20)
+    layerHintFs:SetWidth(W - 16)
+    layerHintFs:SetJustifyH("CENTER")
+    layerHintFs:SetTextColor(0.28, 0.28, 0.36)
+    layerHintFs:SetText("Target any NPC in a capital city\nto detect your layer")
 end
 
 local function FormatNITTime(secs)
@@ -1875,10 +1879,19 @@ function SC_UpdateNITLayer(unit)
     end
 
     if layerNum and layerNum > 0 then
-        local src = (NWB_CurrentLayer and NWB_CurrentLayer > 0) and "|cff2255aa[NWB]|r" or ""
-        nitLayerLabel:SetText(string.format("|cff00ff00%d|r %s", layerNum, src))
+        local src
+        if NWB_CurrentLayer and NWB_CurrentLayer > 0 then
+            src = "source: NWB (live)"
+        elseif NWB and NWB.lastKnownLayer and NWB.lastKnownLayer > 0 then
+            src = "source: NWB (last known)"
+        else
+            src = "source: GUID detection"
+        end
+        nitLayerLabel:SetText(string.format("|cff00ff00%d|r", layerNum))
+        if nitLayerSrcLabel then nitLayerSrcLabel:SetText(src) end
     else
-        nitLayerLabel:SetText("|cff444466—|r")
+        nitLayerLabel:SetText("|cff444466--|r")
+        if nitLayerSrcLabel then nitLayerSrcLabel:SetText("") end
     end
 end
 
@@ -1958,8 +1971,6 @@ function SC_RefreshNITGuild()
 end
 
 function SC_RefreshNIT()
-    SC_UpdateNITLayer("target")
-
     -- Style sub-tab buttons to reflect active selection
     local function StyleSub(btn, active)
         if not btn then return end
@@ -1973,13 +1984,18 @@ function SC_RefreshNIT()
     end
     StyleSub(nitSubLockBtn,  nitSubTab == "locks")
     StyleSub(nitSubGuildBtn, nitSubTab == "guild")
+    StyleSub(nitSubLayerBtn, nitSubTab == "layer")
 
-    -- Show / hide the two content panels
+    -- Show / hide content panels
     if nitLockContent  then nitLockContent:SetShown(nitSubTab == "locks") end
     if nitGuildContent then nitGuildContent:SetShown(nitSubTab == "guild") end
+    if nitLayerContent then nitLayerContent:SetShown(nitSubTab == "layer") end
 
     if nitSubTab == "guild" then
         SC_RefreshNITGuild()
+        return
+    elseif nitSubTab == "layer" then
+        SC_UpdateNITLayer("target")
         return
     end
 
@@ -2709,7 +2725,7 @@ function SC_BuildMain()
 
     local nitCont = CreateFrame("Frame", nil, nitTab)
     nitCont:SetPoint("TOPLEFT", nitTab, "TOPLEFT", PAD, -4)
-    nitCont:SetSize(SIDE_W - PAD*2, 35 + 18 + MAX_NIT_LOCK_ROWS * 18)   -- 35px overhead: layer(17)+subtabs(16)+sep(1)+gap(1)
+    nitCont:SetSize(SIDE_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)   -- 17px: subtabs(16)+sep(1)
     BuildNitRows(nitCont)
 
     nitTab:EnableMouseWheel(true)
