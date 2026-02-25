@@ -93,12 +93,14 @@ local function SC_Slash(msg)
         SC_SwitchTab("sets")
     elseif msg == "rep" then
         SC_ShowMain()
-        SC_SwitchTab("rep")
-        if SC_RefreshReputation then SC_RefreshReputation() end
+        if SC_SetMiscSubTab then SC_SetMiscSubTab("rep") end
+        SC_SwitchTab("misc")
+        if SC_RefreshMisc then SC_RefreshMisc() end
     elseif msg == "skills" then
         SC_ShowMain()
-        SC_SwitchTab("skills")
-        if SC_RefreshSkills then SC_RefreshSkills() end
+        if SC_SetMiscSubTab then SC_SetMiscSubTab("skills") end
+        SC_SwitchTab("misc")
+        if SC_RefreshMisc then SC_RefreshMisc() end
     elseif msg == "debug" then
         -- Print raw talent API data + which frame exists.
         local numTabs = GetNumTalentTabs and GetNumTalentTabs() or 0

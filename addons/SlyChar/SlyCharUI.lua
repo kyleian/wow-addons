@@ -132,6 +132,11 @@ local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
+local miscSubTab          = "rep"   -- "rep" | "skills"
+local miscRepContent      = nil
+local miscSkillContent    = nil
+local miscSubRepBtn       = nil
+local miscSubSkillBtn     = nil
 local MAX_BAR_ROWS        = 14   -- visible action bar profile rows
 local barRowWidgets       = {}
 local barsScrollOffset    = 0
@@ -1809,6 +1814,32 @@ function SC_RefreshSkills()
     end
 end
 
+function SC_SetMiscSubTab(key)
+    miscSubTab = key
+end
+
+function SC_RefreshMisc()
+    local function StyleMiscSub(btn, active)
+        if not btn then return end
+        if active then
+            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1)
+            btn.tx:SetTextColor(0.75, 0.88, 1.00)
+        else
+            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1)
+            btn.tx:SetTextColor(0.40, 0.40, 0.50)
+        end
+    end
+    StyleMiscSub(miscSubRepBtn,   miscSubTab == "rep")
+    StyleMiscSub(miscSubSkillBtn, miscSubTab == "skills")
+    if miscRepContent   then miscRepContent:SetShown(miscSubTab == "rep") end
+    if miscSkillContent then miscSkillContent:SetShown(miscSubTab == "skills") end
+    if miscSubTab == "rep" then
+        SC_RefreshReputation()
+    elseif miscSubTab == "skills" then
+        SC_RefreshSkills()
+    end
+end
+
 -- ============================================================
 -- NIT (NovaInstanceTracker) tab  — per-alt lockout view
 -- ============================================================
@@ -2319,8 +2350,7 @@ function SC_RefreshAll()
     local tab = SC.db.lastTab or "stats"
     if     tab == "stats"  then SC_RefreshStats()
     elseif tab == "sets"   then SC_RefreshSets()
-    elseif tab == "rep"    then SC_RefreshReputation()
-    elseif tab == "skills" then SC_RefreshSkills()
+    elseif tab == "misc"   then SC_RefreshMisc()
     elseif tab == "nit"    then SC_RefreshNIT()
     elseif tab == "bars"   then SC_RefreshBars()
     end
@@ -2764,12 +2794,11 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 6)
+    local tbW = math.floor(SIDE_W / 5)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
-        {key="rep",    label="Rep"},
-        {key="skills", label="Skills"},
+        {key="misc",   label="Misc"},
         {key="nit",    label="NIT"},
         {key="bars",   label="Bars"},
     }
@@ -2875,35 +2904,75 @@ function SC_BuildMain()
     setsInfo:SetTextColor(0.40, 0.40, 0.50)
     setsScrollInfoLabel = setsInfo
 
-    -- Reputation tab
-    local repTab = CreateFrame("Frame", nil, side)
-    repTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    repTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    repTab:SetHeight(tcH) ; repTab:Hide()
-    tabFrames["rep"] = repTab
+    -- Misc tab (Rep + Skills as sub-tabs)
+    local miscTab = CreateFrame("Frame", nil, side)
+    miscTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
+    miscTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
+    miscTab:SetHeight(tcH) ; miscTab:Hide()
+    tabFrames["misc"] = miscTab
 
-    local repScroll = CreateFrame("ScrollFrame", nil, repTab, "UIPanelScrollFrameTemplate")
-    repScroll:SetPoint("TOPLEFT",     repTab, "TOPLEFT",      PAD,  -2)
-    repScroll:SetPoint("BOTTOMRIGHT", repTab, "BOTTOMRIGHT", -22,    2)
+    -- Sub-tab strip (Rep | Skills) — identical pattern to NIT
+    local mW = SIDE_W
+    local mBW = math.floor(mW / 2)
+
+    local function MakeMiscSubBtn(label, x)
+        local btn = CreateFrame("Button", nil, miscTab)
+        btn:SetSize(mBW, 16)
+        btn:SetPoint("TOPLEFT", miscTab, "TOPLEFT", x, 0)
+        local bbg = btn:CreateTexture(nil, "BACKGROUND")
+        bbg:SetAllPoints() ; bbg:SetColorTexture(0.05, 0.05, 0.09, 1)
+        btn.bg = bbg
+        local btx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        btx:SetFont(btx:GetFont(), 9, "") ; btx:SetAllPoints()
+        btx:SetJustifyH("CENTER") ; btx:SetText(label)
+        btx:SetTextColor(0.40, 0.40, 0.50)
+        btn.tx = btx
+        return btn
+    end
+    miscSubRepBtn   = MakeMiscSubBtn("Reputation", 0)
+    miscSubSkillBtn = MakeMiscSubBtn("Skills",     mBW)
+
+    local miscSep = miscTab:CreateTexture(nil, "ARTWORK")
+    miscSep:SetSize(mW, 1)
+    miscSep:SetPoint("TOPLEFT", miscTab, "TOPLEFT", 0, -16)
+    miscSep:SetColorTexture(0.18, 0.18, 0.25, 1)
+
+    -- Rep content
+    local repContent = CreateFrame("Frame", nil, miscTab)
+    repContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
+    repContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
+    repContent:SetHeight(tcH - 17)
+    miscRepContent = repContent
+
+    local repScroll = CreateFrame("ScrollFrame", nil, repContent, "UIPanelScrollFrameTemplate")
+    repScroll:SetPoint("TOPLEFT",     repContent, "TOPLEFT",      PAD,  -2)
+    repScroll:SetPoint("BOTTOMRIGHT", repContent, "BOTTOMRIGHT", -22,    2)
     local repCont = CreateFrame("Frame", nil, repScroll)
     repCont:SetSize(SIDE_W - PAD*2 - 22, MAX_REP_ROWS * 16)
     repScroll:SetScrollChild(repCont)
     BuildRepRows(repCont)
 
-    -- Skills tab
-    local skillsTab = CreateFrame("Frame", nil, side)
-    skillsTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    skillsTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    skillsTab:SetHeight(tcH) ; skillsTab:Hide()
-    tabFrames["skills"] = skillsTab
+    -- Skills content
+    local skillContent = CreateFrame("Frame", nil, miscTab)
+    skillContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
+    skillContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
+    skillContent:SetHeight(tcH - 17)
+    miscSkillContent = skillContent
 
-    local skillScroll = CreateFrame("ScrollFrame", nil, skillsTab, "UIPanelScrollFrameTemplate")
-    skillScroll:SetPoint("TOPLEFT",     skillsTab, "TOPLEFT",      PAD,  -2)
-    skillScroll:SetPoint("BOTTOMRIGHT", skillsTab, "BOTTOMRIGHT", -22,    2)
+    local skillScroll = CreateFrame("ScrollFrame", nil, skillContent, "UIPanelScrollFrameTemplate")
+    skillScroll:SetPoint("TOPLEFT",     skillContent, "TOPLEFT",      PAD,  -2)
+    skillScroll:SetPoint("BOTTOMRIGHT", skillContent, "BOTTOMRIGHT", -22,    2)
     local skillCont = CreateFrame("Frame", nil, skillScroll)
     skillCont:SetSize(SIDE_W - PAD*2 - 22, MAX_SKILL_ROWS * 14)
     skillScroll:SetScrollChild(skillCont)
     BuildSkillRows(skillCont)
+
+    miscSubRepBtn:SetScript("OnClick", function()
+        miscSubTab = "rep" ; SC_RefreshMisc()
+    end)
+    miscSubSkillBtn:SetScript("OnClick", function()
+        miscSubTab = "skills" ; SC_RefreshMisc()
+    end)
 
     -- NIT tab
     local nitTab = CreateFrame("Frame", nil, side)
