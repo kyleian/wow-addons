@@ -53,8 +53,7 @@ function SL_BuildUI()
     local tabBtns = {}
     local activeTab = "Rolls"
 
-    local function SwitchTab(name)
-        activeTab = name
+    local function HighlightTab(name)
         for _, t in ipairs(TABS) do
             local btn = tabBtns[t]
             if t == name then
@@ -63,6 +62,11 @@ function SL_BuildUI()
                 btn:GetNormalTexture():SetVertexColor(1, 1, 1)
             end
         end
+    end
+
+    local function SwitchTab(name)
+        activeTab = name
+        HighlightTab(name)
         SL.uiRefresh()
     end
 
@@ -304,17 +308,8 @@ function SL_BuildUI()
         end
 
         SL:RefreshChannelBtns()
-        -- highlight active tab buttons (inline to avoid recursive SwitchTab -> uiRefresh loop)
-        for _, t in ipairs(TABS) do
-            local btn = tabBtns[t]
-            if btn then
-                if t == activeTab then
-                    btn:GetNormalTexture():SetVertexColor(0.3, 1, 0.3)
-                else
-                    btn:GetNormalTexture():SetVertexColor(1, 1, 1)
-                end
-            end
-        end
+        -- highlight active tab button without re-calling uiRefresh
+        HighlightTab(activeTab)
     end
 
     function SL:RefreshChannelBtns()

@@ -2325,9 +2325,14 @@ function SC_RefreshNITFriends()
     if not nitFriendsContent or not nitFriendsContent:IsShown() then return end
 
     if ShowFriends then ShowFriends() end
-    local total = GetNumFriends and GetNumFriends() or 0
+    -- GetNumFriends returns: onlineCount, totalCount  (TBC API returns two values)
+    local onlineCount, total = 0, 0
+    if GetNumFriends then
+        onlineCount, total = GetNumFriends()
+        total = total or onlineCount or 0  -- older clients return only one value
+    end
     if nitFriendsHeaderFs then
-        nitFriendsHeaderFs:SetText(string.format("|cffffff99Friends|r |cff888888(%d)|r", total))
+        nitFriendsHeaderFs:SetText(string.format("|cffffff99Friends|r |cff00ee44%d|r|cff888888/%d|r", onlineCount, total))
     end
 
     local shown = 0
