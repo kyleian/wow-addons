@@ -33,17 +33,29 @@ function IRR_SaveCurrentSet(name)
         print("|cff00ccff[ItemRack Revived]|r Set name cannot be empty.")
         return false
     end
+    if not IRR.db then
+        print("|cff00ccff[ItemRack Revived]|r DB not ready — try again in a moment.")
+        return false
+    end
 
     local setData = {}
+    local count = 0
     for _, slotDef in ipairs(IRR.SLOTS) do
-        local itemId = GetInventoryItemID("player", slotDef.id)
-        if itemId then
-            setData[slotDef.id] = itemId
+        if slotDef.id ~= 0 then  -- skip ammo slot (id=0, not a valid equip slot)
+            local itemId = GetInventoryItemID("player", slotDef.id)
+            if itemId then
+                setData[slotDef.id] = itemId
+                count = count + 1
+            end
         end
     end
 
+    if count == 0 then
+        print("|cff00ccff[ItemRack Revived]|r |cffff8800Warning:|r No equipped items found — set saved empty.")
+    end
+
     IRR.db.sets[name] = setData
-    print("|cff00ccff[ItemRack Revived]|r Set |cffffcc00" .. name .. "|r saved.")
+    print("|cff00ccff[ItemRack Revived]|r Set |cffffcc00" .. name .. "|r saved (" .. count .. " slot" .. (count == 1 and "" or "s") .. ").")
     IRR_UpdateSetsList()
     -- Also refresh SlyChar sets panel if it is open
     if SC_RefreshSets then SC_RefreshSets() end
