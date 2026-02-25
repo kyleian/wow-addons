@@ -12,6 +12,9 @@ SL.activeItem  = nil    -- { link, name, icon } - item currently being rolled
 SL.rolls       = {}     -- { [playerName] = rollValue } for current session
 SL.history     = {}     -- list of completed sessions { item, winner, rolls }
 SL.uiRefresh   = nil    -- set by UI file
+SL.srRefresh   = nil    -- set by UI file (switches to SR tab and refreshes)
+SL.sr          = {}     -- fast lookup: { [itemId]=players[], [itemNameLower]=players[] }
+SL.srItems     = {}     -- sorted display list: { {id, name, players[]}, ... }
 
 -- ── Defaults ─────────────────────────────────────────────────────────────────
 local DB_DEFAULTS = {
@@ -19,6 +22,7 @@ local DB_DEFAULTS = {
     announceChannel = "raid",   -- raid | party | say
     minQuality     = 3,         -- 0=gray 1=white 2=green 3=blue 4=epic 5=leg
     position       = { point = "CENTER", x = 200, y = 0 },
+    srRaw          = "",        -- last raw soft-reserve import text
 }
 
 SL.QUALITY_COLORS = {
@@ -53,6 +57,99 @@ function SL:Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyLoot]|r " .. msg)
 end
 
+-- ── Soft Reserve ─────────────────────────────────────────────────────────────
+function SL:GetSRForLink(itemLink)
+    if not itemLink then return {} end
+    local players, seen = {}, {}
+    local idStr = itemLink:match("item:(%d+)")
+    if idStr then
+        for _, p in ipairs(SL.sr[tonumber(idStr)] or {}) do
+            if not seen[p] then seen[p]=true; players[#players+1]=p end
+        end
+    end
+    local itemName = GetItemInfo(itemLink)
+    if itemName then
+        for _, p in ipairs(SL.sr[itemName:lower()] or {}) do
+            if not seen[p] then seen[p]=true; players[#players+1]=p end
+        end
+    end
+    return players
+end
+
+local function ParseSRText(text)
+    local itemMap = {}
+    local skipNames = { name=true, character=true, charname=true }
+    local classWords = { warrior=true,paladin=true,hunter=true,rogue=true,priest=true,
+        shaman=true,mage=true,warlock=true,druid=true,dps=true,tank=true,healer=true,
+        male=true,female=true }
+    for line in (text or ""):gmatch("[^\r\n]+") do
+        line = line:gsub('"',''):match("^%s*(.-)%s*$")
+        if line ~= "" then
+            local parts = {}
+            for p in line:gmatch("[^,]+") do parts[#parts+1]=p:match("^%s*(.-)%s*$") end
+            if #parts >= 2 then
+                local charName = parts[1]
+                if not skipNames[charName:lower()] then
+                    for i = 2, #parts do
+                        local p = parts[i]
+                        if p ~= "" and not classWords[p:lower()] then
+                            local numId = tonumber(p)
+                            local key = numId or p:lower()
+                            if not itemMap[key] then
+                                itemMap[key] = { id=numId, name=(numId and tostring(numId) or p), players={} }
+                            end
+                            local already = false
+                            for _, e in ipairs(itemMap[key].players) do
+                                if e == charName then already=true; break end
+                            end
+                            if not already then
+                                itemMap[key].players[#itemMap[key].players+1] = charName
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return itemMap
+end
+
+function SL:ImportSR(text)
+    SL.sr = {}; SL.srItems = {}
+    local itemMap = ParseSRText(text)
+    local count = 0
+    for k, entry in pairs(itemMap) do
+        SL.sr[k] = entry.players
+        local n = GetItemInfo(entry.id or "")
+        if n then entry.name = n end
+        SL.srItems[#SL.srItems+1] = entry
+        count = count + 1
+    end
+    table.sort(SL.srItems, function(a,b) return (a.name or ""):lower() < (b.name or ""):lower() end)
+    SlyLootDB.srRaw = text
+    SL:Print("Imported " .. count .. " SR item(s).")
+    if SL.srRefresh then SL.srRefresh() end
+end
+
+function SL:ClearSR()
+    SL.sr = {}; SL.srItems = {}
+    SlyLootDB.srRaw = ""
+    SL:Print("Soft reserves cleared.")
+    if SL.srRefresh then SL.srRefresh() end
+end
+
+function SL:LoadSR()
+    local text = SlyLootDB and SlyLootDB.srRaw or ""
+    if text == "" then return end
+    SL.sr = {}; SL.srItems = {}
+    local itemMap = ParseSRText(text)
+    for k, entry in pairs(itemMap) do
+        SL.sr[k] = entry.players
+        SL.srItems[#SL.srItems+1] = entry
+    end
+    table.sort(SL.srItems, function(a,b) return (a.name or ""):lower() < (b.name or ""):lower() end)
+end
+
 -- ── Loot handling ─────────────────────────────────────────────────────────────
 function SL:ScanLoot()
     if not SlyLootDB.enabled then return end
@@ -67,8 +164,11 @@ function SL:ScanLoot()
             local col  = SL.QUALITY_COLORS[quality] or ""
             local qstr = SL.QUALITY_NAMES[quality] or "?"
             local qtyStr = qty and qty > 1 and " x" .. qty or ""
-            reported[#reported+1] = col .. "[" .. name .. qtyStr .. "]|r"
-        end
+            reported[#reported+1] = col .. "[" .. name .. qtyStr .. "]|r"            -- Announce soft-reserve holders for this item
+            local srPlayers = SL:GetSRForLink(link)
+            if #srPlayers > 0 then
+                SL:Send("[SR] " .. (link or name) .. " -> " .. table.concat(srPlayers, ", "))
+            end        end
     end
 
     if #reported > 0 then
@@ -150,6 +250,7 @@ local eventFrame = CreateFrame("Frame")
 function SL:Init()
     SlyLootDB = SlyLootDB or {}
     ApplyDefaults(SlyLootDB, DB_DEFAULTS)
+    SL:LoadSR()  -- rebuild SR lookup from saved raw text
 
     eventFrame:RegisterEvent("LOOT_OPENED")
     eventFrame:RegisterEvent("CHAT_MSG_SYSTEM")
@@ -184,8 +285,12 @@ function SL:Init()
             SlyLootDB.enabled = true; SL:Print("Enabled.")
         elseif cmd == "disable" then
             SlyLootDB.enabled = false; SL:Print("Disabled.")
+        elseif cmd == "sr" then
+            if SL_OpenSRTab then SL_OpenSRTab() else SL_BuildUI() end
+        elseif cmd == "clsr" then
+            SL:ClearSR()
         else
-            SL:Print("Commands: /slyloot | start <item> | end | clear | channel <raid|party|say> | quality <0-5> | enable | disable")
+            SL:Print("Commands: /slyloot | start <item> | end | clear | sr | clsr | channel <raid|party|say> | quality <0-5> | enable | disable")
         end
     end
 end

@@ -3416,6 +3416,16 @@ function SC_BuildMain()
           fn=function()
               SC_OpenPanel("Blizzard_AchievementUI", "AchievementFrame", ToggleAchievementFrame)
           end },
+        { tip="SlyGargul",    desc="Soft Res & Loot rolls",  lbl="SR",  r=0.20, g=0.90, b=0.50,
+          fn=function()
+              if SlyLootPanel and SlyLootPanel:IsShown() then
+                  SlyLootPanel:Hide()
+              elseif SL_OpenSRTab then
+                  SL_OpenSRTab()
+              elseif SL_BuildUI then
+                  SL_BuildUI()
+              end
+          end },
         { tip="Honor",        desc="View honor & PvP stats",  lbl="Hon", r=1.00, g=0.25, b=0.35,
           fn=function()
               SC_ToggleWing("honor")
