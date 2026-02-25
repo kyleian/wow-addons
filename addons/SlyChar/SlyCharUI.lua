@@ -2180,11 +2180,17 @@ local function BuildNitRows(parent)
         elseif ShowFriends then
             ShowFriends()
         end
-        -- Print raw API values to chat for debugging
+        -- Print raw API values + available functions to chat for debugging
         local n = (C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetNumFriends())
                or (GetNumFriends and GetNumFriends()) or 0
-        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Friends API count: " .. tostring(n)
-            .. "  (C_FriendList=" .. tostring(C_FriendList ~= nil) .. ")")
+        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Friends count=" .. tostring(n)
+            .. "  C_FriendList=" .. tostring(C_FriendList ~= nil))
+        if C_FriendList then
+            local fns = {}
+            for k in pairs(C_FriendList) do fns[#fns+1] = k end
+            table.sort(fns)
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r C_FriendList keys: " .. table.concat(fns, ", "))
+        end
         -- Refresh will happen when FRIENDLIST_UPDATE fires; also try immediately
         SC_RefreshNITFriends()
     end)
@@ -2357,15 +2363,26 @@ function SC_RefreshNITFriends()
     -- TBC Anniversary uses C_FriendList namespace; fall back to globals if absent.
     local hasCFL = C_FriendList and C_FriendList.GetNumFriends
     local total = hasCFL and C_FriendList.GetNumFriends() or (GetNumFriends and GetNumFriends() or 0)
+    -- Resolve the correct per-entry function (name varies by client patch)
+    local cflGetInfo = C_FriendList and (
+        C_FriendList.GetFriendInfoByIndex or   -- retail / some patches
+        C_FriendList.GetFriendInfo             -- TBC Anniversary alternate
+    )
     local onlineCount = 0
     local shown = 0
     for i = 1, total do
-        local name, level, _, area, connected
-        if hasCFL then
-            local info = C_FriendList.GetFriendInfoByIndex(i)
-            if info then name, level, area, connected = info.name, info.level, info.area, info.connected end
-        else
-            name, level, _, area, connected = GetFriendInfo(i)
+        local name, level, area, connected
+        if cflGetInfo then
+            local info = cflGetInfo(i)
+            if info then
+                name      = info.name
+                level     = info.level
+                area      = info.area
+                connected = info.connected
+            end
+        elseif GetFriendInfo then
+            local _class
+            name, level, _class, area, connected = GetFriendInfo(i)
         end
         if connected then onlineCount = onlineCount + 1 end
         if name and shown < MAX_NIT_LOCK_ROWS then
