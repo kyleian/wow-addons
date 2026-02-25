@@ -94,11 +94,18 @@ jobs:
           fi
           BUNDLE="dist/SlySuite-${VERSION}-full.zip"
           echo "Fetching CurseForge game versions..."
-          GAME_VERSION_ID=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
-            "https://wow.curseforge.com/api/game/versions" | \
-            jq -r '[.[] | select(.name | startswith("2.5"))] | .[0].id // empty' 2>/dev/null || echo "")
+          CF_VERSIONS=$(curl -s -H "X-Api-Token: $CF_API_KEY" "https://wow.curseforge.com/api/game/versions")
+          echo "Available versions containing '2.5' or 'Anniversary':"
+          echo "$CF_VERSIONS" | jq '[.[] | select(.name | test("2\\.5|Anniversary"; "i")) ] | .[] | {id, name}' 2>/dev/null || true
+          GAME_VERSION_ID=$(echo "$CF_VERSIONS" | \
+            jq -r '[.[] | select(.name | test("Anniversary"; "i"))] | .[0].id // empty' 2>/dev/null || echo "")
           if [ -z "$GAME_VERSION_ID" ]; then
-            echo "WARNING: No 2.5.x version found, using fallback 9551"
+            echo "WARNING: No Anniversary version found, trying 2.5.x..."
+            GAME_VERSION_ID=$(echo "$CF_VERSIONS" | \
+              jq -r '[.[] | select(.name | startswith("2.5"))] | .[0].id // empty' 2>/dev/null || echo "")
+          fi
+          if [ -z "$GAME_VERSION_ID" ]; then
+            echo "WARNING: No 2.5.x version found either, using fallback 9551"
             GAME_VERSION_ID="9551"
           fi
           echo "Using game version ID: $GAME_VERSION_ID"
