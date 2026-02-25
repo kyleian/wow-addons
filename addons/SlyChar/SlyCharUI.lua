@@ -10,6 +10,7 @@
 local _PickupContainerItem
 local _GetContainerNumSlots
 local _GetContainerItemID
+local _GetItemLink
 if C_Container then
     _PickupContainerItem  = C_Container.PickupContainerItem
     _GetContainerNumSlots = C_Container.GetContainerNumSlots
@@ -17,10 +18,12 @@ if C_Container then
         local info = C_Container.GetContainerItemInfo(bag, slot)
         return info and info.itemID or nil
     end
+    _GetItemLink          = C_Container.GetContainerItemLink or GetContainerItemLink
 else
     _PickupContainerItem  = PickupContainerItem
     _GetContainerNumSlots = GetContainerNumSlots
     _GetContainerItemID   = GetContainerItemID
+    _GetItemLink          = GetContainerItemLink
 end
 
 SlyCharMainFrame = nil   -- global ref, set at end of SC_BuildMain
