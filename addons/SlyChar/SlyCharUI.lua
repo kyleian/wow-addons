@@ -776,10 +776,12 @@ local function BuildSlot(parent, slotId, label, x, y)
             end
             -- Weapon stone / temp enchant: stone use triggers SpellIsTargeting.
             -- Apply it to this slot by targeting with PickupInventoryItem.
+            -- Must NOT use pcall here — we're in an OnClick (hardware event) which
+            -- is required for protected API access; pcall breaks that chain.
             -- (Ammo slot 0 can't use PickupInventoryItem(0) — skip.)
             if SpellIsTargeting() and slotId ~= 0 then
-                local ok = pcall(PickupInventoryItem, slotId)
-                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
+                PickupInventoryItem(slotId)
+                UpdateSlot(slotWidgets[slotId], slotId)
                 return
             end
             -- If cursor has an item (dragged from bag), equip it.
