@@ -147,6 +147,7 @@ evFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 evFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 evFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
 evFrame:RegisterEvent("FRIENDLIST_UPDATE")
+evFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 
 evFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -223,6 +224,11 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
         if SlyCharMainFrame and SlyCharMainFrame:IsShown()
             and SC.db.lastTab == "social" then
             if SC_RefreshNITFriends then SC_RefreshNITFriends() end
+        end
+
+    elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+            if SC_RefreshAll then SC_RefreshAll() end
         end
     end
 end)

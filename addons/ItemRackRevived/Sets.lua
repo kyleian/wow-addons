@@ -225,10 +225,33 @@ function IRR_LoadSet(name)
         local active = GetActiveTalentGroup and GetActiveTalentGroup() or 1
         if active ~= linkedSpec then
             local ok, err = pcall(SetActiveTalentGroup, linkedSpec)
-            if ok then
-                print("|cff00ccff[ItemRack Revived]|r Switched to Spec " .. linkedSpec .. ".")
-            else
+            if not ok then
                 print("|cffff4444[ItemRack Revived]|r Spec switch failed: " .. tostring(err))
+            else
+                -- TBC shows a confirmation popup before actually switching.
+                -- Auto-confirm it on the next frame.
+                C_Timer.After(0, function()
+                    local popupNames = {
+                        "CONFIRM_TALENT_GROUP",
+                        "CONFIRM_TALENT_GROUP_SWITCH",
+                        "CONFIRM_ACTIVE_TALENT_GROUP",
+                    }
+                    for _, popupName in ipairs(popupNames) do
+                        local popup = StaticPopup_FindVisible(popupName)
+                        if popup then
+                            local okBtn = _G[popup .. "Button1"]
+                            if okBtn and okBtn:IsShown() then
+                                okBtn:Click()
+                            end
+                            break
+                        end
+                    end
+                    -- Verify switch actually happened
+                    local now = GetActiveTalentGroup and GetActiveTalentGroup() or 0
+                    if now == linkedSpec then
+                        print("|cff00ccff[ItemRack Revived]|r Switched to Spec " .. linkedSpec .. ".")
+                    end
+                end)
             end
         end
     end
