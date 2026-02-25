@@ -745,8 +745,8 @@ local function BuildSlot(parent, slotId, label, x, y)
         if IsInventoryItemLocked(slotId) then return end
         GameTooltip:Hide()
         SC_HidePicker()
-        local ok = pcall(PickupInventoryItem, slotId)
-        if ok then UpdateSlot(slotWidgets[slotId], slotId) end
+        PickupInventoryItem(slotId)
+        UpdateSlot(slotWidgets[slotId], slotId)
     end)
 
     -- Drop ON: equip whatever is on the cursor (dragged from bags/bank)
@@ -758,8 +758,8 @@ local function BuildSlot(parent, slotId, label, x, y)
         if not ctype then return end
         if ctype == "enchant" or ctype == "spell" then return end
         GameTooltip:Hide()
-        local ok, err = pcall(PickupInventoryItem, slotId)
-        if ok then UpdateSlot(slotWidgets[slotId], slotId) end
+        PickupInventoryItem(slotId)
+        UpdateSlot(slotWidgets[slotId], slotId)
     end)
 
     btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -790,8 +790,8 @@ local function BuildSlot(parent, slotId, label, x, y)
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
                 if ctype == "enchant" or ctype == "spell" then return end
-                local ok = pcall(PickupInventoryItem, slotId)
-                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
+                PickupInventoryItem(slotId)
+                UpdateSlot(slotWidgets[slotId], slotId)
                 return
             end
             -- Toggle picker
