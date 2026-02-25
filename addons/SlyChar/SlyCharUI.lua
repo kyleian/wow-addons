@@ -745,8 +745,8 @@ local function BuildSlot(parent, slotId, label, x, y)
         if IsInventoryItemLocked(slotId) then return end
         GameTooltip:Hide()
         SC_HidePicker()
-        PickupInventoryItem(slotId)
-        UpdateSlot(slotWidgets[slotId], slotId)
+        local ok = pcall(PickupInventoryItem, slotId)
+        if ok then UpdateSlot(slotWidgets[slotId], slotId) end
     end)
 
     -- Drop ON: equip whatever is on the cursor (dragged from bags/bank)
@@ -756,10 +756,10 @@ local function BuildSlot(parent, slotId, label, x, y)
         if slotId == 0 then return end
         local ctype = GetCursorInfo()
         if not ctype then return end
-        if ctype == "enchant" or ctype == "spell" then return end
+        if ctype == "spell" then return end
         GameTooltip:Hide()
-        PickupInventoryItem(slotId)
-        UpdateSlot(slotWidgets[slotId], slotId)
+        local ok = pcall(PickupInventoryItem, slotId)
+        if ok then UpdateSlot(slotWidgets[slotId], slotId) end
     end)
 
     btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -789,9 +789,12 @@ local function BuildSlot(parent, slotId, label, x, y)
             -- Ammo slot: can't equip via PickupInventoryItem(0); use the picker instead.
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
-                if ctype == "enchant" or ctype == "spell" then return end
-                PickupInventoryItem(slotId)
-                UpdateSlot(slotWidgets[slotId], slotId)
+                -- "spell" cursor = targeting cursor for a spell, let it pass through.
+                -- "enchant" cursor = temp enchant / sharpening stone: apply it.
+                -- Any other cursor type ("item") = bag item being dragged: equip it.
+                if ctype == "spell" then return end
+                local ok = pcall(PickupInventoryItem, slotId)
+                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
                 return
             end
             -- Toggle picker
