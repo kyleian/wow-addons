@@ -2362,6 +2362,11 @@ end
 -- Tab switching + master refresh
 -- ============================================================
 function SC_SwitchTab(name)
+    -- remap removed top-level keys to their new parents
+    if name == "bars" then name = "sets" end
+    if name == "rep" or name == "skills" then name = "misc" end
+    -- if still unknown, fall back to stats
+    if not tabFrames[name] then name = "stats" end
     SC.db.lastTab = name
     for k, tf in pairs(tabFrames) do tf:SetShown(k == name) end
     local th = SC_THEMES[(SC.db and SC.db.theme) or "shadow"] or SC_THEMES.shadow

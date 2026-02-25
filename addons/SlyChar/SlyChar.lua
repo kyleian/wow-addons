@@ -188,14 +188,14 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "UPDATE_FACTION" then
         if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "rep" then
-            SC_RefreshReputation()
+            and SC.db.lastTab == "misc" then
+            if SC_RefreshMisc then SC_RefreshMisc() end
         end
 
     elseif event == "SKILL_LINES_CHANGED" then
         if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "skills" then
-            SC_RefreshSkills()
+            and SC.db.lastTab == "misc" then
+            if SC_RefreshMisc then SC_RefreshMisc() end
         end
 
     elseif event == "PLAYER_TARGET_CHANGED" then
