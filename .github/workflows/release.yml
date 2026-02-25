@@ -82,6 +82,7 @@ jobs:
           generate_release_notes: false
 
       - name: Upload combined bundle to CurseForge
+        continue-on-error: true
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           CF_PROJECT_ID: ${{ secrets.CF_PROJECT_ID }}
