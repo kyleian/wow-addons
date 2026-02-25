@@ -2324,22 +2324,15 @@ function SC_RefreshNITFriends()
     for _, r in ipairs(nitFriendsRows) do r:Hide() end
     if not nitFriendsContent or not nitFriendsContent:IsShown() then return end
 
-    if ShowFriends then ShowFriends() end
-    -- GetNumFriends returns: onlineCount, totalCount  (TBC API returns two values)
-    local onlineCount, total = 0, 0
-    if GetNumFriends then
-        onlineCount, total = GetNumFriends()
-        total = total or onlineCount or 0  -- older clients return only one value
-    end
-    if nitFriendsHeaderFs then
-        nitFriendsHeaderFs:SetText(string.format("|cffffff99Friends|r |cff00ee44%d|r|cff888888/%d|r", onlineCount, total))
-    end
-
+    -- Do NOT call ShowFriends() here — it is async and triggers FRIENDLIST_UPDATE.
+    -- It is called from the sub-tab click; we just read whatever is cached now.
+    local total = GetNumFriends and GetNumFriends() or 0  -- TBC: single return value
+    local onlineCount = 0
     local shown = 0
     for i = 1, total do
-        if shown >= MAX_NIT_LOCK_ROWS then break end
         local name, level, _, area, connected = GetFriendInfo(i)
-        if name then
+        if connected then onlineCount = onlineCount + 1 end
+        if name and shown < MAX_NIT_LOCK_ROWS then
             shown = shown + 1
             local row = nitFriendsRows[shown]
             row._name = name
@@ -2363,6 +2356,11 @@ function SC_RefreshNITFriends()
             row:Show()
         end
     end
+    if nitFriendsHeaderFs then
+        nitFriendsHeaderFs:SetText(string.format(
+            "|cffffff99Friends|r |cff00ee44%d|r|cff888888/%d|r", onlineCount, total))
+    end
+
 end
 
 -- ── Guild layer refresh ─────────────────────────────────────────────────────
