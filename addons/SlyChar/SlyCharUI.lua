@@ -1760,14 +1760,19 @@ local function BuildNitRows(parent)
 
     for i = 1, MAX_NIT_LOCK_ROWS do
         local yOff = -(18 + (i-1)*18)
-        local row = CreateFrame("Frame", nil, guildContent)
+        local row = CreateFrame("Button", nil, guildContent)
         row:SetSize(W, 17)
         row:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, yOff)
+        row:RegisterForClicks("LeftButtonUp")
 
         local bg = row:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(row)
         bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
         row.bg = bg
+
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row)
+        hl:SetColorTexture(1, 1, 1, 0.07)
 
         -- layer number (compact left column)
         local ly = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1789,6 +1794,16 @@ local function BuildNitRows(parent)
         zn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
         zn:SetJustifyH("RIGHT") ; zn:SetWidth(W - 26 - 155 - 4)
         row.zn = zn
+
+        row:SetScript("OnEnter", function(self)
+            if self._name then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(self._name, 1, 1, 1)
+                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         row:Hide()
         nitGuildRows[i] = row
@@ -1963,8 +1978,19 @@ function SC_RefreshNITGuild()
             row.nm:SetText(string.format("|cff%s%s|r", cc, m.name))
             -- Zone
             row.zn:SetText("|cff555566" .. m.zone .. "|r")
+            -- Whisper on click
+            row._name = m.name
+            row:SetScript("OnClick", function()
+                if ChatFrame1EditBox then
+                    ChatFrame1EditBox:Show()
+                    ChatFrame1EditBox:SetText("/w " .. m.name .. " ")
+                    ChatFrame1EditBox:SetCursorPosition(1000)
+                    ChatFrame1EditBox:SetFocus()
+                end
+            end)
             row:Show()
         else
+            row._name = nil
             row:Hide()
         end
     end
