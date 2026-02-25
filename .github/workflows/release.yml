@@ -33,6 +33,18 @@ jobs:
           echo "=== All packages ==="
           ls -1 dist/
 
+      - name: Build combined SlySuite bundle (all addons in one zip)
+        run: |
+          VER="${{ steps.ver.outputs.VERSION }}"
+          BUNDLE="SlySuite-${VER}-full"
+          mkdir -p "$BUNDLE"
+          for dir in addons/*/; do
+            cp -r "$dir" "${BUNDLE}/$(basename $dir)"
+          done
+          zip -r "dist/${BUNDLE}.zip" "${BUNDLE}/"
+          echo "Bundle: dist/${BUNDLE}.zip"
+          ls -lh "dist/${BUNDLE}.zip"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -69,8 +81,53 @@ jobs:
           fail_on_unmatched_files: false
           generate_release_notes: false
 
-      - name: Upload to CurseForge
+      - name: Upload combined bundle to CurseForge
         env:
-          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_PROJECT_ID: ${{ secrets.CF_PROJECT_ID }}
           VERSION: ${{ steps.ver.outputs.VERSION }}
-        run: python3 scripts/curseforge_publish.py dist/ "$VERSION"
+        run: |
+          if [ -z "$CF_API_KEY" ] || [ -z "$CF_PROJECT_ID" ]; then
+            echo "CF_API_KEY or CF_PROJECT_ID not set — skipping CurseForge upload."
+            exit 0
+          fi
+          BUNDLE="dist/SlySuite-${VERSION}-full.zip"
+          echo "Fetching CurseForge game versions..."
+          VERSIONS=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
+            "https://wow.curseforge.com/api/game/versions")
+          GAME_VERSION_ID=$(echo "$VERSIONS" | python3 -c "
+import sys, json
+versions = json.load(sys.stdin)
+for v in versions:
+    if str(v.get('gameVersionTypeID','')) == '67':
+        print(v['id'])
+        break
+" 2>/dev/null || echo "")
+          if [ -z "$GAME_VERSION_ID" ]; then
+            echo "WARNING: Could not detect TBC game version ID, trying slug search..."
+            GAME_VERSION_ID=$(echo "$VERSIONS" | python3 -c "
+import sys, json
+versions = json.load(sys.stdin)
+for v in versions:
+    name = str(v.get('name','')).lower()
+    if '2.5' in name or 'burning crusade' in name or 'tbc' in name:
+        print(v['id'])
+        break
+" 2>/dev/null || echo "9551")
+          fi
+          echo "Using game version ID: $GAME_VERSION_ID"
+          echo "Uploading $BUNDLE to CurseForge project $CF_PROJECT_ID..."
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+            -H "X-Api-Token: $CF_API_KEY" \
+            -F "metadata={\"changelog\":\"https://github.com/kyleian/wow-addons/releases/tag/v${VERSION}\",\"changelogType\":\"text\",\"displayName\":\"SlySuite v${VERSION}\",\"gameVersions\":[$GAME_VERSION_ID],\"releaseType\":\"release\"}" \
+            -F "file=@${BUNDLE}" \
+            "https://wow.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file")
+          STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          BODY=$(echo "$RESPONSE" | grep -v "HTTP_STATUS:")
+          echo "Response: $BODY"
+          echo "HTTP Status: $STATUS"
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -gt 299 ]; then
+            echo "CurseForge upload failed with HTTP $STATUS"
+            exit 1
+          fi
+          echo "CurseForge upload successful!"

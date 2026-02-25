@@ -78,10 +78,10 @@ def main():
 
     dist_dir = sys.argv[1]
     version = sys.argv[2]
-    token = os.environ.get("CURSEFORGE_TOKEN", "").strip()
+    token = (os.environ.get("CURSEFORGE_TOKEN") or os.environ.get("CF_API_KEY") or "").strip()
 
     if not token:
-        print("CURSEFORGE_TOKEN not set — skipping CurseForge upload.")
+        print("CF_API_KEY / CURSEFORGE_TOKEN not set — skipping CurseForge upload.")
         sys.exit(0)
 
     with open("config.json") as f:
