@@ -304,8 +304,17 @@ function SL_BuildUI()
         end
 
         SL:RefreshChannelBtns()
-        -- highlight active tab
-        SwitchTab(activeTab)
+        -- highlight active tab buttons (inline to avoid recursive SwitchTab -> uiRefresh loop)
+        for _, t in ipairs(TABS) do
+            local btn = tabBtns[t]
+            if btn then
+                if t == activeTab then
+                    btn:GetNormalTexture():SetVertexColor(0.3, 1, 0.3)
+                else
+                    btn:GetNormalTexture():SetVertexColor(1, 1, 1)
+                end
+            end
+        end
     end
 
     function SL:RefreshChannelBtns()
