@@ -96,9 +96,9 @@ jobs:
           echo "Fetching CurseForge game versions..."
           GAME_VERSION_ID=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
             "https://wow.curseforge.com/api/game/versions" | \
-            jq -r '[.[] | select(.gameVersionTypeID == 67)] | .[0].id // empty' 2>/dev/null || echo "")
+            jq -r '[.[] | select(.name | startswith("2.5"))] | .[0].id // empty' 2>/dev/null || echo "")
           if [ -z "$GAME_VERSION_ID" ]; then
-            echo "WARNING: gameVersionTypeID 67 not found, using fallback 9551"
+            echo "WARNING: No 2.5.x version found, using fallback 9551"
             GAME_VERSION_ID="9551"
           fi
           echo "Using game version ID: $GAME_VERSION_ID"
