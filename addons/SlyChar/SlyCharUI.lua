@@ -144,7 +144,7 @@ local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
 local nitLockScrollOffset = 0
 local nitScrollInfoLabel  = nil
 local nitLayerLabel       = nil  -- FontString showing current layer
-local nitSubTab           = "locks"  -- "locks" | "layer"
+local nitSubTab           = "locks"  -- "locks" | "guild" | "friends" | "layer"
 local nitLockContent      = nil  -- Frame containing lockout header+rows
 local nitLayerContent     = nil  -- Frame containing layer number display
 local nitLayerSrcLabel    = nil  -- FontString for source info in layer tab
@@ -154,6 +154,10 @@ local nitSubGuildBtn      = nil
 local nitGuildContent     = nil
 local nitGuildHeaderFs    = nil
 local nitGuildRows        = {}
+local nitSubFriendsBtn    = nil
+local nitFriendsContent   = nil
+local nitFriendsHeaderFs  = nil
+local nitFriendsRows      = {}
 local socialUI = {               -- Friends / Guild social tab
     subTab          = "friends", -- "friends" | "guild"
     guildRows       = {},
@@ -1986,8 +1990,8 @@ end
 local function BuildNitRows(parent)
     local W = SIDE_W - PAD*2
 
-    -- ── Sub-tab strip: Lockouts | Guild | Layer ──────────────────────────────
-    local stThird = math.floor(W / 3)
+    -- ── Sub-tab strip: Lockouts | Guild | Friends | Layer ────────────────────
+    local stQtr = math.floor(W / 4)
 
     local subBarBg = parent:CreateTexture(nil, "BACKGROUND")
     subBarBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, 0)
@@ -1997,7 +2001,7 @@ local function BuildNitRows(parent)
 
     local function MakeSubTab(label, xOff, key)
         local btn = CreateFrame("Button", nil, parent)
-        btn:SetSize(stThird, 16)
+        btn:SetSize(stQtr, 16)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, 0)
         local bg = btn:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(btn) ; bg:SetColorTexture(0.06, 0.06, 0.10, 1)
@@ -2011,15 +2015,18 @@ local function BuildNitRows(parent)
             if key == "guild" then
                 if C_GuildInfo then C_GuildInfo.GuildRoster()
                 elseif GuildRoster then GuildRoster() end
+            elseif key == "friends" then
+                if ShowFriends then ShowFriends() end
             end
             SC_RefreshNIT()
         end)
         return btn
     end
 
-    nitSubLockBtn  = MakeSubTab("Lockouts", 0,           "locks")
-    nitSubGuildBtn = MakeSubTab("Guild",    stThird,     "guild")
-    nitSubLayerBtn = MakeSubTab("Layer",    stThird * 2, "layer")
+    nitSubLockBtn    = MakeSubTab("Locks",   0,          "locks")
+    nitSubGuildBtn   = MakeSubTab("Guild",   stQtr,      "guild")
+    nitSubFriendsBtn = MakeSubTab("Friends", stQtr * 2,  "friends")
+    nitSubLayerBtn   = MakeSubTab("Layer",   stQtr * 3,  "layer")
 
     -- thin separator below sub-tab strip
     local subSep = parent:CreateTexture(nil, "ARTWORK")
@@ -2141,6 +2148,76 @@ local function BuildNitRows(parent)
         nitGuildRows[i] = row
     end
 
+    -- ── Friends content (shown when nitSubTab == "friends") ──────────────────
+    local friendsContent = CreateFrame("Frame", nil, parent)
+    friendsContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
+    friendsContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
+    friendsContent:Hide()
+    nitFriendsContent = friendsContent
+
+    local fh = friendsContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fh:SetFont(fh:GetFont(), 10, "OUTLINE")
+    fh:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, 0)
+    fh:SetText("|cffffff99Friends|r")
+    nitFriendsHeaderFs = fh
+
+    for i = 1, MAX_NIT_LOCK_ROWS do
+        local yOff = -(18 + (i-1)*18)
+        local row = CreateFrame("Button", nil, friendsContent)
+        row:SetSize(W, 17)
+        row:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, yOff)
+        row:RegisterForClicks("LeftButtonUp")
+
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row)
+        bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
+        row.bg = bg
+
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
+
+        -- online dot
+        local dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        dot:SetFont(dot:GetFont(), 10, "OUTLINE")
+        dot:SetPoint("LEFT", row, "LEFT", 2, 0)
+        dot:SetWidth(10) ; dot:SetJustifyH("CENTER")
+        row.dot = dot
+
+        -- name
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 14, 0)
+        nm:SetJustifyH("LEFT") ; nm:SetWidth(130)
+        row.nm = nm
+
+        -- level
+        local lv = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lv:SetFont(lv:GetFont(), 8, "")
+        lv:SetPoint("LEFT", row, "LEFT", 146, 0)
+        lv:SetJustifyH("LEFT") ; lv:SetWidth(28)
+        row.lv = lv
+
+        -- area
+        local ar = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ar:SetFont(ar:GetFont(), 8, "")
+        ar:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        ar:SetJustifyH("RIGHT") ; ar:SetWidth(W - 14 - 130 - 28 - 6)
+        row.ar = ar
+
+        row:SetScript("OnEnter", function(self)
+            if self._name then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(self._name, 1, 1, 1)
+                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        row:Hide()
+        nitFriendsRows[i] = row
+    end
+
     -- ── Layer content (shown when nitSubTab == "layer") ──────────────────────
     local layerContent = CreateFrame("Frame", nil, parent)
     layerContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
@@ -2242,6 +2319,47 @@ function SC_UpdateNITLayer(unit)
     end
 end
 
+-- ── Friends refresh ────────────────────────────────────────────────────────
+function SC_RefreshNITFriends()
+    for _, r in ipairs(nitFriendsRows) do r:Hide() end
+    if not nitFriendsContent or not nitFriendsContent:IsShown() then return end
+
+    if ShowFriends then ShowFriends() end
+    local total = GetNumFriends and GetNumFriends() or 0
+    if nitFriendsHeaderFs then
+        nitFriendsHeaderFs:SetText(string.format("|cffffff99Friends|r |cff888888(%d)|r", total))
+    end
+
+    local shown = 0
+    for i = 1, total do
+        if shown >= MAX_NIT_LOCK_ROWS then break end
+        local name, level, _, area, connected = GetFriendInfo(i)
+        if name then
+            shown = shown + 1
+            local row = nitFriendsRows[shown]
+            row._name = name
+            if connected then
+                row.dot:SetText("|cff00ee44•|r")
+                row.nm:SetText("|cffdddddd" .. name .. "|r")
+            else
+                row.dot:SetText("|cff444455•|r")
+                row.nm:SetText("|cff666677" .. name .. "|r")
+            end
+            row.lv:SetText("|cff888888" .. (level or "?") .. "|r")
+            row.ar:SetText("|cff555566" .. (area or "") .. "|r")
+            row:SetScript("OnClick", function()
+                if ChatFrame1EditBox then
+                    ChatFrame1EditBox:Show()
+                    ChatFrame1EditBox:SetText("/w " .. name .. " ")
+                    ChatFrame1EditBox:SetCursorPosition(1000)
+                    ChatFrame1EditBox:SetFocus()
+                end
+            end)
+            row:Show()
+        end
+    end
+end
+
 -- ── Guild layer refresh ─────────────────────────────────────────────────────
 function SC_RefreshNITGuild()
     for _, r in ipairs(nitGuildRows) do r:Hide() end
@@ -2340,17 +2458,22 @@ function SC_RefreshNIT()
             btn.tx:SetTextColor(0.40, 0.40, 0.50)
         end
     end
-    StyleSub(nitSubLockBtn,  nitSubTab == "locks")
-    StyleSub(nitSubGuildBtn, nitSubTab == "guild")
-    StyleSub(nitSubLayerBtn, nitSubTab == "layer")
+    StyleSub(nitSubLockBtn,    nitSubTab == "locks")
+    StyleSub(nitSubGuildBtn,   nitSubTab == "guild")
+    StyleSub(nitSubFriendsBtn, nitSubTab == "friends")
+    StyleSub(nitSubLayerBtn,   nitSubTab == "layer")
 
     -- Show / hide content panels
-    if nitLockContent  then nitLockContent:SetShown(nitSubTab == "locks") end
-    if nitGuildContent then nitGuildContent:SetShown(nitSubTab == "guild") end
-    if nitLayerContent then nitLayerContent:SetShown(nitSubTab == "layer") end
+    if nitLockContent    then nitLockContent:SetShown(nitSubTab == "locks") end
+    if nitGuildContent   then nitGuildContent:SetShown(nitSubTab == "guild") end
+    if nitFriendsContent then nitFriendsContent:SetShown(nitSubTab == "friends") end
+    if nitLayerContent   then nitLayerContent:SetShown(nitSubTab == "layer") end
 
     if nitSubTab == "guild" then
         SC_RefreshNITGuild()
+        return
+    elseif nitSubTab == "friends" then
+        SC_RefreshNITFriends()
         return
     elseif nitSubTab == "layer" then
         SC_UpdateNITLayer("target")
@@ -2474,6 +2597,7 @@ function SC_SwitchTab(name)
     -- remap removed top-level keys to their new parents
     if name == "bars" then name = "sets" end
     if name == "rep" or name == "skills" then name = "misc" end
+    if name == "nit" then name = "social" end
     -- if still unknown, fall back to stats
     if not tabFrames[name] then name = "stats" end
     SC.db.lastTab = name
@@ -2496,7 +2620,7 @@ function SC_RefreshAll()
     if     tab == "stats"  then SC_RefreshStats()
     elseif tab == "sets"   then SC_RefreshSetsSub()
     elseif tab == "misc"   then SC_RefreshMisc()
-    elseif tab == "nit"    then SC_RefreshNIT()
+    elseif tab == "social" then SC_RefreshNIT()
     end
 end
 
@@ -2950,7 +3074,7 @@ function SC_BuildMain()
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="misc",   label="Misc"},
-        {key="nit",    label="NIT"},
+        {key="social", label="Social"},
     }
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
@@ -3225,7 +3349,7 @@ function SC_BuildMain()
     nitTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
     nitTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
     nitTab:SetHeight(tcH) ; nitTab:Hide()
-    tabFrames["nit"] = nitTab
+    tabFrames["social"] = nitTab
 
     local nitCont = CreateFrame("Frame", nil, nitTab)
     nitCont:SetPoint("TOPLEFT", nitTab, "TOPLEFT", PAD, -4)

@@ -146,6 +146,7 @@ evFrame:RegisterEvent("SKILL_LINES_CHANGED")
 evFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 evFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 evFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
+evFrame:RegisterEvent("FRIENDLIST_UPDATE")
 
 evFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -200,22 +201,28 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_TARGET_CHANGED" then
         if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "nit" then
+            and SC.db.lastTab == "social" then
             if SC_UpdateNITLayer then SC_UpdateNITLayer("target") end
         end
 
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
         -- Only bother with mouseover if NWB hasn't already set a layer value
         if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "nit"
+            and SC.db.lastTab == "social"
             and (not NWB_CurrentLayer or NWB_CurrentLayer == 0) then
             if SC_UpdateNITLayer then SC_UpdateNITLayer("mouseover") end
         end
 
     elseif event == "GUILD_ROSTER_UPDATE" then
         if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "nit" then
+            and SC.db.lastTab == "social" then
             if SC_RefreshNITGuild then SC_RefreshNITGuild() end
+        end
+
+    elseif event == "FRIENDLIST_UPDATE" then
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
+            and SC.db.lastTab == "social" then
+            if SC_RefreshNITFriends then SC_RefreshNITFriends() end
         end
     end
 end)
