@@ -37,7 +37,6 @@ local CHAR_W       = 370
 local BTN_STRIP_W  = 32
 local SIDE_W       = FRAME_W - CHAR_W - BTN_STRIP_W  -- 330
 local WING_W       = 360  -- expandable right-side wing panel
-local DOCK_W       = 370  -- width of the embedded dock panel (right of main frame)
 local PAD      = 8
 local SLOT_S   = 38
 local SLOT_GAP = 5
@@ -127,7 +126,6 @@ local nitRunHeader  = nil
 local headerName    = nil
 local headerInfo    = nil
 local headerGS      = nil
-local dockUI = { panel = nil, container = nil }  -- embedded dock panel state
 
 local MAX_STAT_ROWS  = 60
 local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
@@ -2536,57 +2534,6 @@ function SC_CloseSidePanel()
     tf:Hide()
 end
 
-function SC_UndockPanel()
-    if dockUI.panel then
-        local tf = dockUI.panel
-        dockUI.panel = nil
-        tf:ClearAllPoints()
-        tf:SetParent(UIParent)
-        tf:Hide()
-    end
-    if dockUI.container then dockUI.container:Hide() end
-end
-
-function SC_DockPanel(tf)
-    if not tf or not dockUI.container then return end
-    -- toggle off if same frame already docked
-    if dockUI.panel == tf and tf:IsShown() then
-        SC_UndockPanel() ; return
-    end
-    SC_UndockPanel()
-    dockUI.panel = tf
-    tf:ClearAllPoints()
-    tf:SetParent(dockUI.container)
-    tf:SetPoint("TOPLEFT", dockUI.container, "TOPLEFT", 1, 22)  -- 22px clips title bar
-    pcall(tf.SetMovable, tf, false)
-    pcall(tf.SetUserPlaced, tf, true)
-    tf:Show()
-    -- try to hide standard chrome (title drag area + close button)
-    local name = tf:GetName()
-    if name then
-        for _, suffix in ipairs({"TitleButton", "CloseButton", "Close"}) do
-            local c = _G[name .. suffix]
-            if c and c.Hide then pcall(c.Hide, c) end
-        end
-    end
-    dockUI.container:Show()
-end
-
-function SC_LoadAndDock(addonName, frameGlobal)
-    if addonName and not _G[frameGlobal] and LoadAddOn then
-        LoadAddOn(addonName)
-    end
-    local tf = _G[frameGlobal]
-    if tf then SC_DockPanel(tf) end
-end
-
-function SC_GetTalentFrame()
-    if PlayerTalentFrame then return PlayerTalentFrame end
-    if TalentFrame       then return TalentFrame       end
-    if LoadAddOn         then LoadAddOn("Blizzard_TalentUI") end
-    return PlayerTalentFrame or TalentFrame or nil
-end
-
 local function SC_ToggleSidePanel(tf)
     if not tf then return end
     SC_EnsureHooked(tf)
@@ -2602,6 +2549,13 @@ local function SC_ToggleSidePanel(tf)
     -- SC_AnchorRight sets position synchronously after OnShow fires.
     tf:Show()
     SC_AnchorRight(tf)
+end
+
+local function SC_GetTalentFrame()
+    if PlayerTalentFrame then return PlayerTalentFrame end
+    if TalentFrame       then return TalentFrame       end
+    if LoadAddOn         then LoadAddOn("Blizzard_TalentUI") end
+    return PlayerTalentFrame or TalentFrame or nil
 end
 
 -- Resolve a UI panel frame, loading its LoD addon if needed.
@@ -3284,30 +3238,6 @@ function SC_BuildMain()
         SC_RefreshNIT()
     end)
 
-    -- Embedded dock container (right of main frame, holds reparented Blizzard panels)
-    do
-        local dc = CreateFrame("Frame", nil, f)
-        dc:SetSize(DOCK_W, FRAME_H - HDR_H - FOOT_H)
-        dc:SetPoint("TOPLEFT", f, "TOPLEFT", FRAME_W + 2, -HDR_H)
-        dc:SetClipsChildren(true)
-        dc:Hide()
-        dockUI.container = dc
-        local dcBg = dc:CreateTexture(nil, "BACKGROUND")
-        dcBg:SetAllPoints(dc) ; dcBg:SetColorTexture(0.05, 0.05, 0.07, 0.97)
-        local dcL = dc:CreateTexture(nil, "ARTWORK")
-        dcL:SetSize(1, FRAME_H - HDR_H - FOOT_H)
-        dcL:SetPoint("TOPLEFT", dc, "TOPLEFT", 0, 0)
-        dcL:SetColorTexture(0.28, 0.28, 0.35, 1)
-        local dcT = dc:CreateTexture(nil, "ARTWORK")
-        dcT:SetPoint("TOPLEFT", dc, "TOPLEFT", 0, 0)
-        dcT:SetPoint("TOPRIGHT", dc, "TOPRIGHT", 0, 0)
-        dcT:SetHeight(1) ; dcT:SetColorTexture(0.28, 0.28, 0.35, 1)
-        local dcBot = dc:CreateTexture(nil, "ARTWORK")
-        dcBot:SetPoint("BOTTOMLEFT", dc, "BOTTOMLEFT", 0, 0)
-        dcBot:SetPoint("BOTTOMRIGHT", dc, "BOTTOMRIGHT", 0, 0)
-        dcBot:SetHeight(1) ; dcBot:SetColorTexture(0.28, 0.28, 0.35, 1)
-    end
-
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")
     stripDiv:SetSize(1, FRAME_H - HDR_H - FOOT_H)
@@ -3320,24 +3250,52 @@ function SC_BuildMain()
     FillBg(btnStrip, 0.05, 0.04, 0.08, 1)
 
     local STRIP_BTNS = {
-        { tip="Talents",      desc="Embed Talent window",       lbl="T",   r=0.75, g=0.50, b=1.00,
-          fn=function() SC_DockPanel(SC_GetTalentFrame()) end },
-        { tip="Spellbook",    desc="Embed Spellbook",           lbl="Sp",  r=0.35, g=0.70, b=1.00,
-          fn=function() SC_LoadAndDock("Blizzard_SpellBookUI", "SpellBookFrame") end },
-        { tip="Quest Log",    desc="Embed Quest Log",           lbl="Q",   r=1.00, g=0.78, b=0.15,
-          fn=function() SC_LoadAndDock("Blizzard_QuestLog",    "QuestLogFrame")  end },
-        { tip="World Map",    desc="Embed World Map",           lbl="M",   r=0.25, g=0.85, b=0.30,
-          fn=function() SC_LoadAndDock("Blizzard_MapCanvas",   "WorldMapFrame")  end },
-        { tip="Friends",      desc="Embed Friends list",        lbl="Fr",  r=0.25, g=0.70, b=1.00,
-          fn=function() SC_LoadAndDock("Blizzard_SocialUI",    "FriendsFrame")   end },
-        { tip="PvP",          desc="Embed PvP frame",           lbl="PvP", r=1.00, g=0.30, b=0.20,
-          fn=function() SC_LoadAndDock("Blizzard_PVPUI",       "PVPFrame")       end },
-        { tip="Guild",        desc="Embed Guild panel",         lbl="G",   r=0.25, g=1.00, b=0.55,
-          fn=function() if GuildFrame then SC_DockPanel(GuildFrame) end end },
-        { tip="Achievements", desc="Embed Achievements",        lbl="A",   r=1.00, g=0.70, b=0.20,
-          fn=function() SC_LoadAndDock("Blizzard_AchievementUI","AchievementFrame") end },
-        { tip="Honor",        desc="View honor & PvP stats",    lbl="Hon", r=1.00, g=0.25, b=0.35,
-          fn=function() SC_ToggleWing("honor") end },
+        { tip="Talents",   desc="Open Talent frame",          lbl="T",   r=0.75, g=0.50, b=1.00,
+          fn=function()
+              SC_ToggleSidePanel(SC_GetTalentFrame())
+          end },
+        { tip="Spellbook", desc="Open Spellbook",             lbl="Sp",  r=0.35, g=0.70, b=1.00,
+          fn=function()
+              SC_OpenPanel("Blizzard_SpellBookUI", "SpellBookFrame", ToggleSpellBook)
+          end },
+        { tip="Quest Log", desc="Open Quest Log",             lbl="Q",   r=1.00, g=0.78, b=0.15,
+          fn=function()
+              SC_OpenPanel("Blizzard_QuestLog", "QuestLogFrame", ToggleQuestLog)
+          end },
+        { tip="World Map", desc="Open World Map",             lbl="M",   r=0.25, g=0.85, b=0.30,
+          fn=function()
+              SC_OpenPanel("Blizzard_MapCanvas", "WorldMapFrame", ToggleWorldMap)
+          end },
+        { tip="Friends",   desc="Open Friends / Social",      lbl="Fr",  r=0.25, g=0.70, b=1.00,
+          fn=function()
+              SC_OpenPanel("Blizzard_SocialUI", "FriendsFrame", ToggleFriendsFrame)
+          end },
+        { tip="PvP",       desc="Open PvP frame",             lbl="PvP", r=1.00, g=0.30, b=0.20,
+          fn=function()
+              SC_OpenPanel("Blizzard_PVPUI", "PVPFrame", TogglePVPFrame)
+          end },
+        { tip="Guild",     desc="Open Guild panel",           lbl="G",   r=0.25, g=1.00, b=0.55,
+          fn=function()
+              if not GuildFrame then return end
+              if GuildFrame:IsShown() then
+                  HideUIPanel(GuildFrame)
+              else
+                  -- Must use ShowUIPanel/ToggleGuildFrame to initialise tabs
+                  ShowUIPanel(GuildFrame)
+                  -- Reposition next to SlyChar after Blizzard's panel manager settles
+                  C_Timer.After(0, function()
+                      SC_AnchorRight(GuildFrame)
+                  end)
+              end
+          end },
+        { tip="Achievements", desc="Open Achievements panel", lbl="A",   r=1.00, g=0.70, b=0.20,
+          fn=function()
+              SC_OpenPanel("Blizzard_AchievementUI", "AchievementFrame", ToggleAchievementFrame)
+          end },
+        { tip="Honor",        desc="View honor & PvP stats",  lbl="Hon", r=1.00, g=0.25, b=0.35,
+          fn=function()
+              SC_ToggleWing("honor")
+          end },
     }
 
     local bSz = BTN_STRIP_W - 6  -- 26px buttons with 3px margin each side
@@ -3408,7 +3366,7 @@ function SC_BuildMain()
             bbgX:SetColorTexture(0.20, 0.04, 0.04, 1)
             GameTooltip:Hide()
         end)
-        bX:SetScript("OnClick", function() SC_CloseSidePanel() ; SC_UndockPanel() end)
+        bX:SetScript("OnClick", SC_CloseSidePanel)
     end
 
     -- Footer
@@ -3428,7 +3386,6 @@ function SC_BuildMain()
         self:EnableMouse(false)
         SC_HidePicker()
         SC_CloseSidePanel()
-        SC_UndockPanel()
         if wingFrame then wingFrame:Hide() ; activeWingKey = nil end
     end)
 
