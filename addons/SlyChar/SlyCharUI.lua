@@ -774,24 +774,16 @@ local function BuildSlot(parent, slotId, label, x, y)
                 end
                 return
             end
-            -- Weapon stone / temp enchant: stone use triggers SpellIsTargeting.
-            -- Apply it to this slot by targeting with PickupInventoryItem.
-            -- Must NOT use pcall here — we're in an OnClick (hardware event) which
-            -- is required for protected API access; pcall breaks that chain.
-            -- (Ammo slot 0 can't use PickupInventoryItem(0) — skip.)
-            if SpellIsTargeting() and slotId ~= 0 then
-                PickupInventoryItem(slotId)
-                UpdateSlot(slotWidgets[slotId], slotId)
-                return
-            end
-            -- If cursor has an item (dragged from bag), equip it.
-            -- Skip enchant/spell cursors — those are protected; use default char frame.
-            -- Ammo slot: can't equip via PickupInventoryItem(0); use the picker instead.
+            -- If cursor has an item/enchant on it, equip or apply it.
+            -- "enchant" cursor = sharpening stone / wizard oil — call PickupInventoryItem
+            --   to apply it to this slot (ammo slot 0 excluded).
+            -- "item" cursor = bag item being dragged in — equip it.
+            -- "spell" cursor = active spell targeting — don't intercept, let it pass.
+            -- SpellIsTargeting() is NOT checked here; calling PickupInventoryItem while
+            -- a spell is targeting would pick up the equipped item onto the cursor,
+            -- permanently blocking the picker on subsequent clicks.
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
-                -- "spell" cursor = targeting cursor for a spell, let it pass through.
-                -- "enchant" cursor = temp enchant / sharpening stone: apply it.
-                -- Any other cursor type ("item") = bag item being dragged: equip it.
                 if ctype == "spell" then return end
                 local ok = pcall(PickupInventoryItem, slotId)
                 if ok then UpdateSlot(slotWidgets[slotId], slotId) end
