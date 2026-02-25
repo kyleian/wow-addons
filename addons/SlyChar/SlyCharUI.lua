@@ -130,11 +130,7 @@ local MAX_STAT_ROWS  = 60
 local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
 local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
-local setsSubTab          = "gear"  -- "gear" | "bars"
-local setsGearContent     = nil
-local setsBarsContent     = nil
-local setsSubGearBtn      = nil
-local setsSubBarsBtn      = nil
+local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, subGearBtn=nil, subBarsBtn=nil }
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
 local miscSubTab          = "rep"   -- "rep" | "skills"
@@ -1486,7 +1482,7 @@ function SC_RefreshBars()
 end
 
 function SC_SetSetsSubTab(key)
-    setsSubTab = key
+    setsUI.subTab = key
 end
 
 function SC_RefreshSetsSub()
@@ -1500,13 +1496,13 @@ function SC_RefreshSetsSub()
             btn.tx:SetTextColor(0.40, 0.40, 0.50)
         end
     end
-    StyleSetsSub(setsSubGearBtn, setsSubTab == "gear")
-    StyleSetsSub(setsSubBarsBtn, setsSubTab == "bars")
-    if setsGearContent then setsGearContent:SetShown(setsSubTab == "gear") end
-    if setsBarsContent then setsBarsContent:SetShown(setsSubTab == "bars") end
-    if setsSubTab == "gear" then
+    StyleSetsSub(setsUI.subGearBtn, setsUI.subTab == "gear")
+    StyleSetsSub(setsUI.subBarsBtn, setsUI.subTab == "bars")
+    if setsUI.gearContent then setsUI.gearContent:SetShown(setsUI.subTab == "gear") end
+    if setsUI.barsContent then setsUI.barsContent:SetShown(setsUI.subTab == "bars") end
+    if setsUI.subTab == "gear" then
         SC_RefreshSets()
-    elseif setsSubTab == "bars" then
+    elseif setsUI.subTab == "bars" then
         SC_RefreshBars()
     end
 end
@@ -2900,8 +2896,8 @@ function SC_BuildMain()
         btn.tx = btx
         return btn
     end
-    setsSubGearBtn = MakeSetsSubBtn("Gear Sets", 0)
-    setsSubBarsBtn = MakeSetsSubBtn("Bars",      sBW)
+    setsUI.subGearBtn = MakeSetsSubBtn("Gear Sets", 0)
+    setsUI.subBarsBtn = MakeSetsSubBtn("Bars",      sBW)
 
     local setSubSep = setsTab:CreateTexture(nil, "ARTWORK")
     setSubSep:SetSize(SIDE_W, 1)
@@ -2913,7 +2909,7 @@ function SC_BuildMain()
     gearContent:SetPoint("TOPLEFT",  setsTab, "TOPLEFT",  0, -17)
     gearContent:SetPoint("TOPRIGHT", setsTab, "TOPRIGHT", 0, -17)
     gearContent:SetHeight(tcH - 17)
-    setsGearContent = gearContent
+    setsUI.gearContent = gearContent
 
     local saveLbl = gearContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     saveLbl:SetFont(saveLbl:GetFont(), 9, "")
@@ -2963,7 +2959,7 @@ function SC_BuildMain()
     barsContent:SetPoint("TOPLEFT",  setsTab, "TOPLEFT",  0, -17)
     barsContent:SetPoint("TOPRIGHT", setsTab, "TOPRIGHT", 0, -17)
     barsContent:SetHeight(tcH - 17)
-    setsBarsContent = barsContent
+    setsUI.barsContent = barsContent
 
     local barsLbl = barsContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     barsLbl:SetFont(barsLbl:GetFont(), 9, "")
@@ -3011,12 +3007,12 @@ function SC_BuildMain()
     -- Mouse-wheel dispatches to active sub-tab
     setsTab:EnableMouseWheel(true)
     setsTab:SetScript("OnMouseWheel", function(self, delta)
-        if setsSubTab == "gear" then
+        if setsUI.subTab == "gear" then
             local names2 = IRR_GetSetNames and IRR_GetSetNames() or {}
             local maxOffset = math.max(0, #names2 - MAX_SET_ROWS)
             setsScrollOffset = math.max(0, math.min(setsScrollOffset - delta, maxOffset))
             SC_RefreshSets()
-        elseif setsSubTab == "bars" then
+        elseif setsUI.subTab == "bars" then
             local names2 = {}
             if SlySlot and SlySlot.db then
                 for n in pairs(SlySlot.db.profiles) do table.insert(names2, n) end
@@ -3027,11 +3023,11 @@ function SC_BuildMain()
         end
     end)
 
-    setsSubGearBtn:SetScript("OnClick", function()
-        setsSubTab = "gear" ; SC_RefreshSetsSub()
+    setsUI.subGearBtn:SetScript("OnClick", function()
+        setsUI.subTab = "gear" ; SC_RefreshSetsSub()
     end)
-    setsSubBarsBtn:SetScript("OnClick", function()
-        setsSubTab = "bars" ; SC_RefreshSetsSub()
+    setsUI.subBarsBtn:SetScript("OnClick", function()
+        setsUI.subTab = "bars" ; SC_RefreshSetsSub()
     end)
 
     -- Misc tab (Rep + Skills as sub-tabs)
