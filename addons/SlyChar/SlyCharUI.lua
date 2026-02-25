@@ -490,7 +490,7 @@ function SC_ShowGearPicker(slotId)
 
     -- Currently equipped
     if currentId then
-        local link = GetInventoryItemLink(slotId)
+        local link = GetInventoryItemLink("player", slotId)
         local n,_,q,ilvl,_,_,_,_,_,tex = GetItemInfo(currentId)
         if n then
             shownAsEquipped[currentId] = true
@@ -529,7 +529,7 @@ function SC_ShowGearPicker(slotId)
         if sid ~= slotId then
             local id = GetInventoryItemID("player", sid)
             if id and not shownAsEquipped[id] and not seenSwap[id] then
-                local swapLink = GetInventoryItemLink(sid)
+                local swapLink = GetInventoryItemLink("player", sid)
                 local n,_,q,ilvl,_,_,_,_,eqLoc,tex = GetItemInfo(id)
                 if n and validTypes[eqLoc] then
                     seenSwap[id] = true
