@@ -90,7 +90,14 @@ local function SC_Slash(msg)
         SC_SwitchTab("stats")
     elseif msg == "sets" then
         SC_ShowMain()
+        if SC_SetSetsSubTab then SC_SetSetsSubTab("gear") end
         SC_SwitchTab("sets")
+        if SC_RefreshSetsSub then SC_RefreshSetsSub() end
+    elseif msg == "bars" then
+        SC_ShowMain()
+        if SC_SetSetsSubTab then SC_SetSetsSubTab("bars") end
+        SC_SwitchTab("sets")
+        if SC_RefreshSetsSub then SC_RefreshSetsSub() end
     elseif msg == "rep" then
         SC_ShowMain()
         if SC_SetMiscSubTab then SC_SetMiscSubTab("rep") end

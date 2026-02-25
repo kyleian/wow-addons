@@ -130,6 +130,11 @@ local MAX_STAT_ROWS  = 60
 local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
 local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
+local setsSubTab          = "gear"  -- "gear" | "bars"
+local setsGearContent     = nil
+local setsBarsContent     = nil
+local setsSubGearBtn      = nil
+local setsSubBarsBtn      = nil
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
 local miscSubTab          = "rep"   -- "rep" | "skills"
@@ -1480,6 +1485,32 @@ function SC_RefreshBars()
     end
 end
 
+function SC_SetSetsSubTab(key)
+    setsSubTab = key
+end
+
+function SC_RefreshSetsSub()
+    local function StyleSetsSub(btn, active)
+        if not btn then return end
+        if active then
+            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1)
+            btn.tx:SetTextColor(0.75, 0.88, 1.00)
+        else
+            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1)
+            btn.tx:SetTextColor(0.40, 0.40, 0.50)
+        end
+    end
+    StyleSetsSub(setsSubGearBtn, setsSubTab == "gear")
+    StyleSetsSub(setsSubBarsBtn, setsSubTab == "bars")
+    if setsGearContent then setsGearContent:SetShown(setsSubTab == "gear") end
+    if setsBarsContent then setsBarsContent:SetShown(setsSubTab == "bars") end
+    if setsSubTab == "gear" then
+        SC_RefreshSets()
+    elseif setsSubTab == "bars" then
+        SC_RefreshBars()
+    end
+end
+
 function SC_RefreshSets()
     for _, w in ipairs(setRowWidgets) do w.row:Hide() end
 
@@ -2349,10 +2380,9 @@ function SC_RefreshAll()
     SC_RefreshSlots()
     local tab = SC.db.lastTab or "stats"
     if     tab == "stats"  then SC_RefreshStats()
-    elseif tab == "sets"   then SC_RefreshSets()
+    elseif tab == "sets"   then SC_RefreshSetsSub()
     elseif tab == "misc"   then SC_RefreshMisc()
     elseif tab == "nit"    then SC_RefreshNIT()
-    elseif tab == "bars"   then SC_RefreshBars()
     end
 end
 
@@ -2794,13 +2824,12 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 5)
+    local tbW = math.floor(SIDE_W / 4)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="misc",   label="Misc"},
         {key="nit",    label="NIT"},
-        {key="bars",   label="Bars"},
     }
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
@@ -2850,18 +2879,49 @@ function SC_BuildMain()
     setsTab:SetHeight(tcH) ; setsTab:Hide()
     tabFrames["sets"] = setsTab
 
-    local saveLbl = setsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    -- Sub-tab strip: [Gear Sets][Bars]
+    local sBW = math.floor(SIDE_W / 2)
+    local function MakeSetsSubBtn(label, x)
+        local btn = CreateFrame("Button", nil, setsTab)
+        btn:SetSize(sBW, 16)
+        btn:SetPoint("TOPLEFT", setsTab, "TOPLEFT", x, 0)
+        local bbg = btn:CreateTexture(nil, "BACKGROUND")
+        bbg:SetAllPoints() ; bbg:SetColorTexture(0.05, 0.05, 0.09, 1)
+        btn.bg = bbg
+        local btx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        btx:SetFont(btx:GetFont(), 9, "") ; btx:SetAllPoints()
+        btx:SetJustifyH("CENTER") ; btx:SetText(label)
+        btx:SetTextColor(0.40, 0.40, 0.50)
+        btn.tx = btx
+        return btn
+    end
+    setsSubGearBtn = MakeSetsSubBtn("Gear Sets", 0)
+    setsSubBarsBtn = MakeSetsSubBtn("Bars",      sBW)
+
+    local setSubSep = setsTab:CreateTexture(nil, "ARTWORK")
+    setSubSep:SetSize(SIDE_W, 1)
+    setSubSep:SetPoint("TOPLEFT", setsTab, "TOPLEFT", 0, -16)
+    setSubSep:SetColorTexture(0.18, 0.18, 0.25, 1)
+
+    -- ── Gear Sets content ─────────────────────────────────────────────────────
+    local gearContent = CreateFrame("Frame", nil, setsTab)
+    gearContent:SetPoint("TOPLEFT",  setsTab, "TOPLEFT",  0, -17)
+    gearContent:SetPoint("TOPRIGHT", setsTab, "TOPRIGHT", 0, -17)
+    gearContent:SetHeight(tcH - 17)
+    setsGearContent = gearContent
+
+    local saveLbl = gearContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     saveLbl:SetFont(saveLbl:GetFont(), 9, "")
-    saveLbl:SetPoint("TOPLEFT", setsTab, "TOPLEFT", PAD, -3)
+    saveLbl:SetPoint("TOPLEFT", gearContent, "TOPLEFT", PAD, -3)
     saveLbl:SetTextColor(0.5, 0.5, 0.55) ; saveLbl:SetText("Save current as:")
 
-    local saveInput = CreateFrame("EditBox", nil, setsTab, "InputBoxTemplate")
+    local saveInput = CreateFrame("EditBox", nil, gearContent, "InputBoxTemplate")
     saveInput:SetSize(SIDE_W - PAD*2 - 52, 17)
     saveInput:SetPoint("TOPLEFT", saveLbl, "BOTTOMLEFT", 0, -1)
     saveInput:SetAutoFocus(false) ; saveInput:SetFontObject("GameFontNormalSmall")
     saveInput:SetScript("OnEscapePressed", function(self2) self2:ClearFocus() end)
 
-    local saveBtn = CreateFrame("Button", nil, setsTab, "UIPanelButtonTemplate")
+    local saveBtn = CreateFrame("Button", nil, gearContent, "UIPanelButtonTemplate")
     saveBtn:SetSize(46, 17) ; saveBtn:SetPoint("LEFT", saveInput, "RIGHT", 3, 0)
     saveBtn:SetText("Save")
     local function doSave()
@@ -2877,32 +2937,97 @@ function SC_BuildMain()
     saveBtn:SetScript("OnClick", doSave)
     saveInput:SetScript("OnEnterPressed", doSave)
 
-    local setSep = setsTab:CreateTexture(nil, "ARTWORK")
+    local setSep = gearContent:CreateTexture(nil, "ARTWORK")
     setSep:SetSize(SIDE_W - PAD*2, 1)
     setSep:SetPoint("TOPLEFT", saveInput, "BOTTOMLEFT", 0, -4)
     setSep:SetColorTexture(0.18, 0.18, 0.24, 1)
 
-    -- Rows live directly on a plain Frame (no ScrollFrame) — avoids TBC click-intercept bug
-    local setsCont = CreateFrame("Frame", nil, setsTab)
-    setsCont:SetPoint("TOPLEFT", setsTab, "TOPLEFT", PAD, -48)
+    local setsCont = CreateFrame("Frame", nil, gearContent)
+    setsCont:SetPoint("TOPLEFT", gearContent, "TOPLEFT", PAD, -48)
     setsCont:SetSize(SIDE_W - PAD*2, MAX_SET_ROWS * 22)
     BuildSetRows(setsCont)
 
-    -- Mouse-wheel virtual scroll
-    setsTab:EnableMouseWheel(true)
-    setsTab:SetScript("OnMouseWheel", function(self, delta)
-        local names2 = IRR_GetSetNames and IRR_GetSetNames() or {}
-        local maxOffset = math.max(0, #names2 - MAX_SET_ROWS)
-        setsScrollOffset = math.max(0, math.min(setsScrollOffset - delta, maxOffset))
-        SC_RefreshSets()
-    end)
-
-    -- Scroll position indicator
-    local setsInfo = setsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local setsInfo = gearContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     setsInfo:SetFont(setsInfo:GetFont(), 8, "")
-    setsInfo:SetPoint("BOTTOMRIGHT", setsTab, "BOTTOMRIGHT", -4, 4)
+    setsInfo:SetPoint("BOTTOMRIGHT", gearContent, "BOTTOMRIGHT", -4, 4)
     setsInfo:SetTextColor(0.40, 0.40, 0.50)
     setsScrollInfoLabel = setsInfo
+
+    -- ── Bars content ──────────────────────────────────────────────────────────
+    local barsContent = CreateFrame("Frame", nil, setsTab)
+    barsContent:SetPoint("TOPLEFT",  setsTab, "TOPLEFT",  0, -17)
+    barsContent:SetPoint("TOPRIGHT", setsTab, "TOPRIGHT", 0, -17)
+    barsContent:SetHeight(tcH - 17)
+    setsBarsContent = barsContent
+
+    local barsLbl = barsContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    barsLbl:SetFont(barsLbl:GetFont(), 9, "")
+    barsLbl:SetPoint("TOPLEFT", barsContent, "TOPLEFT", PAD, -3)
+    barsLbl:SetTextColor(0.5, 0.5, 0.55) ; barsLbl:SetText("Save current bars as:")
+
+    local barsInput = CreateFrame("EditBox", nil, barsContent, "InputBoxTemplate")
+    barsInput:SetSize(SIDE_W - PAD*2 - 52, 17)
+    barsInput:SetPoint("TOPLEFT", barsLbl, "BOTTOMLEFT", 0, -1)
+    barsInput:SetAutoFocus(false) ; barsInput:SetFontObject("GameFontNormalSmall")
+    barsInput:SetScript("OnEscapePressed", function(self2) self2:ClearFocus() end)
+
+    local barsSaveBtn = CreateFrame("Button", nil, barsContent, "UIPanelButtonTemplate")
+    barsSaveBtn:SetSize(46, 17) ; barsSaveBtn:SetPoint("LEFT", barsInput, "RIGHT", 3, 0)
+    barsSaveBtn:SetText("Save")
+    local function doSaveBars()
+        local sn = barsInput:GetText()
+        if sn and sn:trim() ~= "" and SlySlot_SaveProfile then
+            SlySlot_SaveProfile(sn:trim())
+            barsInput:SetText("") ; barsInput:ClearFocus()
+            SC_RefreshBars()
+            DEFAULT_CHAT_FRAME:AddMessage(
+                "|cff88bbff[SlyChar]|r Bars saved: |cffffd700"..sn:trim().."|r")
+        end
+    end
+    barsSaveBtn:SetScript("OnClick", doSaveBars)
+    barsInput:SetScript("OnEnterPressed", doSaveBars)
+
+    local barsSep = barsContent:CreateTexture(nil, "ARTWORK")
+    barsSep:SetSize(SIDE_W - PAD*2, 1)
+    barsSep:SetPoint("TOPLEFT", barsInput, "BOTTOMLEFT", 0, -4)
+    barsSep:SetColorTexture(0.18, 0.18, 0.24, 1)
+
+    local barsCont = CreateFrame("Frame", nil, barsContent)
+    barsCont:SetPoint("TOPLEFT", barsContent, "TOPLEFT", PAD, -48)
+    barsCont:SetSize(SIDE_W - PAD*2, MAX_BAR_ROWS * 22)
+    BuildBarRows(barsCont)
+
+    local barsInfo = barsContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    barsInfo:SetFont(barsInfo:GetFont(), 8, "")
+    barsInfo:SetPoint("BOTTOMRIGHT", barsContent, "BOTTOMRIGHT", -4, 4)
+    barsInfo:SetTextColor(0.40, 0.40, 0.50)
+    barsScrollInfoLabel = barsInfo
+
+    -- Mouse-wheel dispatches to active sub-tab
+    setsTab:EnableMouseWheel(true)
+    setsTab:SetScript("OnMouseWheel", function(self, delta)
+        if setsSubTab == "gear" then
+            local names2 = IRR_GetSetNames and IRR_GetSetNames() or {}
+            local maxOffset = math.max(0, #names2 - MAX_SET_ROWS)
+            setsScrollOffset = math.max(0, math.min(setsScrollOffset - delta, maxOffset))
+            SC_RefreshSets()
+        elseif setsSubTab == "bars" then
+            local names2 = {}
+            if SlySlot and SlySlot.db then
+                for n in pairs(SlySlot.db.profiles) do table.insert(names2, n) end
+            end
+            local maxOffset = math.max(0, #names2 - MAX_BAR_ROWS)
+            barsScrollOffset = math.max(0, math.min(barsScrollOffset - delta, maxOffset))
+            SC_RefreshBars()
+        end
+    end)
+
+    setsSubGearBtn:SetScript("OnClick", function()
+        setsSubTab = "gear" ; SC_RefreshSetsSub()
+    end)
+    setsSubBarsBtn:SetScript("OnClick", function()
+        setsSubTab = "bars" ; SC_RefreshSetsSub()
+    end)
 
     -- Misc tab (Rep + Skills as sub-tabs)
     local miscTab = CreateFrame("Frame", nil, side)
@@ -2991,67 +3116,6 @@ function SC_BuildMain()
         nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
         SC_RefreshNIT()
     end)
-
-    -- Bars tab (SlySlot action-bar profiles)
-    local barsTab = CreateFrame("Frame", nil, side)
-    barsTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    barsTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    barsTab:SetHeight(tcH) ; barsTab:Hide()
-    tabFrames["bars"] = barsTab
-
-    local barsLbl = barsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    barsLbl:SetFont(barsLbl:GetFont(), 9, "")
-    barsLbl:SetPoint("TOPLEFT", barsTab, "TOPLEFT", PAD, -3)
-    barsLbl:SetTextColor(0.5, 0.5, 0.55) ; barsLbl:SetText("Save current bars as:")
-
-    local barsInput = CreateFrame("EditBox", nil, barsTab, "InputBoxTemplate")
-    barsInput:SetSize(SIDE_W - PAD*2 - 52, 17)
-    barsInput:SetPoint("TOPLEFT", barsLbl, "BOTTOMLEFT", 0, -1)
-    barsInput:SetAutoFocus(false) ; barsInput:SetFontObject("GameFontNormalSmall")
-    barsInput:SetScript("OnEscapePressed", function(self2) self2:ClearFocus() end)
-
-    local barsSaveBtn = CreateFrame("Button", nil, barsTab, "UIPanelButtonTemplate")
-    barsSaveBtn:SetSize(46, 17) ; barsSaveBtn:SetPoint("LEFT", barsInput, "RIGHT", 3, 0)
-    barsSaveBtn:SetText("Save")
-    local function doSaveBars()
-        local sn = barsInput:GetText()
-        if sn and sn:trim() ~= "" and SlySlot_SaveProfile then
-            SlySlot_SaveProfile(sn:trim())
-            barsInput:SetText("") ; barsInput:ClearFocus()
-            SC_RefreshBars()
-            DEFAULT_CHAT_FRAME:AddMessage(
-                "|cff88bbff[SlyChar]|r Bars saved: |cffffd700"..sn:trim().."|r")
-        end
-    end
-    barsSaveBtn:SetScript("OnClick", doSaveBars)
-    barsInput:SetScript("OnEnterPressed", doSaveBars)
-
-    local barsSep = barsTab:CreateTexture(nil, "ARTWORK")
-    barsSep:SetSize(SIDE_W - PAD*2, 1)
-    barsSep:SetPoint("TOPLEFT", barsInput, "BOTTOMLEFT", 0, -4)
-    barsSep:SetColorTexture(0.18, 0.18, 0.24, 1)
-
-    local barsCont = CreateFrame("Frame", nil, barsTab)
-    barsCont:SetPoint("TOPLEFT", barsTab, "TOPLEFT", PAD, -48)
-    barsCont:SetSize(SIDE_W - PAD*2, MAX_BAR_ROWS * 22)
-    BuildBarRows(barsCont)
-
-    barsTab:EnableMouseWheel(true)
-    barsTab:SetScript("OnMouseWheel", function(self, delta)
-        local names2 = {}
-        if SlySlot and SlySlot.db then
-            for n in pairs(SlySlot.db.profiles) do table.insert(names2, n) end
-        end
-        local maxOffset = math.max(0, #names2 - MAX_BAR_ROWS)
-        barsScrollOffset = math.max(0, math.min(barsScrollOffset - delta, maxOffset))
-        SC_RefreshBars()
-    end)
-
-    local barsInfo = barsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    barsInfo:SetFont(barsInfo:GetFont(), 8, "")
-    barsInfo:SetPoint("BOTTOMRIGHT", barsTab, "BOTTOMRIGHT", -4, 4)
-    barsInfo:SetTextColor(0.40, 0.40, 0.50)
-    barsScrollInfoLabel = barsInfo
 
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")
