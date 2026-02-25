@@ -2016,7 +2016,8 @@ local function BuildNitRows(parent)
                 if C_GuildInfo then C_GuildInfo.GuildRoster()
                 elseif GuildRoster then GuildRoster() end
             elseif key == "friends" then
-                if ShowFriends then ShowFriends() end
+                if C_FriendList and C_FriendList.ShowFriends then C_FriendList.ShowFriends()
+                elseif ShowFriends then ShowFriends() end
             end
             SC_RefreshNIT()
         end)
@@ -2326,11 +2327,19 @@ function SC_RefreshNITFriends()
 
     -- Do NOT call ShowFriends() here — it is async and triggers FRIENDLIST_UPDATE.
     -- It is called from the sub-tab click; we just read whatever is cached now.
-    local total = GetNumFriends and GetNumFriends() or 0  -- TBC: single return value
+    -- TBC Anniversary uses C_FriendList namespace; fall back to globals if absent.
+    local hasCFL = C_FriendList and C_FriendList.GetNumFriends
+    local total = hasCFL and C_FriendList.GetNumFriends() or (GetNumFriends and GetNumFriends() or 0)
     local onlineCount = 0
     local shown = 0
     for i = 1, total do
-        local name, level, _, area, connected = GetFriendInfo(i)
+        local name, level, _, area, connected
+        if hasCFL then
+            local info = C_FriendList.GetFriendInfoByIndex(i)
+            if info then name, level, area, connected = info.name, info.level, info.area, info.connected end
+        else
+            name, level, _, area, connected = GetFriendInfo(i)
+        end
         if connected then onlineCount = onlineCount + 1 end
         if name and shown < MAX_NIT_LOCK_ROWS then
             shown = shown + 1
