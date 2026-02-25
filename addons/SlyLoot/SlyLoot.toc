@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: Sly Loot
 ## Notes: Master looter assistant: announces drops, tracks /roll results, declares winners. /slyloot to open.
-## Version: 1.0.0
+## Version: 1.1.0
 ## X-Curse-Project-ID: 0
 ## Author: Custom
 ## OptionalDependencies: SlySuite

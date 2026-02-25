@@ -1,10 +1,80 @@
 name: Release
 
-# Triggered by any tag push (e.g. git tag -a "1.0.0" -m "..." && git push origin 1.0.0)
+# Trigger on version tags: git tag v1.1.0 && git push origin v1.1.0
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: ver
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package each addon into individual zips
+        run: |
+          mkdir -p dist
+          for dir in addons/*/; do
+            name=$(basename "$dir")
+            (cd addons && zip -r "../dist/${name}-${{ steps.ver.outputs.VERSION }}.zip" "${name}/")
+            echo "  Packaged: ${name}-${{ steps.ver.outputs.VERSION }}.zip"
+          done
+          echo ""
+          echo "=== All packages ==="
+          ls -1 dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.ver.outputs.VERSION }}"
+          body: |
+            ## Sly Suite v${{ steps.ver.outputs.VERSION }}
+
+            TBC Anniversary (Interface 20505) addon suite.
+
+            ### Addons
+            | Addon | Description |
+            |---|---|
+            | **SlyChar** | Extended character sheet — stats, gear sets, social tab |
+            | **SlyLoot** | SlyGargul — softres.it import + /roll tracker + loot announcer |
+            | **ItemRackRevived** | Gear set manager — save/load/spec-link |
+            | **SlySuite** | Addon loader and error sandbox |
+            | **SlyRepair** | Auto-repair at merchants with cost reporting |
+            | **SlyMount** | Smart mount picker with zone awareness |
+            | **GearScore** | Gear score on tooltips and character pane |
+            | **ExtendedCharStats** | Extended stat panel (spell power, hit, crit, haste) |
+            | **SlyWeakAuras** | WeakAura pack manager |
+            | **SlyAtlasLoot** | AtlasLoot drop % on tooltips |
+            | **SlyItemizer** | Item compare + DPS delta on tooltips |
+            | **SlySlot** | Action bar profile manager |
+            | **SlyBag** | Unified bag window |
+            | **SlyUF** | Custom unit frames |
+            | **SlyMetrics** | Damage / healing / threat meter |
+
+            See [commit history](https://github.com/${{ github.repository }}/commits) for full change log.
+
+            ### Installation
+            Extract any `.zip` directly into `Interface/AddOns/` in your WoW directory.
+          files: dist/*.zip
+          fail_on_unmatched_files: false
+          generate_release_notes: false
+
+      - name: Upload to CurseForge
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.VERSION }}
+        run: python3 scripts/curseforge_publish.py dist/ "$VERSION"
+
 
 jobs:
   release:
