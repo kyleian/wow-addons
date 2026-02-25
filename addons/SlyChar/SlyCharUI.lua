@@ -133,11 +133,7 @@ local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, subGearBtn=nil, subBarsBtn=nil }
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
-local miscSubTab          = "rep"   -- "rep" | "skills"
-local miscRepContent      = nil
-local miscSkillContent    = nil
-local miscSubRepBtn       = nil
-local miscSubSkillBtn     = nil
+local miscUI = { subTab="rep", repContent=nil, skillContent=nil, subRepBtn=nil, subSkillBtn=nil }
 local MAX_BAR_ROWS        = 14   -- visible action bar profile rows
 local barRowWidgets       = {}
 local barsScrollOffset    = 0
@@ -1842,7 +1838,7 @@ function SC_RefreshSkills()
 end
 
 function SC_SetMiscSubTab(key)
-    miscSubTab = key
+    miscUI.subTab = key
 end
 
 function SC_RefreshMisc()
@@ -1856,13 +1852,13 @@ function SC_RefreshMisc()
             btn.tx:SetTextColor(0.40, 0.40, 0.50)
         end
     end
-    StyleMiscSub(miscSubRepBtn,   miscSubTab == "rep")
-    StyleMiscSub(miscSubSkillBtn, miscSubTab == "skills")
-    if miscRepContent   then miscRepContent:SetShown(miscSubTab == "rep") end
-    if miscSkillContent then miscSkillContent:SetShown(miscSubTab == "skills") end
-    if miscSubTab == "rep" then
+    StyleMiscSub(miscUI.subRepBtn,   miscUI.subTab == "rep")
+    StyleMiscSub(miscUI.subSkillBtn, miscUI.subTab == "skills")
+    if miscUI.repContent   then miscUI.repContent:SetShown(miscUI.subTab == "rep") end
+    if miscUI.skillContent then miscUI.skillContent:SetShown(miscUI.subTab == "skills") end
+    if miscUI.subTab == "rep" then
         SC_RefreshReputation()
-    elseif miscSubTab == "skills" then
+    elseif miscUI.subTab == "skills" then
         SC_RefreshSkills()
     end
 end
@@ -3055,8 +3051,8 @@ function SC_BuildMain()
         btn.tx = btx
         return btn
     end
-    miscSubRepBtn   = MakeMiscSubBtn("Reputation", 0)
-    miscSubSkillBtn = MakeMiscSubBtn("Skills",     mBW)
+    miscUI.subRepBtn   = MakeMiscSubBtn("Reputation", 0)
+    miscUI.subSkillBtn = MakeMiscSubBtn("Skills",     mBW)
 
     local miscSep = miscTab:CreateTexture(nil, "ARTWORK")
     miscSep:SetSize(mW, 1)
@@ -3068,7 +3064,7 @@ function SC_BuildMain()
     repContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
     repContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
     repContent:SetHeight(tcH - 17)
-    miscRepContent = repContent
+    miscUI.repContent = repContent
 
     local repScroll = CreateFrame("ScrollFrame", nil, repContent, "UIPanelScrollFrameTemplate")
     repScroll:SetPoint("TOPLEFT",     repContent, "TOPLEFT",      PAD,  -2)
@@ -3083,7 +3079,7 @@ function SC_BuildMain()
     skillContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
     skillContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
     skillContent:SetHeight(tcH - 17)
-    miscSkillContent = skillContent
+    miscUI.skillContent = skillContent
 
     local skillScroll = CreateFrame("ScrollFrame", nil, skillContent, "UIPanelScrollFrameTemplate")
     skillScroll:SetPoint("TOPLEFT",     skillContent, "TOPLEFT",      PAD,  -2)
@@ -3093,11 +3089,11 @@ function SC_BuildMain()
     skillScroll:SetScrollChild(skillCont)
     BuildSkillRows(skillCont)
 
-    miscSubRepBtn:SetScript("OnClick", function()
-        miscSubTab = "rep" ; SC_RefreshMisc()
+    miscUI.subRepBtn:SetScript("OnClick", function()
+        miscUI.subTab = "rep" ; SC_RefreshMisc()
     end)
-    miscSubSkillBtn:SetScript("OnClick", function()
-        miscSubTab = "skills" ; SC_RefreshMisc()
+    miscUI.subSkillBtn:SetScript("OnClick", function()
+        miscUI.subTab = "skills" ; SC_RefreshMisc()
     end)
 
     -- NIT tab
