@@ -88,32 +88,17 @@ jobs:
           VERSION: ${{ steps.ver.outputs.VERSION }}
         run: |
           if [ -z "$CF_API_KEY" ] || [ -z "$CF_PROJECT_ID" ]; then
-            echo "CF_API_KEY or CF_PROJECT_ID not set — skipping CurseForge upload."
+            echo "CF secrets not set - skipping CurseForge upload."
             exit 0
           fi
           BUNDLE="dist/SlySuite-${VERSION}-full.zip"
           echo "Fetching CurseForge game versions..."
-          VERSIONS=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
-            "https://wow.curseforge.com/api/game/versions")
-          GAME_VERSION_ID=$(echo "$VERSIONS" | python3 -c "
-import sys, json
-versions = json.load(sys.stdin)
-for v in versions:
-    if str(v.get('gameVersionTypeID','')) == '67':
-        print(v['id'])
-        break
-" 2>/dev/null || echo "")
+          GAME_VERSION_ID=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
+            "https://wow.curseforge.com/api/game/versions" | \
+            jq -r '[.[] | select(.gameVersionTypeID == 67)] | .[0].id // empty' 2>/dev/null || echo "")
           if [ -z "$GAME_VERSION_ID" ]; then
-            echo "WARNING: Could not detect TBC game version ID, trying slug search..."
-            GAME_VERSION_ID=$(echo "$VERSIONS" | python3 -c "
-import sys, json
-versions = json.load(sys.stdin)
-for v in versions:
-    name = str(v.get('name','')).lower()
-    if '2.5' in name or 'burning crusade' in name or 'tbc' in name:
-        print(v['id'])
-        break
-" 2>/dev/null || echo "9551")
+            echo "WARNING: gameVersionTypeID 67 not found, using fallback 9551"
+            GAME_VERSION_ID="9551"
           fi
           echo "Using game version ID: $GAME_VERSION_ID"
           echo "Uploading $BUNDLE to CurseForge project $CF_PROJECT_ID..."
