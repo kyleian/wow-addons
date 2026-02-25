@@ -125,6 +125,7 @@ local nitRunRows    = {}
 local nitRunHeader  = nil
 local headerName    = nil
 local headerInfo    = nil
+local headerGS      = nil
 
 local MAX_STAT_ROWS  = 60
 local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
@@ -143,16 +144,24 @@ local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
 local nitLockScrollOffset = 0
 local nitScrollInfoLabel  = nil
 local nitLayerLabel       = nil  -- FontString showing current layer
-local nitSubTab           = "locks"  -- "locks" | "guild" | "layer"
+local nitSubTab           = "locks"  -- "locks" | "layer"
 local nitLockContent      = nil  -- Frame containing lockout header+rows
-local nitGuildContent     = nil  -- Frame containing guild member rows
 local nitLayerContent     = nil  -- Frame containing layer number display
 local nitLayerSrcLabel    = nil  -- FontString for source info in layer tab
 local nitSubLayerBtn      = nil
-local nitGuildRows        = {}
-local nitGuildHeaderFs    = nil  -- FontString for guild header (count)
 local nitSubLockBtn       = nil  -- sub-tab button widgets
-local nitSubGuildBtn      = nil
+local socialUI = {               -- Friends / Guild social tab
+    subTab          = "friends", -- "friends" | "guild"
+    guildRows       = {},
+    friendsRows     = {},
+    guildContent    = nil,
+    guildHeaderFs   = nil,
+    subGuildBtn     = nil,
+    friendsContent  = nil,
+    friendsHeaderFs = nil,
+    subFriendsBtn   = nil,
+    scrollOffset    = 0,
+}
 
 -- ============================================================
 -- Themes
@@ -932,6 +941,14 @@ local function RefreshHeader()
         cc[1]*255, cc[2]*255, cc[3]*255, name)
     headerInfo:SetFormattedText("Level %d  %s  %s",
         level, race, cls and (cls:sub(1,1)..cls:sub(2):lower()) or "")
+    if headerGS then
+        local gs = GS_GetTotalScore and GS_GetTotalScore() or 0
+        if gs > 0 then
+            headerGS:SetFormattedText("GS: %d", gs)
+        else
+            headerGS:SetText("|cff666666GS: --  |r")
+        end
+    end
 end
 
 -- ============================================================
@@ -2790,8 +2807,14 @@ function SC_BuildMain()
 
     headerName = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     headerName:SetFont(headerName:GetFont(), 13, "OUTLINE")
-    headerName:SetPoint("LEFT", hdr, "LEFT", PAD, 0)
+    headerName:SetPoint("LEFT", hdr, "LEFT", PAD, 7)
     headerName:SetText("...")
+
+    headerGS = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    headerGS:SetFont(headerGS:GetFont(), 9, "")
+    headerGS:SetPoint("LEFT", hdr, "LEFT", PAD, -7)
+    headerGS:SetTextColor(1.00, 0.80, 0.10)
+    headerGS:SetText("")
 
     headerInfo = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     headerInfo:SetFont(headerInfo:GetFont(), 10, "")
