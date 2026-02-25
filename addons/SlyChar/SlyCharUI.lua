@@ -132,6 +132,10 @@ local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
+local MAX_BAR_ROWS        = 14   -- visible action bar profile rows
+local barRowWidgets       = {}
+local barsScrollOffset    = 0
+local barsScrollInfoLabel = nil
 local MAX_NIT_LOCK_ROWS   = 15   -- reduced by 2 to make room for layer display
 local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
 local nitLockScrollOffset = 0
@@ -1314,6 +1318,163 @@ local function BuildSetRows(parent)
     end
 end
 
+local function BuildBarRows(parent)
+    for i = 1, MAX_BAR_ROWS do
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetSize(SIDE_W - PAD*2 - 16, 22)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((i-1)*22))
+
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row)
+        bg:SetColorTexture(0, 0, 0, i%2==0 and 0.12 or 0)
+
+        -- Delete button (far right)
+        local delBtn = CreateFrame("Button", nil, row)
+        delBtn:SetSize(16, 16) ; delBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        delBtn:EnableMouse(false) ; delBtn:RegisterForClicks("LeftButtonUp")
+        local delBg = delBtn:CreateTexture(nil, "BACKGROUND")
+        delBg:SetAllPoints() ; delBg:SetColorTexture(0.45, 0.10, 0.10, 0.85)
+        local delHl = delBtn:CreateTexture(nil, "HIGHLIGHT")
+        delHl:SetAllPoints() ; delHl:SetColorTexture(0.70, 0.20, 0.20, 0.50)
+        local delTx = delBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        delTx:SetFont(delTx:GetFont(), 9, "OUTLINE") ; delTx:SetAllPoints()
+        delTx:SetJustifyH("CENTER") ; delTx:SetText("|cffff6666x|r")
+
+        -- Update (overwrite) button
+        local updBtn = CreateFrame("Button", nil, row)
+        updBtn:SetSize(36, 16) ; updBtn:SetPoint("RIGHT", delBtn, "LEFT", -2, 0)
+        updBtn:EnableMouse(false) ; updBtn:RegisterForClicks("LeftButtonUp")
+        local updBg = updBtn:CreateTexture(nil, "BACKGROUND")
+        updBg:SetAllPoints() ; updBg:SetColorTexture(0.15, 0.38, 0.60, 0.85)
+        local updHl = updBtn:CreateTexture(nil, "HIGHLIGHT")
+        updHl:SetAllPoints() ; updHl:SetColorTexture(0.30, 0.55, 0.80, 0.50)
+        local updTx = updBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        updTx:SetFont(updTx:GetFont(), 9, "OUTLINE") ; updTx:SetAllPoints()
+        updTx:SetJustifyH("CENTER") ; updTx:SetText("Upd")
+
+        -- Load button
+        local loadBtn = CreateFrame("Button", nil, row)
+        loadBtn:SetSize(36, 16) ; loadBtn:SetPoint("RIGHT", updBtn, "LEFT", -2, 0)
+        loadBtn:EnableMouse(false) ; loadBtn:RegisterForClicks("LeftButtonUp")
+        local loadBg = loadBtn:CreateTexture(nil, "BACKGROUND")
+        loadBg:SetAllPoints() ; loadBg:SetColorTexture(0.15, 0.30, 0.15, 0.85)
+        local loadHl = loadBtn:CreateTexture(nil, "HIGHLIGHT")
+        loadHl:SetAllPoints() ; loadHl:SetColorTexture(0.25, 0.55, 0.25, 0.50)
+        local loadTx = loadBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        loadTx:SetFont(loadTx:GetFont(), 9, "OUTLINE") ; loadTx:SetAllPoints()
+        loadTx:SetJustifyH("CENTER") ; loadTx:SetText("Load")
+
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 10, "")
+        nm:SetPoint("LEFT", row, "LEFT", 4, 0)
+        nm:SetJustifyH("LEFT") ; nm:SetWidth(170)
+
+        row:Hide()
+        barRowWidgets[i] = { row=row, nm=nm, loadBtn=loadBtn, updBtn=updBtn, delBtn=delBtn }
+    end
+end
+
+function SC_RefreshBars()
+    for _, w in ipairs(barRowWidgets) do w.row:Hide() end
+
+    if not SlySlot or not SlySlot.db then
+        local w = barRowWidgets[1]
+        if w then
+            w.nm:SetText("|cffff8800SlySlot not loaded|r")
+            w.loadBtn:EnableMouse(false) ; w.updBtn:EnableMouse(false) ; w.delBtn:EnableMouse(false)
+            w.row:Show()
+        end
+        return
+    end
+
+    local names = {}
+    for n in pairs(SlySlot.db.profiles) do table.insert(names, n) end
+    table.sort(names)
+
+    if #names == 0 then
+        local w = barRowWidgets[1]
+        if w then
+            w.nm:SetText("|cff666666No profiles saved|r")
+            w.loadBtn:EnableMouse(false) ; w.updBtn:EnableMouse(false) ; w.delBtn:EnableMouse(false)
+            w.row:Show()
+        end
+        return
+    end
+
+    local total = #names
+    barsScrollOffset = math.max(0, math.min(barsScrollOffset, math.max(0, total - MAX_BAR_ROWS)))
+
+    for i = 1, MAX_BAR_ROWS do
+        local w    = barRowWidgets[i]
+        if not w then break end
+        local name = names[barsScrollOffset + i]
+        if not name then break end
+
+        w.nm:SetText("|cffdddddd" .. name .. "|r")
+
+        w.loadBtn:EnableMouse(true)
+        w.loadBtn:SetScript("OnClick", function()
+            if SlySlot_LoadProfile then
+                local ok, err = SlySlot_LoadProfile(name)
+                if ok then
+                    DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Loaded bars: |cffffd700"..name.."|r")
+                else
+                    DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar]|r Load failed: "..tostring(err))
+                end
+            end
+        end)
+        w.loadBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Load", 1, 1, 1)
+            GameTooltip:AddLine("Restore action bars from \""..name.."\"", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        w.loadBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        w.updBtn:EnableMouse(true)
+        w.updBtn:SetScript("OnClick", function()
+            if SlySlot_SaveProfile then
+                SlySlot_SaveProfile(name)
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Updated bars: |cffffd700"..name.."|r")
+                SC_RefreshBars()
+            end
+        end)
+        w.updBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Update", 1, 1, 1)
+            GameTooltip:AddLine("Overwrite \""..name.."\" with current bars", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        w.updBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        w.delBtn:EnableMouse(true)
+        w.delBtn:SetScript("OnClick", function()
+            if SlySlot_DeleteProfile then
+                SlySlot_DeleteProfile(name)
+                SC_RefreshBars()
+            end
+        end)
+        w.delBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Delete", 1, 0.3, 0.3)
+            GameTooltip:AddLine("Delete profile \""..name.."\"", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        w.delBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        w.row:Show()
+    end
+
+    if barsScrollInfoLabel then
+        if total > MAX_BAR_ROWS then
+            barsScrollInfoLabel:SetText(string.format("|cff444455%d-%d / %d  (scroll)|r",
+                barsScrollOffset+1, math.min(barsScrollOffset+MAX_BAR_ROWS, total), total))
+        else
+            barsScrollInfoLabel:SetText("")
+        end
+    end
+end
+
 function SC_RefreshSets()
     for _, w in ipairs(setRowWidgets) do w.row:Hide() end
 
@@ -2161,6 +2322,7 @@ function SC_RefreshAll()
     elseif tab == "rep"    then SC_RefreshReputation()
     elseif tab == "skills" then SC_RefreshSkills()
     elseif tab == "nit"    then SC_RefreshNIT()
+    elseif tab == "bars"   then SC_RefreshBars()
     end
 end
 
@@ -2602,13 +2764,14 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 5)
+    local tbW = math.floor(SIDE_W / 6)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="rep",    label="Rep"},
         {key="skills", label="Skills"},
         {key="nit",    label="NIT"},
+        {key="bars",   label="Bars"},
     }
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
@@ -2759,6 +2922,67 @@ function SC_BuildMain()
         nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
         SC_RefreshNIT()
     end)
+
+    -- Bars tab (SlySlot action-bar profiles)
+    local barsTab = CreateFrame("Frame", nil, side)
+    barsTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
+    barsTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
+    barsTab:SetHeight(tcH) ; barsTab:Hide()
+    tabFrames["bars"] = barsTab
+
+    local barsLbl = barsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    barsLbl:SetFont(barsLbl:GetFont(), 9, "")
+    barsLbl:SetPoint("TOPLEFT", barsTab, "TOPLEFT", PAD, -3)
+    barsLbl:SetTextColor(0.5, 0.5, 0.55) ; barsLbl:SetText("Save current bars as:")
+
+    local barsInput = CreateFrame("EditBox", nil, barsTab, "InputBoxTemplate")
+    barsInput:SetSize(SIDE_W - PAD*2 - 52, 17)
+    barsInput:SetPoint("TOPLEFT", barsLbl, "BOTTOMLEFT", 0, -1)
+    barsInput:SetAutoFocus(false) ; barsInput:SetFontObject("GameFontNormalSmall")
+    barsInput:SetScript("OnEscapePressed", function(self2) self2:ClearFocus() end)
+
+    local barsSaveBtn = CreateFrame("Button", nil, barsTab, "UIPanelButtonTemplate")
+    barsSaveBtn:SetSize(46, 17) ; barsSaveBtn:SetPoint("LEFT", barsInput, "RIGHT", 3, 0)
+    barsSaveBtn:SetText("Save")
+    local function doSaveBars()
+        local sn = barsInput:GetText()
+        if sn and sn:trim() ~= "" and SlySlot_SaveProfile then
+            SlySlot_SaveProfile(sn:trim())
+            barsInput:SetText("") ; barsInput:ClearFocus()
+            SC_RefreshBars()
+            DEFAULT_CHAT_FRAME:AddMessage(
+                "|cff88bbff[SlyChar]|r Bars saved: |cffffd700"..sn:trim().."|r")
+        end
+    end
+    barsSaveBtn:SetScript("OnClick", doSaveBars)
+    barsInput:SetScript("OnEnterPressed", doSaveBars)
+
+    local barsSep = barsTab:CreateTexture(nil, "ARTWORK")
+    barsSep:SetSize(SIDE_W - PAD*2, 1)
+    barsSep:SetPoint("TOPLEFT", barsInput, "BOTTOMLEFT", 0, -4)
+    barsSep:SetColorTexture(0.18, 0.18, 0.24, 1)
+
+    local barsCont = CreateFrame("Frame", nil, barsTab)
+    barsCont:SetPoint("TOPLEFT", barsTab, "TOPLEFT", PAD, -48)
+    barsCont:SetSize(SIDE_W - PAD*2, MAX_BAR_ROWS * 22)
+    BuildBarRows(barsCont)
+
+    barsTab:EnableMouseWheel(true)
+    barsTab:SetScript("OnMouseWheel", function(self, delta)
+        local names2 = {}
+        if SlySlot and SlySlot.db then
+            for n in pairs(SlySlot.db.profiles) do table.insert(names2, n) end
+        end
+        local maxOffset = math.max(0, #names2 - MAX_BAR_ROWS)
+        barsScrollOffset = math.max(0, math.min(barsScrollOffset - delta, maxOffset))
+        SC_RefreshBars()
+    end)
+
+    local barsInfo = barsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    barsInfo:SetFont(barsInfo:GetFont(), 8, "")
+    barsInfo:SetPoint("BOTTOMRIGHT", barsTab, "BOTTOMRIGHT", -4, 4)
+    barsInfo:SetTextColor(0.40, 0.40, 0.50)
+    barsScrollInfoLabel = barsInfo
 
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")

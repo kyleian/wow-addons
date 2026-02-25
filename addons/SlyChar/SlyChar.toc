@@ -4,7 +4,7 @@
 ## Version: 1.1.0
 ## X-Curse-Project-ID: 0
 ## Author: Sly
-## OptionalDependencies: SlySuite, ExtendedCharStats, ItemRackRevived
+## OptionalDependencies: SlySuite, ExtendedCharStats, ItemRackRevived, SlySlot
 ## SavedVariables: SlyCharDB
 
 SlyChar.lua

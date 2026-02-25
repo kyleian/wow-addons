@@ -96,6 +96,8 @@ function SlySlot_UIRefresh()
             and ("|cffffcc00" .. selectedProfile .. "|r selected")
             or  "|cffaaaaaa(none selected)|r")
     end
+    -- Keep SlyChar Bars tab in sync if open
+    if SC_RefreshBars then SC_RefreshBars() end
 end
 
 -- -------------------------------------------------------
