@@ -413,9 +413,10 @@ local function SC_BuildPicker()
         row.ilvl = ilvl
 
         row:SetScript("OnEnter", function(self)
-            if self._itemId then
+            if self._itemLink or self._itemId then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetHyperlink("item:" .. self._itemId)
+                -- Use the full hyperlink (includes enchant/gem data) when available
+                GameTooltip:SetHyperlink(self._itemLink or ("item:" .. self._itemId))
                 GameTooltip:Show()
             end
         end)
@@ -445,6 +446,28 @@ local function SC_BuildPicker()
     picker = f
 end
 
+-- Parse enchant name + gem count from a full item hyperlink.
+-- Returns: enchantName (string or nil), gemCount (int)
+local function ParseEnchantGems(link)
+    if not link then return nil, 0 end
+    local itemStr = link:match("|Hitem:([^|]+)|h")
+    if not itemStr then return nil, 0 end
+    local parts = { strsplit(":", itemStr) }
+    -- parts[1]=itemId  parts[2]=enchantId  parts[3..6]=gem slots
+    local enchId   = tonumber(parts[2]) or 0
+    local gemCount = 0
+    for i = 3, 6 do
+        if tonumber(parts[i] or "0") and tonumber(parts[i] or "0") > 0 then
+            gemCount = gemCount + 1
+        end
+    end
+    local enchName = nil
+    if enchId > 0 then
+        enchName = GetSpellInfo(enchId)
+    end
+    return enchName, gemCount
+end
+
 function SC_ShowGearPicker(slotId)
     if not picker then SC_BuildPicker() end
     CancelPickerHide()
@@ -455,51 +478,60 @@ function SC_ShowGearPicker(slotId)
     local currentId  = GetInventoryItemID("player", slotId)
 
     local items = {}
-    local seen  = {}
-    seen[currentId or 0] = true
+    -- Track IDs already shown as "Equipped" so we don't also list them in bags/swap.
+    -- We do NOT dedup within bags — duplicate items in bags must all appear.
+    local shownAsEquipped = {}
 
     -- Currently equipped
     if currentId then
+        local link = GetInventoryItemLink(slotId)
         local n,_,q,ilvl,_,_,_,_,_,tex = GetItemInfo(currentId)
         if n then
+            shownAsEquipped[currentId] = true
             items[#items+1] = {
                 itemId=currentId, name=n, qual=q or 1,
                 ilvl=ilvl or 0, tex=tex, equipped=true,
                 src="Equipped", bag=-1, bslot=-1,
+                link=link,
             }
         end
     end
 
-    -- Bags 0-4
+    -- Bags 0-4: show ALL matching stacks including duplicates.
+    -- Only skip the exact item currently equipped in this slot.
     for bag = 0, 4 do
         for bs = 1, _GetContainerNumSlots(bag) do
             local id = _GetContainerItemID(bag, bs)
-            if id and not seen[id] then
+            if id and not shownAsEquipped[id] then
+                local bagLink = _GetItemLink(bag, bs)
                 local n,_,q,ilvl,_,_,_,_,eqLoc,tex = GetItemInfo(id)
                 if n and validTypes[eqLoc] then
-                    seen[id] = true
                     items[#items+1] = {
                         itemId=id, name=n, qual=q or 1,
                         ilvl=ilvl or 0, tex=tex, equipped=false,
                         src="Bag", bag=bag, bslot=bs,
+                        link=bagLink,
                     }
                 end
             end
         end
     end
 
-    -- Other equipped slots (swap candidates)
+    -- Other equipped slots (swap candidates) — dedup by id only
+    local seenSwap = {}
     for sid = 1, 19 do
         if sid ~= slotId then
             local id = GetInventoryItemID("player", sid)
-            if id and not seen[id] then
+            if id and not shownAsEquipped[id] and not seenSwap[id] then
+                local swapLink = GetInventoryItemLink(sid)
                 local n,_,q,ilvl,_,_,_,_,eqLoc,tex = GetItemInfo(id)
                 if n and validTypes[eqLoc] then
-                    seen[id] = true
+                    seenSwap[id] = true
                     items[#items+1] = {
                         itemId=id, name=n, qual=q or 1,
                         ilvl=ilvl or 0, tex=tex, equipped=false,
                         src="Swap", bag=-1, bslot=-1, fromSlot=sid,
+                        link=swapLink,
                     }
                 end
             end
@@ -524,7 +556,8 @@ function SC_ShowGearPicker(slotId)
     local rowCount = 0
     if #items == 0 then
         local row = pickerRows[1]
-        row._itemId = nil
+        row._itemId   = nil
+        row._itemLink = nil
         row.nm:SetText("|cff555555No matching items|r")
         row.sub:SetText("") ; row.ilvl:SetText("")
         row.icn:SetTexture("Interface\\PaperDoll\\UI-Backpack-EmptySlot")
@@ -536,14 +569,33 @@ function SC_ShowGearPicker(slotId)
         for i, item in ipairs(items) do
             if i > PICKER_MAX then break end
             local row = pickerRows[i]
-            row._itemId = item.itemId
-            row._slotId = slotId
+            row._itemId   = item.itemId
+            row._itemLink = item.link
+            row._slotId   = slotId
 
             local qc = QUALITY_COLORS[item.qual] or QUALITY_COLORS[1]
             row.nm:SetText(string.format("|cff%02x%02x%02x%s|r",
                 qc[1]*255, qc[2]*255, qc[3]*255, item.name))
             row.ilvl:SetText(item.ilvl > 0 and ("i"..item.ilvl) or "")
-            row.sub:SetText(item.src)
+
+            -- Sub-line: source + enchant name + gem count
+            local enchName, gemCount = ParseEnchantGems(item.link)
+            local subParts = {}
+            if item.equipped then
+                subParts[#subParts+1] = "|cffddbb22Equipped|r"
+            elseif item.src == "Swap" then
+                subParts[#subParts+1] = "|cff998866Swap|r"
+            else
+                subParts[#subParts+1] = "|cff555566Bag|r"
+            end
+            if enchName then
+                subParts[#subParts+1] = string.format("|cff55aaff%s|r", enchName:sub(1, 18))
+            end
+            if gemCount > 0 then
+                subParts[#subParts+1] = string.format("|cff88dd88+%d gem%s|r",
+                    gemCount, gemCount > 1 and "s" or "")
+            end
+            row.sub:SetText(table.concat(subParts, " "))
 
             if item.tex then
                 row.icn:SetTexture(item.tex)
@@ -555,11 +607,10 @@ function SC_ShowGearPicker(slotId)
 
             if item.equipped then
                 row.eqGlow:Show()
-                row.sub:SetTextColor(0.90, 0.76, 0.12)
             else
                 row.eqGlow:Hide()
-                row.sub:SetTextColor(0.45, 0.45, 0.50)
             end
+            row.sub:SetTextColor(1, 1, 1)  -- allow inline color codes to show through
 
             local ci = item
             local cs = slotId
