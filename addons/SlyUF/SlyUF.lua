@@ -55,24 +55,23 @@ SlyUF.REACT_COLORS = {
 -- Blizzard frame suppression
 -- -------------------------------------------------------
 local function HideBlizzardFrames()
-    -- Player
+    -- NEVER call UnregisterAllEvents on Blizzard unit frames.
+    -- PlayerFrame / TargetFrame / PartyMemberFrames drive critical
+    -- game subsystems (loot eligibility, threat, vehicle, aura tracking).
+    -- Stripping events causes crashes and broken loot interactions.
+    -- Simply hide them and suppress re-show.
     if PlayerFrame then
-        PlayerFrame:UnregisterAllEvents()
         PlayerFrame:Hide()
         PlayerFrame:HookScript("OnShow", function(s) s:Hide() end)
     end
-    -- Target
     if TargetFrame then
-        TargetFrame:UnregisterAllEvents()
         TargetFrame:Hide()
         TargetFrame:HookScript("OnShow", function(s) s:Hide() end)
     end
     if ComboFrame then ComboFrame:Hide() end
-    -- Party
     for i = 1, 4 do
         local pf = _G["PartyMemberFrame" .. i]
         if pf then
-            pf:UnregisterAllEvents()
             pf:Hide()
             pf:HookScript("OnShow", function(s) s:Hide() end)
         end

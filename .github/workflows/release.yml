@@ -95,17 +95,25 @@ jobs:
           BUNDLE="dist/SlySuite-${VERSION}-full.zip"
           echo "Fetching CurseForge game versions..."
           CF_VERSIONS=$(curl -s -H "X-Api-Token: $CF_API_KEY" "https://wow.curseforge.com/api/game/versions")
-          GAME_VERSION_ID=$(echo "$CF_VERSIONS" | \
-            jq -r '[.[] | select(.name == "2.5.5")] | .[0].id // empty' 2>/dev/null || echo "")
-          if [ -z "$GAME_VERSION_ID" ]; then
-            echo "WARNING: 2.5.5 not found, using hardcoded fallback ID 14300"
-            GAME_VERSION_ID="14300"
+
+          # Collect ALL TBC 2.5.x version IDs as a JSON array — this matches
+          # what TapTime and other visible CF-app addons do. Including every
+          # 2.5.x subversion means the addon appears for all TBC Classic users
+          # regardless of which exact patch their CF app reports.
+          GAME_VERSION_IDS=$(echo "$CF_VERSIONS" | \
+            jq -r '[.[] | select(.name | test("^2\\.5\\.")) | .id] | join(",")' 2>/dev/null || echo "")
+
+          if [ -z "$GAME_VERSION_IDS" ]; then
+            echo "WARNING: no 2.5.x versions found via API, using hardcoded TBC fallback IDs"
+            # Known CF IDs for TBC Classic 2.5.1–2.5.5 (hardcoded safety net)
+            GAME_VERSION_IDS="9546,9560,9561,14301,14300"
           fi
-          echo "Using game version ID: $GAME_VERSION_ID"
+
+          echo "Using game version IDs: $GAME_VERSION_IDS"
           echo "Uploading $BUNDLE to CurseForge project $CF_PROJECT_ID..."
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
             -H "X-Api-Token: $CF_API_KEY" \
-            -F "metadata={\"changelog\":\"https://github.com/kyleian/wow-addons/releases/tag/v${VERSION}\",\"changelogType\":\"text\",\"displayName\":\"SlySuite v${VERSION}\",\"gameVersions\":[$GAME_VERSION_ID],\"releaseType\":\"release\"}" \
+            -F "metadata={\"changelog\":\"https://github.com/kyleian/wow-addons/releases/tag/v${VERSION}\",\"changelogType\":\"text\",\"displayName\":\"SlySuite v${VERSION}\",\"gameVersions\":[$GAME_VERSION_IDS],\"releaseType\":\"release\"}" \
             -F "file=@${BUNDLE}" \
             "https://wow.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file")
           STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)

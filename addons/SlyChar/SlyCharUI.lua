@@ -3389,34 +3389,59 @@ function SC_BuildMain()
           fn=function()
               SC_OpenPanel("Blizzard_SocialUI", "FriendsFrame", ToggleFriendsFrame)
           end },
-        { tip="PvP",       desc="Open PvP frame",             lbl="PvP", r=1.00, g=0.30, b=0.20,
+        { tip="PvP",       desc="Open PvP / Honor frame",     lbl="PvP", r=1.00, g=0.30, b=0.20,
           fn=function()
-              SC_OpenPanel("Blizzard_PVPUI", "PVPFrame", TogglePVPFrame)
+              -- SetUserPlaced(true) BEFORE the toggle so UIParent_ManageFramePositions
+              -- skips this frame when ShowUIPanel fires inside TogglePVPFrame.
+              if PVPFrame then
+                  if PVPFrame:IsShown() then
+                      PVPFrame:SetUserPlaced(false)
+                      HideUIPanel(PVPFrame)
+                      return
+                  end
+                  PVPFrame:SetUserPlaced(true)
+              end
+              if TogglePVPFrame then TogglePVPFrame()
+              elseif PVPFrame then ShowUIPanel(PVPFrame) end
+              if PVPFrame and PVPFrame:IsShown() then SC_AnchorRight(PVPFrame) end
           end },
         { tip="Guild",     desc="Open Guild panel",           lbl="G",   r=0.25, g=1.00, b=0.55,
           fn=function()
-              if not GuildFrame then return end
-              if GuildFrame:IsShown() then
-                  HideUIPanel(GuildFrame)
-              else
-                  -- Must use ShowUIPanel/ToggleGuildFrame to initialise tabs
-                  ShowUIPanel(GuildFrame)
-                  -- Reposition next to SlyChar after Blizzard's panel manager settles
-                  C_Timer.After(0, function()
-                      SC_AnchorRight(GuildFrame)
-                  end)
+              if GuildFrame then
+                  if GuildFrame:IsShown() then
+                      GuildFrame:SetUserPlaced(false)
+                      HideUIPanel(GuildFrame)
+                      return
+                  end
+                  GuildFrame:SetUserPlaced(true)
               end
+              if ToggleGuildFrame then ToggleGuildFrame()
+              elseif GuildFrame then ShowUIPanel(GuildFrame) end
+              if GuildFrame and GuildFrame:IsShown() then SC_AnchorRight(GuildFrame) end
           end },
         { tip="SlyLoot SR",  desc="Soft Res & Loot rolls",  lbl="SR",  r=0.20, g=0.90, b=0.50,
           fn=function()
               if SlyLootPanel and SlyLootPanel:IsShown() then
                   SlyLootPanel:Hide()
-              elseif SL_OpenSRTab then
+                  return
+              end
+              if SL_OpenSRTab then
                   SL_OpenSRTab()
               elseif SL_BuildUI then
                   SL_BuildUI()
               else
                   DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyChar]|r SlyLoot is not loaded — enable it in /sly")
+                  return
+              end
+              -- Anchor SlyLoot panel to the right of SlyChar
+              if SlyCharMainFrame then
+                  C_Timer.After(0.05, function()
+                      if SlyLootPanel and SlyLootPanel:IsShown() then
+                          SlyLootPanel:SetUserPlaced(true)
+                          SlyLootPanel:ClearAllPoints()
+                          SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
+                      end
+                  end)
               end
           end },
     }

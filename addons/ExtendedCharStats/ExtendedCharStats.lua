@@ -120,7 +120,29 @@ function ECS_GetStats()
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
     local spellHit = GetCombatRatingBonus(CR.HIT_SPELL) or 0
-    table.insert(stats, { label="Spell Hit",      value=string.format("%.2f%%", spellHit or 0) })
+
+    -- Heroic Presence (Draenei racial): +1% hit (melee, ranged, spell) to all
+    -- party members within 30 yards.  GetCombatRatingBonus only covers ratings,
+    -- so we must add the flat 1% ourselves.
+    local heroicPresence = 0
+    local _, playerRace  = UnitRace("player")
+    if playerRace == "Draenei" then
+        heroicPresence = 1
+    else
+        for i = 1, 4 do
+            local _, race = UnitRace("party" .. i)
+            if race == "Draenei" then
+                heroicPresence = 1
+                break
+            end
+        end
+    end
+    spellHit = spellHit + heroicPresence
+
+    local hitLabel = heroicPresence > 0
+        and string.format("%.2f%% |cff88aaff(+1 Heroic Presence)|r", spellHit)
+        or  string.format("%.2f%%", spellHit)
+    table.insert(stats, { label="Spell Hit",      value=hitLabel })
 
     local spellCrit = safe(GetSpellCritChance) or 0
     table.insert(stats, { label="Spell Crit",     value=string.format("%.2f%%", spellCrit) })
