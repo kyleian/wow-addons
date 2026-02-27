@@ -166,7 +166,8 @@ function SI:GetActiveWeights()
     if SlyItemizerDB and SlyItemizerDB.customWeights then
         return SlyItemizerDB.customWeights
     end
-    local class = SlyItemizerDB and SlyItemizerDB.class or "WARRIOR"
+    local class = (SlyItemizerDB and SlyItemizerDB.class)
+                  or select(2, UnitClass("player")) or "WARRIOR"
     local spec  = SlyItemizerDB and SlyItemizerDB.spec  or "dps"
     return SI.PRESETS[class] and SI.PRESETS[class][spec]
         or SI.PRESETS["WARRIOR"]["dps"]

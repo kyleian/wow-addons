@@ -875,7 +875,10 @@ local function BuildSlot(parent, slotId, label, x, y)
         if slotId == 0 then return end
         local ctype = GetCursorInfo()
         if not ctype then return end
-        if ctype == "spell" then return end
+        -- "spell" cursor = rogue poison targeting or other weapon applicables.
+        -- Allow weapon slots (mainhand=16, offhand=17) to receive spell-cursor drops
+        -- (e.g. rogue poisons).  Block on all other slots to avoid intercepting casts.
+        if ctype == "spell" and slotId ~= 16 and slotId ~= 17 then return end
         GameTooltip:Hide()
         local ok = pcall(PickupInventoryItem, slotId)
         if ok then UpdateSlot(slotWidgets[slotId], slotId) end
@@ -897,13 +900,11 @@ local function BuildSlot(parent, slotId, label, x, y)
             -- "enchant" cursor = sharpening stone / wizard oil — call PickupInventoryItem
             --   to apply it to this slot (ammo slot 0 excluded).
             -- "item" cursor = bag item being dragged in — equip it.
-            -- "spell" cursor = active spell targeting — don't intercept, let it pass.
-            -- SpellIsTargeting() is NOT checked here; calling PickupInventoryItem while
-            -- a spell is targeting would pick up the equipped item onto the cursor,
-            -- permanently blocking the picker on subsequent clicks.
+            -- "spell" cursor = rogue poison or weapon applicable — allow on weapon slots
+            --   (16=mainhand, 17=offhand). Block on other slots to avoid intercepting casts.
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
-                if ctype == "spell" then return end
+                if ctype == "spell" and slotId ~= 16 and slotId ~= 17 then return end
                 local ok = pcall(PickupInventoryItem, slotId)
                 if ok then UpdateSlot(slotWidgets[slotId], slotId) end
                 return
