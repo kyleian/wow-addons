@@ -407,7 +407,6 @@ end
 -- Wing panel state (spellbook wing still built; side-panel tracker handles the rest)
 local wingFrame       = nil
 local wingPanes       = {}
-local honorValues     = {}
 local activeWingKey   = nil
 local wingTitleTx     = nil
 local currentSidePanel      = nil   -- currently open native side panel
@@ -2361,20 +2360,17 @@ function SC_RefreshNITFriends()
 
     -- Do NOT call ShowFriends() here — it is async and triggers FRIENDLIST_UPDATE.
     -- It is called from the sub-tab click; we just read whatever is cached now.
-    -- TBC Anniversary uses C_FriendList namespace; fall back to globals if absent.
-    local hasCFL = C_FriendList and C_FriendList.GetNumFriends
-    local total = hasCFL and C_FriendList.GetNumFriends() or (GetNumFriends and GetNumFriends() or 0)
-    -- Resolve the correct per-entry function (name varies by client patch)
-    local cflGetInfo = C_FriendList and (
-        C_FriendList.GetFriendInfoByIndex or   -- retail / some patches
-        C_FriendList.GetFriendInfo             -- TBC Anniversary alternate
-    )
+    -- TBC Anniversary: C_FriendList.GetFriendInfoByIndex exists in some builds;
+    -- C_FriendList.GetFriendInfo takes a NAME not an index so must not be used here.
+    -- Fall back to the legacy global GetFriendInfo(index) which works in TBC 2.5.x.
+    local total = (C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetNumFriends())
+               or (GetNumFriends and GetNumFriends() or 0)
     local onlineCount = 0
     local shown = 0
     for i = 1, total do
         local name, level, area, connected
-        if cflGetInfo then
-            local info = cflGetInfo(i)
+        if C_FriendList and C_FriendList.GetFriendInfoByIndex then
+            local info = C_FriendList.GetFriendInfoByIndex(i)
             if info then
                 name      = info.name
                 level     = info.level
@@ -2768,7 +2764,6 @@ function SC_ToggleWing(key)
     if wingTitleTx then wingTitleTx:SetText(key) end
     wingFrame:Show()
     if key == "spells" then SC_RefreshSpells() end
-    if key == "honor"  then SC_RefreshHonor()  end
 end
 
 
@@ -2803,25 +2798,6 @@ function SC_RefreshSpells()
             end
         end
     end
-end
-
-function SC_RefreshHonor()
-    if not honorValues.currHonor then return end
-    if LoadAddOn then LoadAddOn("Blizzard_PVPUI") end
-
-    -- Scan _G for any function/number matching "honor" or "arena"
-    local found = {}
-    for k, v in pairs(_G) do
-        local kl = string.lower(tostring(k))
-        if (kl:find("honor") or kl:find("arena")) and type(v) == "function" then
-            found[#found+1] = k
-        end
-    end
-    table.sort(found)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffff8800[S-Hon globals]|r " .. table.concat(found, ", "))
-
-    honorValues.currHonor:SetText("scan—see chat")
-    honorValues.arena:SetText("scan—see chat")
 end
 
 local function BuildWingFrame(mainFrame)
@@ -2909,41 +2885,6 @@ local function BuildWingFrame(mainFrame)
         rank:SetFont(rank:GetFont(), 8, "")
         rank:SetPoint("RIGHT", row, "RIGHT", -2, 0) ; rank:SetJustifyH("RIGHT")
         spellRows[i] = {frame=row, lbl=lbl, rank=rank, spellIdx=nil}
-    end
-
-    -- ---- Honor Pane ----
-    do
-        local hp = CreateFrame("Frame", nil, f)
-        hp:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
-        hp:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
-        hp:Hide()
-        FillBg(hp, 0.04, 0.04, 0.07, 1)
-        wingPanes["honor"] = hp
-
-        local function HL(y, text, r, g, b, valX)
-            local lbl = hp:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            lbl:SetFont(lbl:GetFont(), 10, valX and "" or (r == 1 and g == 0.82 and "OUTLINE" or ""))
-            lbl:SetPoint("TOPLEFT", hp, "TOPLEFT", valX or PAD, y)
-            lbl:SetJustifyH("LEFT")
-            lbl:SetTextColor(r or 0.9, g or 0.9, b or 0.9)
-            lbl:SetText(text)
-            return lbl
-        end
-        local vX = 170  -- x offset for value column
-
-        HL( -6,  "Points",        1.00, 0.82, 0.20)
-        HL(-24,  "Current Honor:", 0.65, 0.65, 0.70) ; honorValues.currHonor = HL(-24,  "—", 1,1,1, vX)
-        HL(-42,  "Arena Points:",  0.65, 0.65, 0.70) ; honorValues.arena     = HL(-42,  "—", 1,1,1, vX)
-
-        HL(-64,  "Kills",          1.00, 0.82, 0.20)
-        HL(-82,  "Today:",         0.65, 0.65, 0.70) ; honorValues.todayHK   = HL(-82,  "—", 1,1,1, vX)
-        HL(-100, "This Week:",     0.65, 0.65, 0.70) ; honorValues.weekHK    = HL(-100, "—", 1,1,1, vX)
-        HL(-118, "Last Week:",     0.65, 0.65, 0.70) ; honorValues.lastHK    = HL(-118, "—", 1,1,1, vX)
-        HL(-136, "Lifetime:",      0.65, 0.65, 0.70) ; honorValues.lifeHK    = HL(-136, "—", 1,1,1, vX)
-
-        HL(-158, "Contribution",   1.00, 0.82, 0.20)
-        HL(-176, "This Week:",     0.65, 0.65, 0.70) ; honorValues.weekContrib = HL(-176, "—", 1,1,1, vX)
-        HL(-194, "Last Week:",     0.65, 0.65, 0.70) ; honorValues.lastContrib = HL(-194, "—", 1,1,1, vX)
     end
 
     -- Wing footer stripe
@@ -3469,11 +3410,7 @@ function SC_BuildMain()
                   end)
               end
           end },
-        { tip="Achievements", desc="Open Achievements panel", lbl="A",   r=1.00, g=0.70, b=0.20,
-          fn=function()
-              SC_OpenPanel("Blizzard_AchievementUI", "AchievementFrame", ToggleAchievementFrame)
-          end },
-        { tip="SlyGargul",    desc="Soft Res & Loot rolls",  lbl="SR",  r=0.20, g=0.90, b=0.50,
+        { tip="SlyLoot SR",  desc="Soft Res & Loot rolls",  lbl="SR",  r=0.20, g=0.90, b=0.50,
           fn=function()
               if SlyLootPanel and SlyLootPanel:IsShown() then
                   SlyLootPanel:Hide()
@@ -3481,11 +3418,9 @@ function SC_BuildMain()
                   SL_OpenSRTab()
               elseif SL_BuildUI then
                   SL_BuildUI()
+              else
+                  DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyChar]|r SlyLoot is not loaded — enable it in /sly")
               end
-          end },
-        { tip="Honor",        desc="View honor & PvP stats",  lbl="Hon", r=1.00, g=0.25, b=0.35,
-          fn=function()
-              SC_ToggleWing("honor")
           end },
     }
 
@@ -3570,7 +3505,7 @@ function SC_BuildMain()
     ftxt:SetFont(ftxt:GetFont(), 8, "")
     ftxt:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     ftxt:SetTextColor(0.3, 0.3, 0.38)
-    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·PvP·G·A·Hon·×")
+    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·PvP·G·SR·×")
 
     f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
     f:HookScript("OnHide", function(self)
