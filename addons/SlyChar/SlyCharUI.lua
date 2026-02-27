@@ -842,7 +842,6 @@ local function BuildSlot(parent, slotId, label, x, y)
             GameTooltip:AddLine("Left-click: swap gear", 0.5, 0.5, 0.5)
             GameTooltip:AddLine("Shift+click: socket gems", 0.5, 0.5, 0.5)
             GameTooltip:AddLine("Drag: move to trade/bank", 0.5, 0.5, 0.5)
-            GameTooltip:AddLine("Enchanting: use default char frame (C key)", 0.45, 0.45, 0.45)
         else
             GameTooltip:SetText(label, 0.65, 0.65, 0.65)
             GameTooltip:AddLine("Empty slot", 0.4, 0.4, 0.4)
@@ -867,8 +866,7 @@ local function BuildSlot(parent, slotId, label, x, y)
         if ok then UpdateSlot(slotWidgets[slotId], slotId) end
     end)
 
-    -- Drop ON: equip whatever is on the cursor (dragged from bags/bank)
-    -- Skip if cursor holds an enchant — protected action; use default char frame.
+    -- Drop ON: equip or apply whatever is on the cursor (dragged from bags/bank).
     -- Ammo slot (0): PickupInventoryItem(0) is invalid; ammo is equipped via the picker.
     btn:SetScript("OnReceiveDrag", function(self)
         if slotId == 0 then return end
@@ -896,11 +894,10 @@ local function BuildSlot(parent, slotId, label, x, y)
                 return
             end
             -- If cursor has an item/enchant on it, equip or apply it.
-            -- "enchant" cursor = sharpening stone / wizard oil — call PickupInventoryItem
-            --   to apply it to this slot (ammo slot 0 excluded).
+            -- "enchant" cursor = profession enchant or sharpening stone/wizard oil.
             -- "item" cursor = bag item being dragged in — equip it.
-            -- "spell" cursor = rogue poison or weapon applicable — allow on weapon slots
-            --   (16=mainhand, 17=offhand). Block on other slots to avoid intercepting casts.
+            -- "spell" cursor = rogue poison or weapon enchant targeting — allow on
+            --   weapon slots (16=mainhand, 17=offhand). Block on other slots.
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
                 if ctype == "spell" and slotId ~= 16 and slotId ~= 17 then return end
