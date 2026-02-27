@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: Sly Slot
 ## Notes: Action bar profile manager â€” save/load/export/import bar layouts. /slyslot to toggle.
-## Version: 1.1.0
+## Version: 1.1.1
 ## X-Curse-Project-ID: 0
 ## Author: Custom
 ## SavedVariablesPerCharacter: SlySlotDB
