@@ -143,6 +143,9 @@ local MAX_NIT_LOCK_ROWS   = 15   -- reduced by 2 to make room for layer display
 local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
 local nitLockScrollOffset = 0
 local nitScrollInfoLabel  = nil
+local suiteRowWidgets  = {}    -- [name]={row,dot,nameTx,statusTx,toggleBtn}
+local suiteErrLabel    = nil   -- FontString: "N errors on disk"
+local suiteCont        = nil   -- scroll child for sub-mod rows
 local nitLayerLabel       = nil  -- FontString showing current layer
 local nitSubTab           = "locks"  -- "locks" | "guild" | "friends" | "layer"
 local nitLockContent      = nil  -- Frame containing lockout header+rows
@@ -2663,6 +2666,82 @@ function SC_SwitchTab(name)
     end
 end
 
+function SC_RefreshSuite()
+    if not suiteCont then return end
+    if not SS or not SS.registry then return end
+    local ROW_H_S = 22
+    local yOff    = 0
+    for _, entry in ipairs(SS.registry) do
+        local name = entry.name
+        local w    = suiteRowWidgets[name]
+        if not w then
+            local row = CreateFrame("Frame", nil, suiteCont)
+            row:SetPoint("TOPLEFT",  suiteCont, "TOPLEFT",  0, 0)
+            row:SetPoint("TOPRIGHT", suiteCont, "TOPRIGHT", 0, 0)
+            row:SetHeight(ROW_H_S)
+            local rbg = row:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints(row) ; rbg:SetColorTexture(0.06, 0.06, 0.10, 0.5)
+            local dot = row:CreateTexture(nil, "ARTWORK")
+            dot:SetSize(8, 8) ; dot:SetPoint("LEFT", row, "LEFT", 4, 0)
+            dot:SetColorTexture(0.4, 0.4, 0.4, 1)
+            local nameTx = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            nameTx:SetFont(nameTx:GetFont(), 10, "")
+            nameTx:SetPoint("LEFT", dot, "RIGHT", 5, 0)
+            nameTx:SetText(name) ; nameTx:SetTextColor(0.9, 0.9, 0.9)
+            local statusTx = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            statusTx:SetFont(statusTx:GetFont(), 8, "")
+            statusTx:SetPoint("RIGHT", row, "RIGHT", -48, 0)
+            statusTx:SetTextColor(0.5, 0.5, 0.5)
+            local toggleBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            toggleBtn:SetSize(40, 16) ; toggleBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+            local capName = name
+            toggleBtn:SetScript("OnClick", function()
+                if not SS or not SS.index then return end
+                local e2 = SS.index[capName]
+                if not e2 then return end
+                if e2.dbRecord.enabled and e2.status ~= SS.STATUS.DISABLED then
+                    SS_DisableSubMod(capName)
+                else
+                    SS_EnableSubMod(capName)
+                end
+                SC_RefreshSuite()
+            end)
+            w = { row=row, dot=dot, nameTx=nameTx, statusTx=statusTx, toggleBtn=toggleBtn }
+            suiteRowWidgets[name] = w
+        end
+        w.row:ClearAllPoints()
+        w.row:SetPoint("TOPLEFT",  suiteCont, "TOPLEFT",  0, yOff)
+        w.row:SetPoint("TOPRIGHT", suiteCont, "TOPRIGHT", 0, yOff)
+        w.row:Show()
+        yOff = yOff - ROW_H_S
+        local e = SS.index[name]
+        if e then
+            local s = e.status
+            if     s == SS.STATUS.OK       then w.dot:SetColorTexture(0.2, 0.9, 0.2, 1)
+            elseif s == SS.STATUS.ERROR    then w.dot:SetColorTexture(0.9, 0.2, 0.2, 1)
+            elseif s == SS.STATUS.DISABLED then w.dot:SetColorTexture(0.4, 0.4, 0.4, 1)
+            else                                w.dot:SetColorTexture(1.0, 0.82, 0.0, 1)
+            end
+            local enabled = e.dbRecord.enabled and e.status ~= SS.STATUS.DISABLED
+            w.toggleBtn:SetText(enabled and "|cff44ff44ON|r" or "|cffaaaaaa OFF|r")
+            w.statusTx:SetText(s or "?")
+            w.nameTx:SetTextColor(
+                s == SS.STATUS.ERROR    and 1.0 or
+                s == SS.STATUS.DISABLED and 0.5 or 0.9,
+                s == SS.STATUS.ERROR    and 0.4 or
+                s == SS.STATUS.DISABLED and 0.5 or 0.9,
+                s == SS.STATUS.ERROR    and 0.4 or
+                s == SS.STATUS.DISABLED and 0.5 or 0.9)
+        end
+    end
+    suiteCont:SetHeight(math.max(-yOff, 1))
+    if suiteErrLabel then
+        local n = (SS.db and SS.db.errorLog and #SS.db.errorLog) or 0
+        suiteErrLabel:SetText(n .. " error" .. (n==1 and "" or "s") .. " on disk")
+        suiteErrLabel:SetTextColor(n > 0 and 1.0 or 0.45, n > 0 and 0.5 or 0.45, n > 0 and 0.4 or 0.5)
+    end
+end
+
 function SC_RefreshAll()
     RefreshHeader()
     SC_RefreshSlots()
@@ -2671,6 +2750,7 @@ function SC_RefreshAll()
     elseif tab == "sets"   then SC_RefreshSetsSub()
     elseif tab == "misc"   then SC_RefreshMisc()
     elseif tab == "social" then SC_RefreshNIT()
+    elseif tab == "suite"  then SC_RefreshSuite()
     end
 end
 
@@ -3064,12 +3144,13 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 4)
+    local tbW = math.floor(SIDE_W / 5)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="misc",   label="Misc"},
         {key="social", label="Social"},
+        {key="suite",  label="Suite"},
     }
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
@@ -3357,6 +3438,49 @@ function SC_BuildMain()
         SC_RefreshNIT()
     end)
 
+    -- ── Suite tab (SlySuite management embedded) ────────────────────────────
+    local suiteTab = CreateFrame("Frame", nil, side)
+    suiteTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
+    suiteTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
+    suiteTab:SetHeight(tcH) ; suiteTab:Hide()
+    tabFrames["suite"] = suiteTab
+
+    local ssScroll = CreateFrame("ScrollFrame", nil, suiteTab, "UIPanelScrollFrameTemplate")
+    ssScroll:SetPoint("TOPLEFT",     suiteTab, "TOPLEFT",      0,  -2)
+    ssScroll:SetPoint("BOTTOMRIGHT", suiteTab, "BOTTOMRIGHT", -18,  28)
+    local ssContent = CreateFrame("Frame", nil, ssScroll)
+    ssContent:SetSize(SIDE_W - 18, 1)
+    ssScroll:SetScrollChild(ssContent)
+    suiteCont = ssContent
+
+    local ssFooter = CreateFrame("Frame", nil, suiteTab)
+    ssFooter:SetSize(SIDE_W, 24)
+    ssFooter:SetPoint("BOTTOM", suiteTab, "BOTTOM", 0, 0)
+    local ssFBg = ssFooter:CreateTexture(nil, "BACKGROUND")
+    ssFBg:SetAllPoints(ssFooter) ; ssFBg:SetColorTexture(0.05, 0.05, 0.09, 1)
+
+    suiteErrLabel = ssFooter:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    suiteErrLabel:SetFont(suiteErrLabel:GetFont(), 9, "")
+    suiteErrLabel:SetPoint("LEFT", ssFooter, "LEFT", 4, 0)
+    suiteErrLabel:SetTextColor(0.45, 0.45, 0.5)
+    suiteErrLabel:SetText("0 errors")
+
+    local ssViewBtn = CreateFrame("Button", nil, ssFooter, "UIPanelButtonTemplate")
+    ssViewBtn:SetSize(38, 16) ; ssViewBtn:SetText("View")
+    ssViewBtn:SetPoint("RIGHT", ssFooter, "RIGHT", -44, 0)
+    ssViewBtn:SetScript("OnClick", function()
+        if SlashCmdList["SLY"] then SlashCmdList["SLY"]("errors") end
+    end)
+
+    local ssClearBtn = CreateFrame("Button", nil, ssFooter, "UIPanelButtonTemplate")
+    ssClearBtn:SetSize(38, 16) ; ssClearBtn:SetText("Clear")
+    ssClearBtn:SetPoint("RIGHT", ssFooter, "RIGHT", -2, 0)
+    ssClearBtn:SetScript("OnClick", function()
+        if SlashCmdList["SLY"] then SlashCmdList["SLY"]("clearerrors") end
+        if SS and SS.db then SS.db.errorLog = {} end
+        SC_RefreshSuite()
+    end)
+
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")
     stripDiv:SetSize(1, FRAME_H - HDR_H - FOOT_H)
@@ -3391,39 +3515,26 @@ function SC_BuildMain()
           end },
         { tip="PvP",       desc="Open PvP / Honor frame",     lbl="PvP", r=1.00, g=0.30, b=0.20,
           fn=function()
-              -- SetUserPlaced(true) BEFORE the toggle so UIParent_ManageFramePositions
-              -- skips this frame when ShowUIPanel fires inside TogglePVPFrame.
-              if PVPFrame then
-                  if PVPFrame:IsShown() then
-                      PVPFrame:SetUserPlaced(false)
-                      HideUIPanel(PVPFrame)
-                      return
-                  end
-                  PVPFrame:SetUserPlaced(true)
+              local pvp = PVPFrame
+              if pvp then
+                  SC_ToggleSidePanel(pvp)
+              elseif TogglePVPFrame then
+                  TogglePVPFrame()
               end
-              if TogglePVPFrame then TogglePVPFrame()
-              elseif PVPFrame then ShowUIPanel(PVPFrame) end
-              if PVPFrame and PVPFrame:IsShown() then SC_AnchorRight(PVPFrame) end
           end },
         { tip="Guild",     desc="Open Guild panel",           lbl="G",   r=0.25, g=1.00, b=0.55,
           fn=function()
-              if GuildFrame then
-                  if GuildFrame:IsShown() then
-                      GuildFrame:SetUserPlaced(false)
-                      HideUIPanel(GuildFrame)
-                      return
-                  end
-                  GuildFrame:SetUserPlaced(true)
+              local gf = GuildFrame
+              if gf then
+                  SC_ToggleSidePanel(gf)
+              elseif ToggleGuildFrame then
+                  ToggleGuildFrame()
               end
-              if ToggleGuildFrame then ToggleGuildFrame()
-              elseif GuildFrame then ShowUIPanel(GuildFrame) end
-              if GuildFrame and GuildFrame:IsShown() then SC_AnchorRight(GuildFrame) end
           end },
         { tip="SlyLoot SR",  desc="Soft Res & Loot rolls",  lbl="SR",  r=0.20, g=0.90, b=0.50,
           fn=function()
               if SlyLootPanel and SlyLootPanel:IsShown() then
-                  SlyLootPanel:Hide()
-                  return
+                  SlyLootPanel:Hide() ; return
               end
               if SL_OpenSRTab then
                   SL_OpenSRTab()
@@ -3433,15 +3544,11 @@ function SC_BuildMain()
                   DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyChar]|r SlyLoot is not loaded — enable it in /sly")
                   return
               end
-              -- Anchor SlyLoot panel to the right of SlyChar
-              if SlyCharMainFrame then
-                  C_Timer.After(0.05, function()
-                      if SlyLootPanel and SlyLootPanel:IsShown() then
-                          SlyLootPanel:SetUserPlaced(true)
-                          SlyLootPanel:ClearAllPoints()
-                          SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
-                      end
-                  end)
+              -- SL_BuildUI is synchronous; anchor immediately
+              if SlyCharMainFrame and SlyLootPanel and SlyLootPanel:IsShown() then
+                  SlyLootPanel:SetUserPlaced(true)
+                  SlyLootPanel:ClearAllPoints()
+                  SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
               end
           end },
     }
