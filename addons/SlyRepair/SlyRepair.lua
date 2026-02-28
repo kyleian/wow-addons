@@ -62,46 +62,51 @@ local function Announce(msg)
 end
 
 -- ── C_Container shims (TBC Anniversary uses C_Container API) ─────────────────
--- Resolved lazily to avoid nil assignments at file-load time (C_Container
--- namespace exists early but individual functions may not be populated yet).
-local function GetNumSlots(bag)
-    if C_Container and C_Container.GetContainerNumSlots then
-        return C_Container.GetContainerNumSlots(bag)
+-- For selling junk at a vendor. Try C_Container first; fall back to legacy global.
+local function SellItem(bag, slot)
+    if C_Container and C_Container.UseContainerItem then
+        C_Container.UseContainerItem(bag, slot)
+    elseif UseContainerItem then
+        UseContainerItem(bag, slot)
     end
-    return GetContainerNumSlots(bag)
 end
 
-local function GetItemLink(bag, slot)
+-- Safe wrappers for globals that may not exist on all clients
+local function SafeGetNumSlots(bag)
+    if C_Container and C_Container.GetContainerNumSlots then
+        return C_Container.GetContainerNumSlots(bag) or 0
+    elseif GetContainerNumSlots then
+        return GetContainerNumSlots(bag) or 0
+    end
+    return 0
+end
+
+local function SafeGetItemLink(bag, slot)
     if C_Container and C_Container.GetContainerItemLink then
         return C_Container.GetContainerItemLink(bag, slot)
+    elseif GetContainerItemLink then
+        return GetContainerItemLink(bag, slot)
     end
-    return GetContainerItemLink(bag, slot)
-end
-
--- For selling junk at a vendor we MUST use the legacy global UseContainerItem.
--- C_Container.UseContainerItem does not trigger the merchant-sell code path in
--- TBC Anniversary; the legacy global does.
-local function SellItem(bag, slot)
-    UseContainerItem(bag, slot)
+    return nil
 end
 
 -- ── Core logic ──────────────────────────────────────────────────────────────
 local function DoSellJunk()
-    if not SlyRepairDB.sellJunk then return end
+    if not SlyRepairDB or not SlyRepairDB.sellJunk then return end
     local total = 0
     local count = 0
     for bag = 0, 4 do
-        local slots = GetNumSlots(bag) or 0
+        local slots = SafeGetNumSlots(bag)
         for slot = 1, slots do
-            local link = GetItemLink(bag, slot)
+            local link = SafeGetItemLink(bag, slot)
             if link then
                 local _, _, quality, _, _, _, _, _, _, _, sellPrice = GetItemInfo(link)
-                if quality == 0 and sellPrice and sellPrice > 0 then
+                if quality == 0 and type(sellPrice) == "number" and sellPrice > 0 then
                     local stackSize = 1
                     if C_Container and C_Container.GetContainerItemInfo then
                         local info = C_Container.GetContainerItemInfo(bag, slot)
                         if info then stackSize = info.stackCount or 1 end
-                    else
+                    elseif GetContainerItemInfo then
                         local _, sc = GetContainerItemInfo(bag, slot)
                         stackSize = sc or 1
                     end
@@ -263,7 +268,9 @@ local function Init()
                 -- Protect independently: a junk-sell error must not prevent repair
                 local ok, err = pcall(DoSellJunk)
                 if not ok then
-                    DEFAULT_CHAT_FRAME:AddMessage("|cffff6060[SlyRepair]|r DoSellJunk error: " .. tostring(err))
+                    local msg = "DoSellJunk error: " .. tostring(err)
+                    DEFAULT_CHAT_FRAME:AddMessage("|cffff6060[SlyRepair]|r " .. msg)
+                    if SS_LogError then SS_LogError("SlyRepair", msg) end
                 end
                 DoRepair()
             end)

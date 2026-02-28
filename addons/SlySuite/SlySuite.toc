@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: Sly Suite
 ## Notes: Addon manager and error sandbox for the Sly addon family. /sly to open.
-## Version: 1.1.6
+## Version: 1.1.7
 ## X-Curse-Project-ID: 0
 ## Author: Custom
 ## SavedVariables: SlySuiteDB

@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: GearScore
 ## Notes: Calculates and displays gear score on tooltips and the character frame. /gs to open.
-## Version: 1.1.6
+## Version: 1.1.7
 ## Author: Custom
 ## SavedVariables: GearScoreDB
 

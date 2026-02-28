@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: Sly Bag
 ## Notes: Unified bag window â€” all bags in one view, with search. /slybag to toggle.
-## Version: 1.1.6
+## Version: 1.1.7
 ## X-Curse-Project-ID: 0
 ## Author: Custom
 ## SavedVariables: SlyBagDB
