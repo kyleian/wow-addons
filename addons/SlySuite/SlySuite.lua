@@ -34,6 +34,8 @@ local DB_DEFAULTS = {
         showOnLoad     = false,   -- auto-open panel on login
         showLoadPrint  = true,    -- print summary line on load
     },
+    errorLog = {},   -- persistent error log — written to disk via SavedVariables
+                     -- read from: WTF\Account\<ACCOUNT>\SavedVariables\SlySuite.lua
 }
 
 local function ApplyDefaults(dest, src)
@@ -48,7 +50,35 @@ local function ApplyDefaults(dest, src)
 end
 
 -- -------------------------------------------------------
--- Error handler — appends a trimmed stack trace
+-- Error log — capped at 200 entries, persisted in SavedVariables.
+-- Written to disk on /reload or logout.
+-- File path: WTF\Account\<ACCOUNT>\SavedVariables\SlySuite.lua
+-- -------------------------------------------------------
+local MAX_LOG = 200
+
+local function SS_LogError(source, fullErr)
+    local entry = {
+        t   = time(),
+        src = tostring(source or "?"),
+        err = tostring(fullErr or "?"),
+    }
+    -- In-memory list (always available)
+    if not SS.errorLogMem then SS.errorLogMem = {} end
+    table.insert(SS.errorLogMem, 1, entry)
+    if #SS.errorLogMem > MAX_LOG then
+        SS.errorLogMem[MAX_LOG + 1] = nil
+    end
+    -- Persist to SavedVariables (written to disk on reload/logout)
+    if SS.db and SS.db.errorLog then
+        table.insert(SS.db.errorLog, 1, entry)
+        if #SS.db.errorLog > MAX_LOG then
+            SS.db.errorLog[MAX_LOG + 1] = nil
+        end
+    end
+end
+
+-- -------------------------------------------------------
+-- Error handler — appends a trimmed stack trace, logs to disk
 -- -------------------------------------------------------
 local function SS_ErrorHandler(err)
     local stack = debugstack(2, 10, 3)
@@ -79,8 +109,10 @@ local function SS_CallSafe(entry, fn)
             SS.db.subMods[entry.name].lastError     = err
             SS.db.subMods[entry.name].lastErrorTime = entry.lastErrorTime
         end
+        -- Log to persistent disk log
+        SS_LogError(entry.name, err)
         print("|cffff4444[Sly Suite]|r ERROR in |cffffcc00"
-            .. entry.name .. "|r — use |cffffcc00/sly|r to view details.")
+            .. entry.name .. "|r — /sly errors to view  |  /sly to manage.")
         return false
     end
 end
@@ -248,14 +280,39 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
             SS_UIRefreshAll()
 
+            -- Backfill in-memory log from persisted log
+            SS.errorLogMem = SS.errorLogMem or {}
+            if SS.db.errorLog and #SS.db.errorLog > 0 and #SS.errorLogMem == 0 then
+                for i, v in ipairs(SS.db.errorLog) do
+                    SS.errorLogMem[i] = v
+                end
+            end
+
+            -- Install global Lua error hook so event-handler errors outside
+            -- xpcall also land in the log (e.g. OnUpdate / addon event frames)
+            local _prevHandler = geterrorhandler()
+            seterrorhandler(function(errMsg)
+                SS_LogError("global", tostring(errMsg))
+                if _prevHandler then _prevHandler(errMsg) end
+            end)
+
             if SS.db.options.showLoadPrint then
                 local total    = #SS.registry
                 local enabled  = 0
+                local errors   = 0
                 for _, e in ipairs(SS.registry) do
                     if e.status ~= SS.STATUS.DISABLED then enabled = enabled + 1 end
+                    if e.status == SS.STATUS.ERROR    then errors  = errors  + 1 end
                 end
+                local errNote = errors > 0
+                    and "  |cffff4444" .. errors .. " error(s)|r — /sly errors"
+                    or  ""
+                local logNote = #SS.db.errorLog > 0
+                    and "  |cff888888(" .. #SS.db.errorLog .. " prior error(s) on disk)|r"
+                    or  ""
                 print("|cff00ccff[Sly Suite]|r v" .. ADDON_VERSION
                     .. " — " .. enabled .. "/" .. total .. " sub-mod(s) active."
+                    .. errNote .. logNote
                     .. "  |cffffcc00/sly|r to manage.")
             end
 
@@ -302,11 +359,40 @@ SlashCmdList["SLYSUITE"] = function(msg)
     elseif msg:sub(1, 6) == "retry " then
         SS_RetrySubMod(strtrim(msg:sub(7)))
 
+    elseif msg:sub(1, 6) == "errors" then
+        -- /sly errors [n]  — print last n log entries (default 10)
+        local n = tonumber(msg:match("errors%s+(%d+)")) or 10
+        local log = (SS.errorLogMem and #SS.errorLogMem > 0)
+            and SS.errorLogMem
+            or  (SS.db and SS.db.errorLog)
+            or  {}
+        if #log == 0 then
+            print("|cff00ccff[Sly Suite]|r Error log is empty.")
+        else
+            print("|cff00ccff[Sly Suite]|r Last " .. math.min(n, #log)
+                .. " of " .. #log .. " error(s):"
+                .. "  |cff888888(full log: WTF\\Account\\<account>\\SavedVariables\\SlySuite.lua)|r")
+            for i = 1, math.min(n, #log) do
+                local e = log[i]
+                local ts = e.t and date("%H:%M:%S", e.t) or "?"
+                print("|cffff8844[" .. ts .. "]|r |cffffcc00" .. (e.src or "?") .. "|r: "
+                    .. (e.err or "?"):gsub("\n", " | "):sub(1, 200))
+            end
+        end
+
+    elseif msg == "clearerrors" then
+        if SS.errorLogMem then wipe(SS.errorLogMem) end
+        if SS.db and SS.db.errorLog then wipe(SS.db.errorLog) end
+        print("|cff00ccff[Sly Suite]|r Error log cleared.")
+
     elseif msg == "help" then
         print("|cff00ccff[Sly Suite]|r Commands:")
-        print("  |cffffcc00/sly|r               — toggle the manager panel")
-        print("  |cffffcc00/sly status|r         — print all sub-mod statuses")
-        print("  |cffffcc00/sly retry <name>|r   — retry an errored sub-mod")
-        print("  |cffffcc00/sly help|r            — this text")
+        print("  |cffffcc00/sly|r                   — toggle the manager panel")
+        print("  |cffffcc00/sly status|r             — print all sub-mod statuses")
+        print("  |cffffcc00/sly retry <name>|r       — retry an errored sub-mod")
+        print("  |cffffcc00/sly errors [n]|r          — print last n errors (default 10)")
+        print("  |cffffcc00/sly clearerrors|r         — wipe the error log")
+        print("  |cffffcc00/sly help|r                — this text")
+        print("  |cff888888Full log on disk: WTF\\Account\\<account>\\SavedVariables\\SlySuite.lua|r")
     end
 end

@@ -62,14 +62,28 @@ local function Announce(msg)
 end
 
 -- ── C_Container shims (TBC Anniversary uses C_Container API) ─────────────────
-local _GetNumSlots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
-local _GetItemInfo = C_Container and function(bag, slot)
-    local info = C_Container.GetContainerItemInfo(bag, slot)
-    if not info then return nil end
-    return info.iconFileID, info.stackCount, info.isLocked, info.quality, nil, nil, info.hyperlink
-end or GetContainerItemInfo
-local _GetItemLink = C_Container and C_Container.GetContainerItemLink or GetContainerItemLink
-local _UseItem     = C_Container and C_Container.UseContainerItem     or UseContainerItem
+-- Resolved lazily to avoid nil assignments at file-load time (C_Container
+-- namespace exists early but individual functions may not be populated yet).
+local function GetNumSlots(bag)
+    if C_Container and C_Container.GetContainerNumSlots then
+        return C_Container.GetContainerNumSlots(bag)
+    end
+    return GetContainerNumSlots(bag)
+end
+
+local function GetItemLink(bag, slot)
+    if C_Container and C_Container.GetContainerItemLink then
+        return C_Container.GetContainerItemLink(bag, slot)
+    end
+    return GetContainerItemLink(bag, slot)
+end
+
+-- For selling junk at a vendor we MUST use the legacy global UseContainerItem.
+-- C_Container.UseContainerItem does not trigger the merchant-sell code path in
+-- TBC Anniversary; the legacy global does.
+local function SellItem(bag, slot)
+    UseContainerItem(bag, slot)
+end
 
 -- ── Core logic ──────────────────────────────────────────────────────────────
 local function DoSellJunk()
@@ -77,18 +91,14 @@ local function DoSellJunk()
     local total = 0
     local count = 0
     for bag = 0, 4 do
-        local slots = _GetNumSlots(bag) or 0
+        local slots = GetNumSlots(bag) or 0
         for slot = 1, slots do
-            -- Get the item link first; skip empty slots
-            local link = _GetItemLink(bag, slot)
+            local link = GetItemLink(bag, slot)
             if link then
-                -- GetItemInfo from the link is authoritative for quality and
-                -- sell price — avoids the C_Container quality=nil caching issue
                 local _, _, quality, _, _, _, _, _, _, _, sellPrice = GetItemInfo(link)
                 if quality == 0 and sellPrice and sellPrice > 0 then
-                    -- Count from container info (stack size)
                     local stackSize = 1
-                    if C_Container then
+                    if C_Container and C_Container.GetContainerItemInfo then
                         local info = C_Container.GetContainerItemInfo(bag, slot)
                         if info then stackSize = info.stackCount or 1 end
                     else
@@ -97,7 +107,7 @@ local function DoSellJunk()
                     end
                     total = total + sellPrice * stackSize
                     count = count + 1
-                    _UseItem(bag, slot)
+                    SellItem(bag, slot)
                 end
             end
         end

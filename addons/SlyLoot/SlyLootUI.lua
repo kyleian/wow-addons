@@ -21,7 +21,17 @@ end
 
 -- ── Build UI ──────────────────────────────────────────────────────────────────
 function SL_BuildUI()
-    if SlyLootPanel then SlyLootPanel:Show(); SL.uiRefresh(); return end
+    -- Ensure DB is initialised even if Init() was never called
+    if not SlyLootDB then
+        SlyLootDB = {}
+        if SlyLoot and SlyLoot.Init then SlyLoot:Init() end
+    end
+
+    if SlyLootPanel then
+        SlyLootPanel:Show()
+        if SL.uiRefresh then SL.uiRefresh() end
+        return
+    end
 
     local f = CreateFrame("Frame", "SlyLootPanel", UIParent)
     f:SetSize(PANEL_W, PANEL_H)
@@ -337,7 +347,12 @@ end
 
 -- ── Global helper: open panel on Soft Res tab ─────────────────────────────────
 function SL_OpenSRTab()
-    SL_BuildUI()
+    local ok, err = pcall(SL_BuildUI)
+    if not ok then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyLoot]|r UI error: " .. tostring(err))
+        if SS_LogError then SS_LogError("SlyLoot:SL_BuildUI", err) end
+        return
+    end
     -- after build the panel exists; switch to SR tab via a deferred call
     C_Timer.After(0, function()
         if SlyLootPanel and SlyLootPanel:IsShown() and SL.srRefresh then
