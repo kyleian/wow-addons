@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: Sly Itemizer
 ## Notes: Item comparison, DPS score delta, enchant/gem suggestions. Works with ItemRack Revived. /slyitem
-## Version: 1.1.7
+## Version: 1.1.8
 ## X-Curse-Project-ID: 0
 ## Author: Custom
 ## OptionalDependencies: SlySuite, ItemRackRevived

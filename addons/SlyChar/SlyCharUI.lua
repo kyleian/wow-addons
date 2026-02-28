@@ -3481,6 +3481,9 @@ function SC_BuildMain()
         SC_RefreshSuite()
     end)
 
+    -- Refresh suite content every time this tab becomes visible
+    suiteTab:SetScript("OnShow", function() SC_RefreshSuite() end)
+
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")
     stripDiv:SetSize(1, FRAME_H - HDR_H - FOOT_H)
