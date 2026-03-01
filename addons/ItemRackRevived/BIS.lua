@@ -36,7 +36,7 @@ local function IRR_BIS_DetectSpec()
     local maxPoints, maxTab = 0, 1
     for i = 1, numTabs do
         local _, _, pts = GetTalentTabInfo(i)
-        pts = pts or 0
+        pts = tonumber(pts) or 0
         if pts > maxPoints then
             maxPoints = pts
             maxTab = i
@@ -251,7 +251,7 @@ function IRR_BuildBISPanel(parent, availableH)
                 local iname    = GetBISItemName(entry.id, entry.name)
                 local equippedId = GetInventoryItemID("player", self.slot.id)
                 local marker   = (equippedId and equippedId == entry.id) and " |cff00ff00[equipped]|r" or ""
-                local scoreStr = entry.score and entry.score > 0 and string.format(" [%.0f pts]", entry.score) or ""
+                local scoreStr = entry.score and tonumber(entry.score) > 0 and string.format(" [%.0f pts]", entry.score) or ""
                 GameTooltip:AddLine(rankStr .. " " .. iname .. scoreStr .. marker, 0.9, 0.9, 0.9)
             end
             GameTooltip:Show()
