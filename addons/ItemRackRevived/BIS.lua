@@ -326,7 +326,25 @@ function IRR_BuildBISPanel(parent, availableH)
     specClickFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Initial populate now that everything is set up
-    IRR_BIS.currentSpecKey = IRR_BIS_DetectSpec()
+    -- Try talent-based detection first; fall back to first spec for this class;
+    -- fall back to first spec in data so the tab always shows something.
+    local function IRR_BIS_BestGuessSpec()
+        local key = IRR_BIS_DetectSpec()
+        if key then return key end
+        if IRR_BIS_DATA then
+            local _, cls = UnitClass("player")
+            -- First pass: match class
+            for k, _ in pairs(IRR_BIS_DATA) do
+                if IRR_BIS_SPECS and IRR_BIS_SPECS[k] and IRR_BIS_SPECS[k].class == cls then
+                    return k
+                end
+            end
+            -- Second pass: any spec with data
+            for k, _ in pairs(IRR_BIS_DATA) do return k end
+        end
+        return nil
+    end
+    IRR_BIS.currentSpecKey = IRR_BIS_BestGuessSpec()
     IRR_RefreshBISPanel()
 end
 
@@ -344,6 +362,18 @@ function IRR_RefreshBISPanel()
     -- Auto-detect spec if not set
     if not IRR_BIS.currentSpecKey then
         IRR_BIS.currentSpecKey = IRR_BIS_DetectSpec()
+        -- Fallback: pick first spec matching this class, then any spec
+        if not IRR_BIS.currentSpecKey and IRR_BIS_DATA then
+            local _, cls = UnitClass("player")
+            for k, _ in pairs(IRR_BIS_DATA) do
+                if IRR_BIS_SPECS and IRR_BIS_SPECS[k] and IRR_BIS_SPECS[k].class == cls then
+                    IRR_BIS.currentSpecKey = k ; break
+                end
+            end
+            if not IRR_BIS.currentSpecKey then
+                for k, _ in pairs(IRR_BIS_DATA) do IRR_BIS.currentSpecKey = k ; break end
+            end
+        end
     end
 
     -- Update spec label
