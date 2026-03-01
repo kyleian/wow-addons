@@ -292,6 +292,42 @@ function IRR_BuildBISPanel(parent, availableH)
     IRR_BIS.noDataTxt:SetJustifyH("CENTER")
     IRR_BIS.noDataTxt:SetPoint("CENTER", parent, "CENTER", 0, -30)
     IRR_BIS.noDataTxt:Hide()
+
+    -- ---- Make spec label clickable to cycle specs for this class ----
+    local specClickFrame = CreateFrame("Button", nil, parent)
+    specClickFrame:SetSize(120, 16)
+    specClickFrame:SetPoint("LEFT", specLblKey, "RIGHT", 4, 0)
+    specClickFrame:SetScript("OnClick", function()
+        if not IRR_BIS_SPECS then return end
+        local _, classToken = UnitClass("player")
+        -- Gather all spec keys for this class, sorted
+        local classSpecs = {}
+        for key, spec in pairs(IRR_BIS_SPECS) do
+            if spec.class == classToken then
+                classSpecs[#classSpecs + 1] = key
+            end
+        end
+        table.sort(classSpecs)
+        if #classSpecs == 0 then return end
+        -- Find current index and advance
+        local currentIdx = 0
+        for i, key in ipairs(classSpecs) do
+            if key == IRR_BIS.currentSpecKey then currentIdx = i; break end
+        end
+        local nextIdx = (currentIdx % #classSpecs) + 1
+        IRR_BIS.currentSpecKey = classSpecs[nextIdx]
+        IRR_RefreshBISPanel()
+    end)
+    specClickFrame:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(specClickFrame, "ANCHOR_LEFT")
+        GameTooltip:SetText("Click to cycle spec", 1,1,1)
+        GameTooltip:Show()
+    end)
+    specClickFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Initial populate now that everything is set up
+    IRR_BIS.currentSpecKey = IRR_BIS_DetectSpec()
+    IRR_RefreshBISPanel()
 end
 
 -- ----------------------------------------------------------------
