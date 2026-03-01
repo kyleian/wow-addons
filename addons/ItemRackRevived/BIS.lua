@@ -452,3 +452,25 @@ function IRR_RefreshBISPanel()
         end
     end
 end
+
+-- Debug command: /bisdbg
+SLASH_BISDBG1 = "/bisdbg"
+SlashCmdList["BISDBG"] = function()
+    print("|cff00ccff[BIS DBG]|r IRR_BIS_DATA = " .. tostring(IRR_BIS_DATA))
+    print("|cff00ccff[BIS DBG]|r IRR_BIS_SPECS = " .. tostring(IRR_BIS_SPECS))
+    print("|cff00ccff[BIS DBG]|r currentSpecKey = " .. tostring(IRR_BIS.currentSpecKey))
+    print("|cff00ccff[BIS DBG]|r currentPhase = " .. tostring(IRR_BIS.currentPhase))
+    print("|cff00ccff[BIS DBG]|r frame = " .. tostring(IRR_BIS.frame))
+    if IRR_BIS_DATA then
+        local n = 0
+        for k,_ in pairs(IRR_BIS_DATA) do n = n + 1 end
+        print("|cff00ccff[BIS DBG]|r DATA spec count = " .. n)
+        local _, cls = UnitClass("player")
+        print("|cff00ccff[BIS DBG]|r player class = " .. tostring(cls))
+        for k,_ in pairs(IRR_BIS_DATA) do
+            print("|cff00ccff[BIS DBG]|r  spec key: " .. k)
+        end
+    else
+        print("|cffff4444[BIS DBG]|r IRR_BIS_DATA IS NIL - data files did not load!")
+    end
+end
