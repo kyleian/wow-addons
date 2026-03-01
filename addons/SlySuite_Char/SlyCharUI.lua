@@ -3850,14 +3850,15 @@ function SC_BuildMain()
     bisContent:SetScript("OnShow", function()
         if bisBuilt then return end
         bisBuilt = true
-        if not IRR_BuildBISPanel then
+        local _buildFn = IRR_BuildBISPanel or _G["IRR_BuildBISPanel"]
+        if not _buildFn then
             local noLbl = bisContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             noLbl:SetPoint("CENTER", bisContent, "CENTER", 0, 0)
             noLbl:SetTextColor(0.5, 0.5, 0.5)
             noLbl:SetText("ItemRackRevived not loaded")
             return
         end
-        local ok, err = pcall(IRR_BuildBISPanel, bisContent, tcH - 17, SIDE_W)
+        local ok, err = pcall(_buildFn, bisContent, tcH - 17, SIDE_W)
         if not ok then
             print("|cffff4444[SlyChar BIS]|r build error: " .. tostring(err))
             local errLbl = bisContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
