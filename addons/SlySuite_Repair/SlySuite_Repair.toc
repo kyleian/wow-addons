@@ -1,0 +1,12 @@
+## Interface: 20505
+## Title: Sly Repair
+## Notes: Auto-repair gear at any merchant and report the cost. SlySuite sub-mod. /slyrepair to configure.
+## Version: 1.2.0
+## X-Curse-Project-ID: 0
+## Author: Custom
+## OptionalDependencies: SlySuite
+## OptionalDeps: SlySuite
+## SavedVariables: SlyRepairDB
+
+
+SlyRepair.lua
