@@ -3844,17 +3844,17 @@ function SC_BuildMain()
     bisContent:Hide()
     setsUI.bisContent = bisContent
 
-    -- IRR loads after SlySuite_Char, so defer the panel build to PLAYER_LOGIN
-    -- when all addons are guaranteed to be loaded.
+    -- Build lazily on first show so IRR is guaranteed loaded regardless of
+    -- whether PLAYER_LOGIN already fired (e.g. after /reload).
     local bisBuilt = false
-    local function BuildBISNow()
+    bisContent:SetScript("OnShow", function()
         if bisBuilt then return end
+        bisBuilt = true
         if not IRR_BuildBISPanel then
             local noLbl = bisContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             noLbl:SetPoint("CENTER", bisContent, "CENTER", 0, 0)
             noLbl:SetTextColor(0.5, 0.5, 0.5)
             noLbl:SetText("ItemRackRevived not loaded")
-            bisBuilt = true
             return
         end
         local ok, err = pcall(IRR_BuildBISPanel, bisContent, tcH - 17, SIDE_W)
@@ -3864,19 +3864,10 @@ function SC_BuildMain()
             errLbl:SetPoint("CENTER", bisContent, "CENTER", 0, 0)
             errLbl:SetTextColor(1, 0.3, 0.3)
             errLbl:SetText("BIS error: " .. tostring(err))
-        else
-            print("|cff00ccff[SlyChar BIS]|r panel built OK, tcH=" .. tostring(tcH) .. " W=" .. tostring(SIDE_W))
         end
-        bisBuilt = true
-    end
-    local bisInitFrame = CreateFrame("Frame")
-    bisInitFrame:RegisterEvent("PLAYER_LOGIN")
-    bisInitFrame:SetScript("OnEvent", function(self)
-        self:UnregisterEvent("PLAYER_LOGIN")
-        BuildBISNow()
     end)
 
-    -- Mouse-wheel dispatches to active sub-tab
+        -- Mouse-wheel dispatches to active sub-tab
     setsTab:EnableMouseWheel(true)
     setsTab:SetScript("OnMouseWheel", function(self, delta)
         if setsUI.subTab == "gear" then
