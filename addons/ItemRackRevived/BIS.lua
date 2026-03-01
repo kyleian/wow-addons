@@ -382,11 +382,13 @@ function IRR_RefreshBISPanel()
         local specKey = IRR_BIS.currentSpecKey
         if specKey and IRR_BIS_SPECS and IRR_BIS_SPECS[specKey] then
             IRR_BIS.specLbl:SetText(IRR_BIS_SPECS[specKey].label)
+        elseif not IRR_BIS_DATA then
+            IRR_BIS.specLbl:SetText("|cffff4444NO DATA|r")
+        elseif not specKey then
+            local _, cls = UnitClass("player")
+            IRR_BIS.specLbl:SetText("|cffff8800no spec (cls=" .. tostring(cls) .. ")|r")
         else
-            IRR_BIS.specLbl:SetText("Unknown")
-        end
-    end
-
+            IRR_BIS.specLbl:SetText("|cffff8800" .. tostring(specKey) .. " (nospec)|r")
     -- Check whether we have data at all
     if not IRR_BIS_DATA then
         if IRR_BIS.noDataTxt then IRR_BIS.noDataTxt:Show() end
