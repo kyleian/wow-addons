@@ -3859,10 +3859,13 @@ function SC_BuildMain()
         end
         local ok, err = pcall(IRR_BuildBISPanel, bisContent, tcH - 17, SIDE_W)
         if not ok then
+            print("|cffff4444[SlyChar BIS]|r build error: " .. tostring(err))
             local errLbl = bisContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             errLbl:SetPoint("CENTER", bisContent, "CENTER", 0, 0)
             errLbl:SetTextColor(1, 0.3, 0.3)
             errLbl:SetText("BIS error: " .. tostring(err))
+        else
+            print("|cff00ccff[SlyChar BIS]|r panel built OK, tcH=" .. tostring(tcH) .. " W=" .. tostring(SIDE_W))
         end
         bisBuilt = true
     end
