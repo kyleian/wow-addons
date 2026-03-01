@@ -122,9 +122,13 @@ end)
 -- Init
 -- -------------------------------------------------------
 function IRR_Init()
-    IRR_BuildUI()
-    print("|cff00ccff[ItemRack Revived]|r v" .. ADDON_VERSION
-        .. " loaded.  |cffffcc00/itemrack|r to open.")
+    local ok, err = pcall(IRR_BuildUI)
+    if not ok then
+        print("|cffff0000[ItemRack Revived] UI build error:|r " .. tostring(err))
+    else
+        print("|cff00ccff[ItemRack Revived]|r v" .. ADDON_VERSION
+            .. " loaded.  |cffffcc00/itemrack|r to open.")
+    end
 end
 
 function IRR_OnLogout()

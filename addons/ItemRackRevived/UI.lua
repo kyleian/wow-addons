@@ -471,9 +471,9 @@ function IRR_BuildUI()
     vdiv:SetPoint("TOPLEFT", f, "TOPLEFT", LEFT_W, -(HEADER_H + 1))
     vdiv:SetColorTexture(0.3, 0.3, 0.3, 1)
 
-    -- ---- Right panel: sets ----
-    CreateSetsPanel(f, LEFT_W + 6, -(HEADER_H + 10),
-        FRAME_H - HEADER_H - 20)
+    -- ---- Right panel: Sets ----
+    local PANEL_H = FRAME_H - HEADER_H - 10
+    CreateSetsPanel(f, LEFT_W + 4, -(HEADER_H + 4), PANEL_H)
 
     -- ---- Initial data load ----
     IRR_UpdateSlots()

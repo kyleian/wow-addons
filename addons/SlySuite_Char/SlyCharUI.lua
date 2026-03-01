@@ -131,7 +131,7 @@ local MAX_STAT_ROWS  = 60
 local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
 local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
-local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, subGearBtn=nil, subBarsBtn=nil }
+local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, bisContent=nil, subGearBtn=nil, subBarsBtn=nil, subBisBtn=nil }
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
 local miscUI = { subTab="rep", repContent=nil, skillContent=nil, subRepBtn=nil, subSkillBtn=nil }
@@ -2115,12 +2115,16 @@ function SC_RefreshSetsSub()
     end
     StyleSetsSub(setsUI.subGearBtn, setsUI.subTab == "gear")
     StyleSetsSub(setsUI.subBarsBtn, setsUI.subTab == "bars")
+    StyleSetsSub(setsUI.subBisBtn,  setsUI.subTab == "bis")
     if setsUI.gearContent then setsUI.gearContent:SetShown(setsUI.subTab == "gear") end
     if setsUI.barsContent then setsUI.barsContent:SetShown(setsUI.subTab == "bars") end
+    if setsUI.bisContent  then setsUI.bisContent:SetShown(setsUI.subTab == "bis")  end
     if setsUI.subTab == "gear" then
         SC_RefreshSets()
     elseif setsUI.subTab == "bars" then
         SC_RefreshBars()
+    elseif setsUI.subTab == "bis" then
+        if IRR_RefreshBISPanel then pcall(IRR_RefreshBISPanel) end
     end
 end
 
@@ -3707,8 +3711,8 @@ function SC_BuildMain()
     setsTab:SetHeight(tcH) ; setsTab:Hide()
     tabFrames["sets"] = setsTab
 
-    -- Sub-tab strip: [Gear Sets][Bars]
-    local sBW = math.floor(SIDE_W / 2)
+    -- Sub-tab strip: [Gear Sets][Bars][BIS]
+    local sBW = math.floor(SIDE_W / 3)
     local function MakeSetsSubBtn(label, x)
         local btn = CreateFrame("Button", nil, setsTab)
         btn:SetSize(sBW, 16)
@@ -3725,6 +3729,7 @@ function SC_BuildMain()
     end
     setsUI.subGearBtn = MakeSetsSubBtn("Gear Sets", 0)
     setsUI.subBarsBtn = MakeSetsSubBtn("Bars",      sBW)
+    setsUI.subBisBtn  = MakeSetsSubBtn("BIS",       sBW * 2)
 
     local setSubSep = setsTab:CreateTexture(nil, "ARTWORK")
     setSubSep:SetSize(SIDE_W, 1)
@@ -3831,6 +3836,28 @@ function SC_BuildMain()
     barsInfo:SetTextColor(0.40, 0.40, 0.50)
     barsScrollInfoLabel = barsInfo
 
+    -- ── BIS content ─────────────────────────────────────────────────────────
+    local bisContent = CreateFrame("Frame", nil, setsTab)
+    bisContent:SetPoint("TOPLEFT",  setsTab, "TOPLEFT",  0, -17)
+    bisContent:SetPoint("TOPRIGHT", setsTab, "TOPRIGHT", 0, -17)
+    bisContent:SetHeight(tcH - 17)
+    bisContent:Hide()
+    setsUI.bisContent = bisContent
+    if IRR_BuildBISPanel then
+        local ok, err = pcall(IRR_BuildBISPanel, bisContent, tcH - 17)
+        if not ok then
+            local errLbl = bisContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            errLbl:SetPoint("CENTER", bisContent, "CENTER", 0, 0)
+            errLbl:SetTextColor(1, 0.3, 0.3)
+            errLbl:SetText("BIS panel error: " .. tostring(err))
+        end
+    else
+        local noLbl = bisContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        noLbl:SetPoint("CENTER", bisContent, "CENTER", 0, 0)
+        noLbl:SetTextColor(0.5, 0.5, 0.5)
+        noLbl:SetText("BIS data not loaded")
+    end
+
     -- Mouse-wheel dispatches to active sub-tab
     setsTab:EnableMouseWheel(true)
     setsTab:SetScript("OnMouseWheel", function(self, delta)
@@ -3855,6 +3882,9 @@ function SC_BuildMain()
     end)
     setsUI.subBarsBtn:SetScript("OnClick", function()
         setsUI.subTab = "bars" ; SC_RefreshSetsSub()
+    end)
+    setsUI.subBisBtn:SetScript("OnClick", function()
+        setsUI.subTab = "bis" ; SC_RefreshSetsSub()
     end)
 
     -- Misc tab (Rep + Skills as sub-tabs)
