@@ -7,6 +7,7 @@
 
 SC  = SC  or {}
 SC.version = "1.0.0"
+local ADDON_NAME = "SlySuite_Char"
 
 -- --------------------------------------------------------
 -- SavedVariables defaults

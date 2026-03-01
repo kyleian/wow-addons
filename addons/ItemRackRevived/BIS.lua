@@ -81,9 +81,10 @@ end
 -- Build the BIS panel into `parent` frame
 -- parent is already sized and positioned by UI.lua
 -- ----------------------------------------------------------------
-function IRR_BuildBISPanel(parent, availableH)
+function IRR_BuildBISPanel(parent, availableH, panelW)
     IRR_BIS.frame = parent
-    local W = parent:GetWidth()
+    local W = (panelW and panelW > 50) and panelW or parent:GetWidth()
+    if W < 50 then W = 260 end  -- fallback if anchored frame not yet sized
     local yTop = 0  -- start from top of parent (using negative y offsets)
 
     -- ---- Phase selector strip ----

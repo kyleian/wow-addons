@@ -3844,7 +3844,7 @@ function SC_BuildMain()
     bisContent:Hide()
     setsUI.bisContent = bisContent
     if IRR_BuildBISPanel then
-        local ok, err = pcall(IRR_BuildBISPanel, bisContent, tcH - 17)
+        local ok, err = pcall(IRR_BuildBISPanel, bisContent, tcH - 17, SIDE_W)
         if not ok then
             local errLbl = bisContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             errLbl:SetPoint("CENTER", bisContent, "CENTER", 0, 0)
