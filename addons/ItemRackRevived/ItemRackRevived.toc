@@ -7,6 +7,15 @@
 
 ItemRackRevived.lua
 Sets.lua
-BIS_Data.lua
+BIS_Shared.lua
+BIS_Data_WARRIOR.lua
+BIS_Data_PALADIN.lua
+BIS_Data_HUNTER.lua
+BIS_Data_ROGUE.lua
+BIS_Data_PRIEST.lua
+BIS_Data_SHAMAN.lua
+BIS_Data_MAGE.lua
+BIS_Data_WARLOCK.lua
+BIS_Data_DRUID.lua
 BIS.lua
 UI.lua
