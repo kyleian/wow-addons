@@ -24,6 +24,7 @@ local UnitDetailedThreatSituation = UnitDetailedThreatSituation
 -- constants
 local MELEE_SPELL_ID = 0
 local MELEE_SPELL_NM = "Melee"
+local FRIENDLY_FLAG  = 0x10   -- COMBATLOG_OBJECT_REACTION_FRIENDLY
 
 -- state
 local actors    = {}
@@ -135,8 +136,10 @@ function SM.Fmt(n)
 end
 
 -- damage handler (shared by all damage subevents)
-local function HandleDamage(srcGUID, srcName, dstGUID, dstName,
+local function HandleDamage(srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags,
                             spellId, spellName, amount, absorbed, critical)
+    -- skip enemy sources
+    if not srcFlags or band(srcFlags, FRIENDLY_FLAG) == 0 then return end
     local amt = tonumber(amount)   or 0
     local abs = tonumber(absorbed) or 0
     local eff = amt + abs
@@ -156,13 +159,16 @@ local function HandleDamage(srcGUID, srcName, dstGUID, dstName,
     end
 
     if dstGUID and dstGUID ~= "" and dstName and dstName ~= "" then
-        local tgt = Actor(dstGUID, dstName)
-        if tgt then
-            tgt.taken     = tgt.taken     + eff
-            totals.taken  = totals.taken  + eff
-            local sp      = SpellEntry(tgt.takenSpells, spellId, spellName)
-            sp.dmg        = sp.dmg  + eff
-            sp.hits       = sp.hits + 1
+        -- only track damage-taken for friendly targets
+        if dstFlags and band(dstFlags, FRIENDLY_FLAG) > 0 then
+            local tgt = Actor(dstGUID, dstName)
+            if tgt then
+                tgt.taken     = tgt.taken     + eff
+                totals.taken  = totals.taken  + eff
+                local sp      = SpellEntry(tgt.takenSpells, spellId, spellName)
+                sp.dmg        = sp.dmg  + eff
+                sp.hits       = sp.hits + 1
+            end
         end
     end
 end
@@ -208,7 +214,7 @@ clFrame:SetScript("OnEvent", function(self, event)
 
     -- DAMAGE
     if subev == "SWING_DAMAGE" then
-        HandleDamage(srcGUID, srcName, dstGUID, dstName,
+        HandleDamage(srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags,
                      MELEE_SPELL_ID, MELEE_SPELL_NM,
                      A1, A6, A7 == true or A7 == 1)
 
@@ -218,7 +224,7 @@ clFrame:SetScript("OnEvent", function(self, event)
         or subev == "DAMAGE_SHIELD"
         or subev == "DAMAGE_SPLIT"
         or subev == "SPELL_BUILDING_DAMAGE" then
-        HandleDamage(srcGUID, srcName, dstGUID, dstName,
+        HandleDamage(srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags,
                      tonumber(A1), A2,
                      A4, A9, A10 == true or A10 == 1)
 
@@ -241,7 +247,7 @@ clFrame:SetScript("OnEvent", function(self, event)
     elseif subev == "SWING_MISSED" then
         if A1 == "ABSORB" then
             local amt = tonumber(A3) or 0
-            if amt > 0 and srcGUID and srcGUID ~= "" then
+            if amt > 0 and srcGUID and srcGUID ~= "" and band(srcFlags, FRIENDLY_FLAG) > 0 then
                 local act = ActorOwned(srcGUID, srcName)
                 if act then
                     act.dmg = act.dmg + amt ; totals.dmg = totals.dmg + amt
@@ -257,7 +263,7 @@ clFrame:SetScript("OnEvent", function(self, event)
         or subev == "DAMAGE_SHIELD_MISSED" then
         if A4 == "ABSORB" then
             local amt = tonumber(A6) or 0
-            if amt > 0 and srcGUID and srcGUID ~= "" then
+            if amt > 0 and srcGUID and srcGUID ~= "" and band(srcFlags, FRIENDLY_FLAG) > 0 then
                 local act = ActorOwned(srcGUID, srcName)
                 if act then
                     act.dmg = act.dmg + amt ; totals.dmg = totals.dmg + amt
