@@ -46,42 +46,38 @@ $SLOT_ID = @{
 # -- Spec definitions ---------------------------------------------------------
 # key = scraper key  class/spec/role/tab for WoW detection
 $SPECS = @(
-    @{key="fury_warrior";        class="WARRIOR"; spec="fury";          specTab=2; role="melee_dps";  label="Fury Warrior";         slug="fury-warrior-dps"}
-    @{key="arms_warrior";        class="WARRIOR"; spec="arms";          specTab=1; role="melee_dps";  label="Arms Warrior";          slug="arms-warrior-dps"}
-    @{key="prot_warrior";        class="WARRIOR"; spec="protection";    specTab=3; role="tank";       label="Prot Warrior";          slug="protection-warrior-tank"}
-    @{key="holy_paladin";        class="PALADIN"; spec="holy";          specTab=1; role="healer";     label="Holy Paladin";          slug="holy-paladin-healer"}
-    @{key="prot_paladin";        class="PALADIN"; spec="protection";    specTab=2; role="tank";       label="Prot Paladin";          slug="paladin-tank"}
-    @{key="ret_paladin";         class="PALADIN"; spec="retribution";   specTab=3; role="melee_dps";  label="Ret Paladin";           slug="retribution-paladin-dps"}
-    @{key="bm_hunter";           class="HUNTER";  spec="beast_mastery"; specTab=1; role="ranged_dps"; label="BM Hunter";             slug="beast-mastery-hunter-dps"}
-    @{key="mm_hunter";           class="HUNTER";  spec="marksmanship";  specTab=2; role="ranged_dps"; label="MM Hunter";             slug="marksmanship-hunter-dps"}
-    @{key="surv_hunter";         class="HUNTER";  spec="survival";      specTab=3; role="ranged_dps"; label="Survival Hunter";       slug="survival-hunter-dps"}
-    @{key="combat_rogue";        class="ROGUE";   spec="combat";        specTab=2; role="melee_dps";  label="Combat Rogue";          slug="rogue-dps"}
-    @{key="shadow_priest";       class="PRIEST";  spec="shadow";        specTab=3; role="caster_dps"; label="Shadow Priest";         slug="shadow-priest-dps"}
-    @{key="holy_priest";         class="PRIEST";  spec="holy";          specTab=2; role="healer";     label="Holy Priest";           slug="priest-healer"}
-    @{key="elemental_shaman";    class="SHAMAN";  spec="elemental";     specTab=1; role="caster_dps"; label="Elemental Shaman";      slug="elemental-shaman-dps"}
-    @{key="enhance_shaman";      class="SHAMAN";  spec="enhancement";   specTab=2; role="melee_dps";  label="Enhance Shaman";        slug="enhancement-shaman-dps"}
-    @{key="resto_shaman";        class="SHAMAN";  spec="restoration";   specTab=3; role="healer";     label="Resto Shaman";          slug="shaman-healer"}
-    @{key="arcane_mage";         class="MAGE";    spec="arcane";        specTab=1; role="caster_dps"; label="Arcane Mage";           slug="arcane-mage-dps"}
-    @{key="fire_mage";           class="MAGE";    spec="fire";          specTab=2; role="caster_dps"; label="Fire Mage";             slug="fire-mage-dps"}
-    @{key="frost_mage";          class="MAGE";    spec="frost";         specTab=3; role="caster_dps"; label="Frost Mage";            slug="frost-mage-dps"}
-    @{key="affliction_warlock";  class="WARLOCK"; spec="affliction";    specTab=1; role="caster_dps"; label="Affliction Warlock";    slug="affliction-warlock-dps"}
-    @{key="destro_warlock";      class="WARLOCK"; spec="destruction";   specTab=3; role="caster_dps"; label="Destro Warlock";        slug="destruction-warlock-dps"}
-    @{key="demo_warlock";        class="WARLOCK"; spec="demonology";    specTab=2; role="caster_dps"; label="Demo Warlock";          slug="demonology-warlock-dps"}
-    @{key="balance_druid";       class="DRUID";   spec="balance";       specTab=1; role="caster_dps"; label="Balance Druid";         slug="balance-druid-dps"}
-    @{key="feral_dps_druid";     class="DRUID";   spec="feral";         specTab=2; role="melee_dps";  label="Feral DPS Druid";       slug="feral-druid-dps"}
-    @{key="feral_tank_druid";    class="DRUID";   spec="feral_tank";    specTab=2; role="tank";       label="Feral Tank Druid";      slug="feral-druid-tank"}
-    @{key="resto_druid";         class="DRUID";   spec="restoration";   specTab=3; role="healer";     label="Resto Druid";           slug="druid-healer"}
+    @{key="fury_warrior";        class="WARRIOR"; spec="fury";          specTab=2; role="melee_dps";  label="Fury Warrior";         slug="fury-warrior-dps";            p2Path="classes/warrior/fury/dps-bis-gear-pve-phase-2";           preRaidPath="classes/warrior/dps-bis-gear-pve-pre-raid"}
+    @{key="arms_warrior";        class="WARRIOR"; spec="arms";          specTab=1; role="melee_dps";  label="Arms Warrior";          slug="arms-warrior-dps";            p2Path="classes/warrior/arms/dps-bis-gear-pve-phase-2";           preRaidPath="classes/warrior/dps-bis-gear-pve-pre-raid"}
+    @{key="prot_warrior";        class="WARRIOR"; spec="protection";    specTab=3; role="tank";       label="Prot Warrior";          slug="protection-warrior-tank";     p2Path="classes/warrior/protection/tank-bis-gear-pve-phase-2";   preRaidPath=""}  # no pre-raid guide
+    @{key="holy_paladin";        class="PALADIN"; spec="holy";          specTab=1; role="healer";     label="Holy Paladin";          slug="holy-paladin-healer";         p2Path="classes/paladin/holy/healer-bis-gear-pve-phase-2";       preRaidPath=""}  # no pre-raid guide
+    @{key="prot_paladin";        class="PALADIN"; spec="protection";    specTab=2; role="tank";       label="Prot Paladin";          slug="paladin-tank";                p2Path="";                                                        preRaidPath="classes/paladin/tank-bis-gear-pve-pre-raid"}  # no TBC P2 guide
+    @{key="ret_paladin";         class="PALADIN"; spec="retribution";   specTab=3; role="melee_dps";  label="Ret Paladin";           slug="retribution-paladin-dps";    p2Path="classes/paladin/retribution/dps-bis-gear-pve-phase-2";  preRaidPath=""}  # no pre-raid guide
+    @{key="bm_hunter";           class="HUNTER";  spec="beast_mastery"; specTab=1; role="ranged_dps"; label="BM Hunter";             slug="beast-mastery-hunter-dps";   p2Path="classes/hunter/beast-mastery/dps-bis-gear-pve-phase-2"; preRaidPath="classes/hunter/dps-bis-gear-pve-pre-raid"}
+    @{key="mm_hunter";           class="HUNTER";  spec="marksmanship";  specTab=2; role="ranged_dps"; label="MM Hunter";             slug="marksmanship-hunter-dps";    p2Path="classes/hunter/marksmanship/dps-bis-gear-pve-phase-2";  preRaidPath="classes/hunter/dps-bis-gear-pve-pre-raid"}
+    @{key="surv_hunter";         class="HUNTER";  spec="survival";      specTab=3; role="ranged_dps"; label="Survival Hunter";       slug="survival-hunter-dps";        p2Path="classes/hunter/survival/dps-bis-gear-pve-phase-2";       preRaidPath="classes/hunter/dps-bis-gear-pve-pre-raid"}
+    @{key="combat_rogue";        class="ROGUE";   spec="combat";        specTab=2; role="melee_dps";  label="Combat Rogue";          slug="rogue-dps";                  p2Path="";                                                        preRaidPath="classes/rogue/dps-bis-gear-pve-pre-raid"}  # no TBC P2 guide
+    @{key="shadow_priest";       class="PRIEST";  spec="shadow";        specTab=3; role="caster_dps"; label="Shadow Priest";         slug="shadow-priest-dps";          p2Path="classes/priest/shadow/dps-bis-gear-pve-phase-2";         preRaidPath="classes/priest/shadow/dps-bis-gear-pve-pre-raid"}
+    @{key="holy_priest";         class="PRIEST";  spec="holy";          specTab=2; role="healer";     label="Holy Priest";           slug="priest-healer";              p2Path="";                                                        preRaidPath="classes/priest/healer-bis-gear-pve-pre-raid"}  # no TBC P2 guide
+    @{key="elemental_shaman";    class="SHAMAN";  spec="elemental";     specTab=1; role="caster_dps"; label="Elemental Shaman";      slug="elemental-shaman-dps";       p2Path="classes/shaman/elemental/dps-bis-gear-pve-phase-2";      preRaidPath="classes/shaman/elemental/dps-bis-gear-pve-pre-raid"}
+    @{key="enhance_shaman";      class="SHAMAN";  spec="enhancement";   specTab=2; role="melee_dps";  label="Enhance Shaman";        slug="enhancement-shaman-dps";     p2Path="classes/shaman/enhancement/dps-bis-gear-pve-phase-2";   preRaidPath="classes/shaman/enhancement/dps-bis-gear-pve-pre-raid"}
+    @{key="resto_shaman";        class="SHAMAN";  spec="restoration";   specTab=3; role="healer";     label="Resto Shaman";          slug="shaman-healer";              p2Path="";                                                        preRaidPath="classes/shaman/healer-bis-gear-pve-pre-raid"}  # no TBC P2 guide
+    @{key="arcane_mage";         class="MAGE";    spec="arcane";        specTab=1; role="caster_dps"; label="Arcane Mage";           slug="arcane-mage-dps";            p2Path="classes/mage/arcane/dps-bis-gear-pve-phase-2";           preRaidPath="classes/mage/dps-bis-gear-pve-pre-raid"}
+    @{key="fire_mage";           class="MAGE";    spec="fire";          specTab=2; role="caster_dps"; label="Fire Mage";             slug="fire-mage-dps";              p2Path="classes/mage/fire/dps-bis-gear-pve-phase-2";             preRaidPath="classes/mage/dps-bis-gear-pve-pre-raid"}
+    @{key="frost_mage";          class="MAGE";    spec="frost";         specTab=3; role="caster_dps"; label="Frost Mage";            slug="frost-mage-dps";             p2Path="classes/mage/frost/dps-bis-gear-pve-phase-2";            preRaidPath="classes/mage/dps-bis-gear-pve-pre-raid"}
+    @{key="affliction_warlock";  class="WARLOCK"; spec="affliction";    specTab=1; role="caster_dps"; label="Affliction Warlock";    slug="affliction-warlock-dps";     p2Path="classes/warlock/affliction/dps-bis-gear-pve-phase-2";   preRaidPath="classes/warlock/dps-bis-gear-pve-pre-raid"}
+    @{key="destro_warlock";      class="WARLOCK"; spec="destruction";   specTab=3; role="caster_dps"; label="Destro Warlock";        slug="destruction-warlock-dps";    p2Path="classes/warlock/destruction/dps-bis-gear-pve-phase-2";  preRaidPath="classes/warlock/dps-bis-gear-pve-pre-raid"}
+    @{key="demo_warlock";        class="WARLOCK"; spec="demonology";    specTab=2; role="caster_dps"; label="Demo Warlock";          slug="demonology-warlock-dps";     p2Path="classes/warlock/demonology/dps-bis-gear-pve-phase-2";   preRaidPath="classes/warlock/dps-bis-gear-pve-pre-raid"}
+    @{key="balance_druid";       class="DRUID";   spec="balance";       specTab=1; role="caster_dps"; label="Balance Druid";         slug="balance-druid-dps";          p2Path="classes/druid/balance/dps-bis-gear-pve-phase-2";         preRaidPath="classes/druid/balance/dps-bis-gear-pve-pre-raid"}
+    @{key="feral_dps_druid";     class="DRUID";   spec="feral";         specTab=2; role="melee_dps";  label="Feral DPS Druid";       slug="feral-druid-dps";            p2Path="classes/druid/feral/dps-bis-gear-pve-phase-2";           preRaidPath="classes/druid/feral/dps-bis-gear-pve-pre-raid"}
+    @{key="feral_tank_druid";    class="DRUID";   spec="feral_tank";    specTab=2; role="tank";       label="Feral Tank Druid";      slug="feral-druid-tank";           p2Path="classes/druid/feral/tank-bis-gear-pve-phase-2";          preRaidPath="classes/druid/feral/tank-bis-gear-pve-pre-raid"}
+    @{key="resto_druid";         class="DRUID";   spec="restoration";   specTab=3; role="healer";     label="Resto Druid";           slug="druid-healer";               p2Path="";                                                        preRaidPath="classes/druid/healer-bis-gear-pve-pre-raid"}  # no TBC P2 guide
 )
 
-# Phase URL suffixes to try (in order)
+# Phase URL suffixes to try (in order)  P2 is handled per-spec via p2Path
 $PHASE_SUFFIXES = @{
     1 = @(
         "-karazhan-best-in-slot-gear-burning-crusade-classic-wow"
         "-karazhan-best-in-slot-gear-burning-crusade"
-    )
-    2 = @(
-        "-ssc-tk-phase-2-best-in-slot-gear-burning-crusade"
-        "-serpentshrine-cavern-the-eye-phase-2-best-in-slot-gear-burning-crusade"
     )
     3 = @(
         "-bt-hyjal-phase-3-best-in-slot-gear-burning-crusade"
@@ -95,6 +91,288 @@ $PHASE_SUFFIXES = @{
         "-swp-phase-5-best-in-slot-gear-burning-crusade"
         "-sunwell-plateau-phase-5-best-in-slot-gear-burning-crusade"
     )
+}
+
+# Phase → short source label written into data files (fallback when per-item lookup fails)
+$PHASE_SRC = @{
+    0 = "Pre-Raid"   # Phase 0: Pre-raid best-in-slot
+    1 = "Kara/T4"    # Phase 1: Karazhan, Gruul's Lair, Magtheridon
+    2 = "SSC/TK"     # Phase 2: Serpentshrine Cavern, The Eye
+    3 = "BT/Hyjal"   # Phase 3: Black Temple, Mount Hyjal
+    4 = "ZA"         # Phase 4: Zul'Aman
+    5 = "SWP"        # Phase 5: Sunwell Plateau
+}
+
+# Boss / mob name (lowercase substring) → short source name
+# Used with the fast XML endpoint that returns sourcemore.n = boss/mob name
+$BOSS_SRC = [ordered]@{
+    # ── Karazhan ──────────────────────────────────────────────────────────────
+    "attumen"                = "Kara"
+    "moroes"                 = "Kara"
+    "maiden of virtue"       = "Kara"
+    "the curator"            = "Kara"
+    "shade of aran"          = "Kara"
+    "terestian illhoof"      = "Kara"
+    "netherspite"            = "Kara"
+    "nightbane"              = "Kara"
+    "prince malchezaar"      = "Kara"
+    "the big bad wolf"       = "Kara"
+    "romulo"                 = "Kara"
+    "julianne"               = "Kara"
+    "the crone"              = "Kara"
+    "dorothee"               = "Kara"
+    "opera"                  = "Kara"
+    "chess"                  = "Kara"
+    # ── Gruul's Lair ──────────────────────────────────────────────────────────
+    "gruul the dragonkiller" = "Gruul"
+    "gruul"                  = "Gruul"
+    "high king maulgar"      = "Gruul"
+    "maulgar"                = "Gruul"
+    # ── Magtheridon's Lair ────────────────────────────────────────────────────
+    "magtheridon"            = "Mag"
+    # ── Serpentshrine Cavern (SSC) ────────────────────────────────────────────
+    "hydross the unstable"   = "SSC"
+    "hydross"                = "SSC"
+    "the lurker below"       = "SSC"
+    "lurker"                 = "SSC"
+    "leotheras the blind"    = "SSC"
+    "leotheras"              = "SSC"
+    "fathom-lord karathress" = "SSC"
+    "karathress"             = "SSC"
+    "morogrim tidewalker"    = "SSC"
+    "morogrim"               = "SSC"
+    "lady vashj"             = "SSC"
+    "vashj"                  = "SSC"
+    # ── The Eye / Tempest Keep (TK) ───────────────────────────────────────────
+    "al'ar"                  = "TK"
+    "void reaver"            = "TK"
+    "high astromancer solarian" = "TK"
+    "solarian"               = "TK"
+    "kael'thas sunstrider"   = "TK"
+    "kael'thas"              = "TK"
+    "kaelthas"               = "TK"
+    # ── Mount Hyjal ───────────────────────────────────────────────────────────
+    "rage winterchill"       = "Hyjal"
+    "winterchill"            = "Hyjal"
+    "anetheron"              = "Hyjal"
+    "kaz'rogal"              = "Hyjal"
+    "azgalor"                = "Hyjal"
+    "archimonde"             = "Hyjal"
+    # ── Black Temple (BT) ─────────────────────────────────────────────────────
+    "high warlord naj'entus" = "BT"
+    "naj'entus"              = "BT"
+    "supremus"               = "BT"
+    "shade of akama"         = "BT"
+    "teron gorefiend"        = "BT"
+    "gorefiend"              = "BT"
+    "gurtogg bloodboil"      = "BT"
+    "bloodboil"              = "BT"
+    "reliquary of souls"     = "BT"
+    "reliquary"              = "BT"
+    "mother shahraz"         = "BT"
+    "shahraz"                = "BT"
+    "illidari council"       = "BT"
+    "illidan stormrage"      = "BT"
+    "illidan"                = "BT"
+    # ── Zul'Aman (ZA) ─────────────────────────────────────────────────────────
+    "nalorakk"               = "ZA"
+    "akil'zon"               = "ZA"
+    "jan'alai"               = "ZA"
+    "halazzi"                = "ZA"
+    "hex lord malacrass"     = "ZA"
+    "malacrass"              = "ZA"
+    "zul'jin"                = "ZA"
+    # ── Sunwell Plateau (SWP) ─────────────────────────────────────────────────
+    "kalecgos"               = "SWP"
+    "sathrovarr the corruptor" = "SWP"
+    "brutallus"              = "SWP"
+    "felmyst"                = "SWP"
+    "eredar twins"           = "SWP"
+    "grand warlock alythess" = "SWP"
+    "lady sacrolash"         = "SWP"
+    "m'uru"                  = "SWP"
+    "entropius"              = "SWP"
+    "kil'jaeden"             = "SWP"
+    # ── Outland Heroic/Normal Dungeons ────────────────────────────────────────
+    # The Botanica
+    "laj"                    = "Botanica"
+    "thorngrin the tender"   = "Botanica"
+    "high botanist freywinn" = "Botanica"
+    "warp splinter"          = "Botanica"
+    # The Mechanar
+    "capacitus"              = "Mechanar"
+    "nethermancer sepethrea" = "Mechanar"
+    "pathaleon the calculator" = "Mechanar"
+    # The Arcatraz
+    "zereketh the unbound"   = "Arcatraz"
+    "dalliah the doomsayer"  = "Arcatraz"
+    "wrath-scryer soccothrates" = "Arcatraz"
+    "harbinger skyriss"      = "Arcatraz"
+    "millhouse manastorm"    = "Arcatraz"
+    # Shadow Labyrinth
+    "ambassador hellmaw"     = "Shadow Lab"
+    "blackheart the inciter" = "Shadow Lab"
+    "grandmaster vorpil"     = "Shadow Lab"
+    "murmur"                 = "Shadow Lab"
+    # Shattered Halls
+    "blood guard porung"     = "Sh. Halls"
+    "grand warlock nethekurse" = "Sh. Halls"
+    "shattered hand executioner" = "Sh. Halls"
+    "warchief kargath bladefist" = "Sh. Halls"
+    "kargath bladefist"      = "Sh. Halls"
+    # The Steam Vaults
+    "hydromancer thespia"    = "Steam Vault"
+    "mekgineer steamrigger"  = "Steam Vault"
+    "warlord kalithresh"     = "Steam Vault"
+    # The Slave Pens
+    "mennu the betrayer"     = "Slave Pens"
+    "rokmar the crackler"    = "Slave Pens"
+    "quagmirran"             = "Slave Pens"
+    # The Underbog
+    "hungarfen"              = "Underbog"
+    "ghaz'an"                = "Underbog"
+    "swamplord musel'ek"     = "Underbog"
+    "the black stalker"      = "Underbog"
+    # Sethekk Halls
+    "darkweaver syth"        = "Sethekk"
+    "anzu"                   = "Sethekk"
+    "talon king ikiss"       = "Sethekk"
+    # Mana-Tombs
+    "pandemonius"            = "Mana-Tombs"
+    "tavarok"                = "Mana-Tombs"
+    "nexus-prince shaffar"   = "Mana-Tombs"
+    # Auchenai Crypts
+    "shirrak the dead watcher" = "Auchenai"
+    "exarch maladaar"        = "Auchenai"
+    # Old Hillsbrad / Black Morass (Caverns of Time)
+    "lieutenant drake"       = "Old Hill."
+    "captain skarloc"        = "Old Hill."
+    "epoch hunter"           = "Black Morass"
+    "chrono lord deja"       = "Black Morass"
+    "temporus"               = "Black Morass"
+    # Hellfire Citadel (Ramparts / Blood Furnace / Shattered Halls)
+    "watchkeeper gargolmar"  = "Ramparts"
+    "omor the unscarred"     = "Ramparts"
+    "vazruden"               = "Ramparts"
+    "nazan"                  = "Ramparts"
+    "the maker"              = "Blood Furnace"
+    "broggok"                = "Blood Furnace"
+    "keli'dan the breaker"   = "Blood Furnace"
+    # Coilfang: Slave Pens / Underbog already covered above
+    # Auchindoun: already covered above
+}
+
+# XML sourcemore "z" field → short instance name
+# (These zone IDs come from empirical testing of the Wowhead item XML endpoint)
+$XML_ZONE_SRC = @{
+    # ── TBC Raids ─────────────────────────────────────────────────────────────
+    3457 = "Kara"       # Karazhan - upper (Prince Malchezaar area)
+    3959 = "BT"         # Black Temple (Illidan, Mother Shahraz, etc.)
+    3606 = "Hyjal"      # Mount Hyjal (Archimonde, Anetheron, etc.) — NOT Kara!
+    3607 = "SSC"        # Serpentshrine Cavern
+    3845 = "TK"         # The Eye / Tempest Keep (Void Reaver, Kael'thas)
+    3923 = "Gruul"      # Gruul's Lair
+    3836 = "Mag"        # Magtheridon's Lair
+    3805 = "ZA"         # Zul'Aman
+    4075 = "SWP"        # Sunwell Plateau
+    4080 = "SWP"        # Sunwell area (Isle of Quel'Danas outdoor/sub-zone)
+    # ── Outland Heroic/Normal Dungeons ────────────────────────────────────────
+    3847 = "Botanica"
+    3849 = "Mechanar"
+    3848 = "Arcatraz"
+    3710 = "Shadow Lab"
+    3713 = "Sh. Halls"
+    3715 = "Steam Vault"
+    3716 = "Underbog"
+    3717 = "Slave Pens" # Quagmirran zone ID in XML
+    3714 = "Slave Pens" # alternate ID
+    3711 = "Sethekk"
+    3712 = "Mana-Tombs"
+    3739 = "Auchenai"
+    3524 = "Ramparts"
+    3523 = "Ramparts"   # alternate
+    3529 = "Blood Furnace"
+    3844 = "Old Hill."  # Caverns of Time: Old Hillsbrad
+    3525 = "Black Morass"
+}
+
+# Cache: itemId -> source string
+$ItemSourceCache = @{}
+
+# Fetch per-item source from Wowhead item XML endpoint (fast, ~5-15KB per item).
+# XML sourcemore format inside <json><![CDATA[...]]></json>:
+#   "sourcemore":[{"bd":N,"dd":N,"n":"BossOrContainerName","t":N,"ti":N,"z":ZONE_ID}]
+# Type values (t): 1=creature drop  2=contained-in  3=crafted  4=quest
+#                  6=vendor  8=pvp  9=badge of justice
+# Zone field (z): Wowhead internal zone ID — mapped via $XML_ZONE_SRC
+function Get-ItemSource($itemId, $phaseFallback) {
+    if ($ItemSourceCache.ContainsKey($itemId)) { return $ItemSourceCache[$itemId] }
+
+    $url = "$BASE_URL/tbc/item=$($itemId)&xml"
+    try {
+        $xml = (Invoke-WebRequest -Uri $url -UserAgent $UA -TimeoutSec 10 -UseBasicParsing -MaximumRedirection 3).Content
+    } catch {
+        $ItemSourceCache[$itemId] = $phaseFallback
+        return $phaseFallback
+    }
+
+    $src = ""
+
+    # Extract the first sourcemore object from the JSON blob in the XML
+    $smBlock = [regex]::Match($xml, '"sourcemore":\[(\{[^\]]+\})\]')
+    if ($smBlock.Success) {
+        $raw   = $smBlock.Groups[1].Value
+        $zM    = [regex]::Match($raw, '"z":(\d+)')
+        $nM    = [regex]::Match($raw, '"n":"([^"]+)"')
+        $tM    = [regex]::Match($raw, '"t":(\d+)')
+        $zid   = if ($zM.Success) { [int]$zM.Groups[1].Value } else { -1 }
+        $sname = if ($nM.Success) { $nM.Groups[1].Value } else { "" }
+        $stype = if ($tM.Success) { [int]$tM.Groups[1].Value } else { -1 }
+
+        # 1. Zone-ID lookup — most reliable, works for both drops and "contained in"
+        if ($zid -ge 0 -and $XML_ZONE_SRC.ContainsKey($zid)) {
+            $src = $XML_ZONE_SRC[$zid]
+        }
+
+        # 2. If zone unknown but it's a direct creature drop (t=1), try boss name
+        if ($src -eq "" -and $stype -eq 1 -and $sname -ne "") {
+            $lower = $sname.ToLower()
+            foreach ($entry in $BOSS_SRC.GetEnumerator()) {
+                if ($lower -eq $entry.Key -or $lower.Contains($entry.Key)) {
+                    $src = $entry.Value; break
+                }
+            }
+        }
+
+        # 3. Non-location source types (override zone lookup only when zone is empty)
+        if ($src -eq "") {
+            switch ($stype) {
+                3 { $src = "Craft" }
+                4 { $src = "Quest" }
+                6 { $src = "Vendor" }
+                8 { $src = "PvP" }
+                9 { $src = "Badge" }
+            }
+        }
+    }
+
+    # 4. Keyword scan of XML <json> block for badge / pvp / craft if still unknown
+    if ($src -eq "") {
+        if     ($xml -match '"class":4,"subclass":2') { $src = "Craft" }  # weapon: bow/gun craft
+        if     ($xml -match 'arenapointsreq|honorpointsreq') { $src = "PvP" }
+        elseif ($xml -match '"nbadges":')              { $src = "Badge" }
+    }
+
+    # Only cache definitive (non-fallback) results — avoids poisoning later
+    # phase lookups when phase 0 (pre-raid) is processed first and an item's
+    # XML lookup temporarily fails.
+    if ($src -ne "") {
+        $ItemSourceCache[$itemId] = $src
+        return $src
+    }
+    # No definitive source found — return phase fallback but do NOT cache it,
+    # so the next phase can try again and may find the correct source.
+    return $phaseFallback
 }
 
 # -- Stat weights per role (for upgrade scoring) -------------------------------
@@ -362,10 +640,31 @@ function Scrape-Guide($url, $role) {
 }
 
 # -- Try phase-specific URL variants ------------------------------------------
-function Get-PhaseData($specSlug, $phase, $role) {
+function Get-PhaseData($specDef, $phase, $role) {
+    # Phase 0 (pre-raid) uses /classes/{class}/{role}-bis-gear-pve-pre-raid
+    if ($phase -eq 0) {
+        $p0 = $specDef.preRaidPath
+        if (-not $p0 -or $p0 -eq "") {
+            Write-Host "  Pre-Raid: no guide available for this spec" -ForegroundColor DarkGray
+            return $null
+        }
+        $url = "/tbc/guide/$p0"
+        return Scrape-Guide $url $role
+    }
+    # Phase 2 uses a completely different URL structure on Wowhead: /classes/{class}/{spec}/{role}-bis-gear-pve-phase-2
+    if ($phase -eq 2) {
+        $p2 = $specDef.p2Path
+        if (-not $p2 -or $p2 -eq "") {
+            Write-Host "  Phase 2: no guide available for this spec" -ForegroundColor DarkGray
+            return $null
+        }
+        $url = "/tbc/guide/$p2"
+        $data = Scrape-Guide $url $role
+        return $data
+    }
     $suffixes = $PHASE_SUFFIXES[$phase]
     foreach ($suffix in $suffixes) {
-        $url  = "/tbc/guide/$specSlug$suffix"
+        $url  = "/tbc/guide/$($specDef.slug)$suffix"
         $data = Scrape-Guide $url $role
         if ($data) { return $data }
     }
@@ -386,7 +685,7 @@ Write-Host ""
 
 # Filter specs + phases if requested
 $targetSpecs  = if ($Spec)  { $SPECS | Where-Object { $_.key -like "*$Spec*" -or $_.slug -like "*$Spec*" } } else { $SPECS }
-$targetPhases = if ($Phase) { @($Phase) } else { 1..5 }
+$targetPhases = if ($Phase) { @($Phase) } else { @(0) + @(1..5) }
 
 # Master data: [specKey][phase][slotId] = @{itemId; name; score; rank}
 $masterData = @{}
@@ -397,7 +696,7 @@ foreach ($specDef in $targetSpecs) {
 
     foreach ($ph in $targetPhases) {
         Write-Host "  Phase $ph" -ForegroundColor Cyan
-        $phData = Get-PhaseData $specDef.slug $ph $specDef.role
+        $phData = Get-PhaseData $specDef $ph $specDef.role
         if ($phData) {
             $masterData[$specDef.key][$ph] = $phData
         } else {
@@ -535,40 +834,60 @@ foreach ($specDef in $SPECS) {
 $null = $sb.AppendLine("}")
 $null = $sb.AppendLine("")
 
-# -- BIS item data -------------------------------------------------------------
-$null = $sb.AppendLine("-- BIS item data per spec per phase per slot")
-$null = $sb.AppendLine("-- Each entry: {id=itemId, name='...', score=weightedScore, rank=N}")
-$null = $sb.AppendLine("IRR_BIS_DATA = {")
+# -- BIS item data: write per-class split files --------------------------------
+$ADDON_DIR = Join-Path $PSScriptRoot "..\addons\ItemRackRevived"
 
+# Group specs by class
+$classByKey = @{}
 foreach ($specDef in $SPECS) {
-    $key     = $specDef.key
-    $specData = $masterData[$key]
-    if (-not $specData) { continue }
-
-    $null = $sb.AppendLine("    -- $($specDef.label)")
-    $null = $sb.AppendLine("    [$(Lua-Str $key)] = {")
-
-    foreach ($ph in 1..5) {
-        $phData = if ($specData.ContainsKey($ph)) { $specData[$ph] } else { @{} }
-        $null = $sb.AppendLine("        [$ph] = {")
-
-        foreach ($slotId in $phData.Keys | Sort-Object) {
-            $entries = $phData[$slotId] | Sort-Object { $_.rank }
-            if ($entries.Count -eq 0) { continue }
-            $best = $entries[0]
-            # Skip entries with no valid item ID
-            if (-not $best.itemId -or [int]$best.itemId -le 0) { continue }
-            $score = if ($best.score) { $best.score } else { 0 }
-            $null = $sb.AppendLine("            [$slotId] = {id=$($best.itemId), name=$(Lua-Str $best.name), score=$score, rank=1},")
-        }
-
-        $null = $sb.AppendLine("        },")
-    }
-
-    $null = $sb.AppendLine("    },")
+    if (-not $classByKey.ContainsKey($specDef.class)) { $classByKey[$specDef.class] = @() }
+    $classByKey[$specDef.class] += $specDef
 }
 
-$null = $sb.AppendLine("}")
+foreach ($class in ($classByKey.Keys | Sort-Object)) {
+    $classSpecs = $classByKey[$class]
+    $csb = [System.Text.StringBuilder]::new()
+    $null = $csb.AppendLine("-- BIS_Data_$class.lua  (Auto-generated by scripts/update-bis.ps1)")
+    $null = $csb.AppendLine("-- Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm')  -- DO NOT EDIT MANUALLY")
+    $null = $csb.AppendLine("IRR_BIS_DATA = IRR_BIS_DATA or {}")
+    $null = $csb.AppendLine("do local _d = {")
 
-[System.IO.File]::WriteAllText($OUT_FILE, $sb.ToString(), [System.Text.UTF8Encoding]::new($false))
-Write-Host "Written: $OUT_FILE ($([Math]::Round((Get-Item $OUT_FILE).Length/1024, 1)) KB)" -ForegroundColor Green
+    foreach ($specDef in $classSpecs) {
+        $key      = $specDef.key
+        $specData = $masterData[$key]
+        if (-not $specData) { continue }
+
+        $null = $csb.AppendLine("    [$(Lua-Str $key)] = {")
+        foreach ($ph in @(0) + @(1..5)) {
+            $phData  = if ($specData.ContainsKey($ph)) { $specData[$ph] } else { @{} }
+            $phSrc   = if ($PHASE_SRC.ContainsKey($ph)) { $PHASE_SRC[$ph] } else { "P$ph" }
+            $null = $csb.AppendLine("        [$ph] = {")
+            foreach ($slotId in ($phData.Keys | Sort-Object)) {
+                $entries = $phData[$slotId] | Sort-Object { $_.rank }
+                $valid   = @($entries | Where-Object { $_.itemId -and [int]$_.itemId -gt 0 })
+                if ($valid.Count -eq 0) { continue }
+                $null = $csb.AppendLine("            [$slotId] = {")
+                foreach ($entry in ($valid | Select-Object -First 3)) {
+                    $score   = if ($entry.score) { $entry.score } else { 0 }
+                    $itemSrc = Get-ItemSource $entry.itemId $phSrc
+                    $null = $csb.AppendLine("                {id=$($entry.itemId), name=$(Lua-Str $entry.name), score=$score, rank=$($entry.rank), src=$(Lua-Str $itemSrc)},")
+                }
+                $null = $csb.AppendLine("            },")
+            }
+            $null = $csb.AppendLine("        },")
+        }
+        $null = $csb.AppendLine("    },")
+    }
+
+    $null = $csb.AppendLine("}")
+    $null = $csb.AppendLine("for k,v in pairs(_d) do IRR_BIS_DATA[k] = v end")
+    $null = $csb.AppendLine("end")
+
+    if (-not $Dry) {
+        $classFile = Join-Path $ADDON_DIR "BIS_Data_$class.lua"
+        [System.IO.File]::WriteAllText($classFile, $csb.ToString(), [System.Text.UTF8Encoding]::new($false))
+        Write-Host "Written: BIS_Data_$class.lua ($([Math]::Round((Get-Item $classFile).Length/1024,1)) KB)" -ForegroundColor Green
+    } else {
+        Write-Host "[Dry] Would write BIS_Data_$class.lua" -ForegroundColor DarkGray
+    }
+}

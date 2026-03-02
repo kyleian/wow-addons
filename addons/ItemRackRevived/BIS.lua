@@ -1,3 +1,4 @@
+print("|cff00ccff[IRR BIS]|r BIS.lua executing")
 -- ============================================================
 -- ItemRack Revived — BIS.lua
 -- Best-in-Slot comparison panel
@@ -8,7 +9,7 @@
 -- Module state
 -- ----------------------------------------------------------------
 local IRR_BIS = {}
-IRR_BIS.currentPhase   = 1       -- 1..5
+IRR_BIS.currentPhase   = 1       -- 0=Pre-Raid, 1..5
 IRR_BIS.currentSpecKey = nil     -- e.g. "fury_warrior"
 IRR_BIS.frame          = nil     -- the panel container frame
 IRR_BIS.rows           = {}      -- row frames keyed by slotId
@@ -78,6 +79,70 @@ local function GetBISItemName(id, fallback)
 end
 
 -- ----------------------------------------------------------------
+-- Item source scanner — uses a hidden tooltip to read drop source text
+-- ----------------------------------------------------------------
+local IRR_BIS_sourceCache = {}
+local IRR_BIS_ScanTip
+local SOURCE_ABBREV = {
+    ["black temple"]     = "BT",
+    ["serpentshrine"]    = "SSC",
+    ["the eye"]          = "TK",
+    ["tempest keep"]     = "TK",
+    ["mount hyjal"]      = "Hyjal",
+    ["hyjal summit"]     = "Hyjal",
+    ["zul'aman"]         = "ZA",
+    ["sunwell"]          = "SWP",
+    ["karazhan"]         = "Kara",
+    ["gruul"]            = "Gruul",
+    ["magtheridon"]      = "Mag",
+    ["hellfire citadel"] = "HFC",
+    ["shattered halls"]  = "SH",
+    ["steam vaults"]     = "SV",
+    ["underbog"]         = "UB",
+    ["slave pens"]       = "SP",
+    ["shadow labyrinth"] = "SL",
+    ["arcatraz"]         = "Arc",
+    ["botanica"]         = "Bot",
+    ["badge of justice"] = "Badge",
+    ["honor points"]     = "PvP",
+    ["arena"]            = "Arena",
+    ["quest reward"]     = "Quest",
+    ["crafted"]          = "Craft",
+    ["engineering"]      = "Craft",
+    ["leatherworking"]   = "Craft",
+    ["blacksmithing"]    = "Craft",
+    ["tailoring"]        = "Craft",
+    ["vendor"]           = "Vendor",
+}
+local function IRR_BIS_GetSource(itemId)
+    if IRR_BIS_sourceCache[itemId] ~= nil then return IRR_BIS_sourceCache[itemId] end
+    if not IRR_BIS_ScanTip then
+        IRR_BIS_ScanTip = CreateFrame("GameTooltip", "IRR_BIS_ScanTooltip", UIParent, "GameTooltipTemplate")
+        IRR_BIS_ScanTip:SetOwner(UIParent, "ANCHOR_NONE")
+    end
+    IRR_BIS_ScanTip:ClearLines()
+    IRR_BIS_ScanTip:SetHyperlink("item:" .. itemId .. ":0:0:0:0:0:0:0")
+    local result = ""
+    for i = 1, IRR_BIS_ScanTip:NumLines() do
+        local line = _G["IRR_BIS_ScanTooltipTextLeft" .. i]
+        if line then
+            local text = line:GetText()
+            if text then
+                local lower = text:lower()
+                for pattern, abbrev in pairs(SOURCE_ABBREV) do
+                    if lower:find(pattern, 1, true) then
+                        result = abbrev ; break
+                    end
+                end
+                if result ~= "" then break end
+            end
+        end
+    end
+    IRR_BIS_sourceCache[itemId] = result
+    return result
+end
+
+-- ----------------------------------------------------------------
 -- Build the BIS panel into `parent` frame
 -- parent is already sized and positioned by UI.lua
 -- ----------------------------------------------------------------
@@ -95,10 +160,10 @@ function IRR_BuildBISPanel(parent, availableH, panelW)
     phaseLbl:SetPoint("TOPLEFT", parent, "TOPLEFT", 4, yTop - 4)
 
     local phBtnX = 46
-    for ph = 1, 5 do
+    for ph = 0, 5 do
         local btn = CreateFrame("Button", nil, parent)
         btn:SetSize(28, 18)
-        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", phBtnX + (ph - 1) * 29, yTop - 2)
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", phBtnX + ph * 29, yTop - 2)
 
         local btnBg = btn:CreateTexture(nil, "BACKGROUND")
         btnBg:SetAllPoints(btn)
@@ -113,7 +178,7 @@ function IRR_BuildBISPanel(parent, availableH, panelW)
         btnTxt:SetFont(btnTxt:GetFont(), 9, "OUTLINE")
         btnTxt:SetAllPoints(btn)
         btnTxt:SetJustifyH("CENTER")
-        btnTxt:SetText("P" .. ph)
+        btnTxt:SetText(ph == 0 and "Pre" or ("P" .. ph))
         btn.txt = btnTxt
 
         local function UpdatePhBtn()
@@ -151,6 +216,15 @@ function IRR_BuildBISPanel(parent, availableH, panelW)
     sep:SetPoint("TOPLEFT", parent, "TOPLEFT", 4, yTop - 42)
     sep:SetColorTexture(0.35, 0.35, 0.35, 1)
 
+    -- ---- Row layout constants (used by headers and rows) ----
+    local ROW_H   = 26
+    local ABBR_W  = 38
+    local ICON_W  = ROW_H - 2
+    local SRC_W   = 48
+    local STAT_W  = 16
+    local PAD2    = 4
+    local NAME_W  = W - 22 - ABBR_W - PAD2 - ICON_W - PAD2 - SRC_W - PAD2 - STAT_W - PAD2
+
     -- ---- Column headers ----
     local hSlot = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     hSlot:SetFont(hSlot:GetFont(), 9, "")
@@ -162,13 +236,13 @@ function IRR_BuildBISPanel(parent, availableH, panelW)
     hItem:SetFont(hItem:GetFont(), 9, "")
     hItem:SetText("BIS Item")
     hItem:SetTextColor(0.6, 0.6, 0.6)
-    hItem:SetPoint("TOPLEFT", parent, "TOPLEFT", 42, yTop - 48)
+    hItem:SetPoint("TOPLEFT", parent, "TOPLEFT", 2 + ABBR_W + PAD2 + ICON_W + PAD2, yTop - 48)
 
-    local hStat = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    hStat:SetFont(hStat:GetFont(), 9, "")
-    hStat:SetText("St")
-    hStat:SetTextColor(0.6, 0.6, 0.6)
-    hStat:SetPoint("TOPLEFT", parent, "TOPLEFT", W - 28, yTop - 48)
+    local hSrc = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hSrc:SetFont(hSrc:GetFont(), 9, "")
+    hSrc:SetText("Source")
+    hSrc:SetTextColor(0.6, 0.6, 0.6)
+    hSrc:SetPoint("TOPLEFT", parent, "TOPLEFT", 2 + ABBR_W + PAD2 + ICON_W + PAD2 + NAME_W + PAD2, yTop - 48)
 
     -- ---- Scroll frame for slot rows ----
     local scrollTop = yTop - 60
@@ -183,13 +257,12 @@ function IRR_BuildBISPanel(parent, availableH, panelW)
     scrollFrame:SetScrollChild(scrollChild)
     IRR_BIS.scrollChild = scrollChild
 
-    local ROW_H  = 20
-    local ABBR_W = 38
-    local NAME_W = W - 22 - ABBR_W - 22  -- leave room for scrollbar + status + padding
+        local SUB_H    = 18
+        local SLOT_H   = ROW_H + 2 * SUB_H + 1  -- main + 2 alt rows + separator
 
     -- Build one row per slot
     for idx, slot in ipairs(SLOT_LIST) do
-        local rowY = -(idx - 1) * ROW_H
+        local rowY = -(idx - 1) * SLOT_H
         local row  = CreateFrame("Frame", nil, scrollChild)
         row:SetSize(W - 22, ROW_H)
         row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, rowY)
@@ -210,60 +283,175 @@ function IRR_BuildBISPanel(parent, availableH, panelW)
         abbrTxt:SetPoint("LEFT", row, "LEFT", 2, 0)
         abbrTxt:SetWidth(ABBR_W)
 
+        -- Item icon
+        local iconTex = row:CreateTexture(nil, "ARTWORK")
+        iconTex:SetSize(ICON_W, ROW_H - 2)
+        iconTex:SetPoint("LEFT", row, "LEFT", ABBR_W + PAD2, 1)
+        iconTex:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+        row.iconTex = iconTex
+
         -- BIS item name label
         local nameTxt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        nameTxt:SetFont(nameTxt:GetFont(), 9, "")
+        nameTxt:SetFont(nameTxt:GetFont(), 12, "")
         nameTxt:SetText("–")
         nameTxt:SetTextColor(0.9, 0.9, 0.9)
         nameTxt:SetJustifyH("LEFT")
-        nameTxt:SetPoint("LEFT", row, "LEFT", ABBR_W + 2, 0)
+        nameTxt:SetPoint("LEFT", row, "LEFT", ABBR_W + PAD2 + ICON_W + PAD2, 0)
         nameTxt:SetWidth(NAME_W)
 
-        -- Status icon (✓ / ↑ / –)
+        -- Source label
+        local srcTxt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        srcTxt:SetFont(srcTxt:GetFont(), 8, "")
+        srcTxt:SetText("")
+        srcTxt:SetTextColor(0.45, 0.65, 0.45)
+        srcTxt:SetJustifyH("LEFT")
+        srcTxt:SetPoint("LEFT", row, "LEFT", ABBR_W + PAD2 + ICON_W + PAD2 + NAME_W + PAD2, 0)
+        srcTxt:SetWidth(SRC_W)
+
+        -- Status icon
         local statusTxt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        statusTxt:SetFont(statusTxt:GetFont(), 10, "OUTLINE")
+        statusTxt:SetFont(statusTxt:GetFont(), 11, "OUTLINE")
         statusTxt:SetText("")
         statusTxt:SetJustifyH("CENTER")
-        statusTxt:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-        statusTxt:SetWidth(18)
+        statusTxt:SetPoint("LEFT", row, "LEFT", ABBR_W + PAD2 + ICON_W + PAD2 + NAME_W + PAD2 + SRC_W + PAD2, 0)
+        statusTxt:SetWidth(STAT_W)
 
         row.nameTxt   = nameTxt
+        row.srcTxt    = srcTxt
         row.statusTxt = statusTxt
         row.slot      = slot
 
-        -- Tooltip on hover: show actual item tooltip via hyperlink
+        -- Main row hover: show BIS tooltip + equipped comparison + ilvl diff
         row:SetScript("OnEnter", function(self)
             local specKey = IRR_BIS.currentSpecKey
             local phase   = IRR_BIS.currentPhase
-            if not specKey or not IRR_BIS_DATA then return end
-            local phaseData = IRR_BIS_DATA[specKey] and IRR_BIS_DATA[specKey][phase]
-            if not phaseData then return end
-            local slotData  = phaseData[self.slot.id]
-            if not slotData or #slotData == 0 then return end
+            local phData  = IRR_BIS_DATA and IRR_BIS_DATA[specKey] and IRR_BIS_DATA[specKey][phase]
+            local rawSlot = phData and phData[self.slot.id]
+            if not rawSlot then return end
+            local slots    = rawSlot.id and {rawSlot} or rawSlot
+            local bisEntry = slots[1]
+            if not bisEntry then return end
 
             GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-            GameTooltip:ClearLines()
-            -- Show BIS header
-            local specLabel = (IRR_BIS_SPECS and IRR_BIS_SPECS[specKey]) and IRR_BIS_SPECS[specKey].label or specKey
-            GameTooltip:AddLine(self.slot.abbr .. " BIS — " .. specLabel .. " P" .. phase, 1, 0.82, 0)
-            GameTooltip:AddLine(" ")
-            for _, entry in ipairs(slotData) do
-                local rankStr  = "#" .. tostring(entry.rank)
-                local iname    = GetBISItemName(entry.id, entry.name)
-                local equippedId = GetInventoryItemID("player", self.slot.id)
-                local marker   = (equippedId and equippedId == entry.id) and " |cff00ff00[equipped]|r" or ""
-                local scoreStr = entry.score and tonumber(entry.score) > 0 and string.format(" [%.0f pts]", entry.score) or ""
-                GameTooltip:AddLine(rankStr .. " " .. iname .. scoreStr .. marker, 0.9, 0.9, 0.9)
+            GameTooltip:SetHyperlink("item:" .. bisEntry.id .. ":0:0:0:0:0:0:0")
+
+            -- ilvl diff vs equipped
+            local bisIlvl    = select(4, GetItemInfo(bisEntry.id))
+            local equippedId = GetInventoryItemID("player", self.slot.id)
+            if equippedId then
+                local eIlvl = select(4, GetItemInfo(equippedId))
+                if bisIlvl and eIlvl then
+                    local diff = bisIlvl - eIlvl
+                    if diff > 0 then
+                        GameTooltip:AddLine(string.format("|cff00ff00Upgrade: +%d ilvl|r  (%d \226\134\146 %d)", diff, eIlvl, bisIlvl), 1, 1, 1)
+                    elseif diff == 0 and equippedId == bisEntry.id then
+                        GameTooltip:AddLine("|cff00ff00BIS Equipped!|r", 1, 1, 1)
+                    elseif diff < 0 then
+                        GameTooltip:AddLine(string.format("|cffffff00BIS is %d ilvl below equipped|r", -diff), 1, 1, 1)
+                    end
+                end
+            end
+
+            -- source tag
+            if bisEntry.src and bisEntry.src ~= "" then
+                GameTooltip:AddLine("Source: " .. bisEntry.src, 0.5, 0.85, 0.5)
             end
             GameTooltip:Show()
+
+            -- comparison tooltip showing currently equipped item
+            if equippedId then
+                local eLink   = GetInventoryItemLink("player", self.slot.id)
+                local compTip = ComparisonTooltip1 or ShoppingTooltip1
+                if eLink and compTip then
+                    compTip:SetOwner(GameTooltip, "ANCHOR_NONE")
+                    compTip:ClearLines()
+                    compTip:SetHyperlink(eLink)
+                    compTip:SetPoint("TOPLEFT", GameTooltip, "TOPRIGHT", 2, 0)
+                    compTip:Show()
+                end
+            end
         end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+            local compTip = ComparisonTooltip1 or ShoppingTooltip1
+            if compTip then compTip:Hide() end
+        end)
+
+        -- Alt sub-rows for rank 2 and 3
+        IRR_BIS.altRows = IRR_BIS.altRows or {}
+        IRR_BIS.altRows[slot.id] = {}
+        local slotId = slot.id
+        for altRank = 2, 3 do
+            local aY   = -(idx - 1) * SLOT_H - ROW_H - (altRank - 2) * SUB_H
+            local arow = CreateFrame("Frame", nil, scrollChild)
+            arow:SetSize(W - 22, SUB_H)
+            arow:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, aY)
+            arow:Hide()
+            arow.slotId  = slotId
+            arow.altRank = altRank
+            -- dim bg
+            local aBg = arow:CreateTexture(nil, "BACKGROUND")
+            aBg:SetAllPoints(arow)
+            aBg:SetColorTexture(0.07, 0.07, 0.07, 0.8)
+            -- rank badge
+            local aLbl = arow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            aLbl:SetFont(aLbl:GetFont(), 7, "")
+            aLbl:SetText("#" .. altRank)
+            aLbl:SetTextColor(0.35, 0.35, 0.45)
+            aLbl:SetPoint("LEFT", arow, "LEFT", ABBR_W - 10, 0)
+            aLbl:SetWidth(10)
+            -- small icon
+            local aIco = arow:CreateTexture(nil, "ARTWORK")
+            aIco:SetSize(SUB_H - 2, SUB_H - 2)
+            aIco:SetPoint("LEFT", arow, "LEFT", ABBR_W + PAD2, 1)
+            arow.iconTex = aIco
+            -- name
+            local aNm = arow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            aNm:SetFont(aNm:GetFont(), 8, "")
+            aNm:SetText("")
+            aNm:SetTextColor(0.45, 0.45, 0.45)
+            aNm:SetJustifyH("LEFT")
+            aNm:SetPoint("LEFT", arow, "LEFT", ABBR_W + PAD2 + (SUB_H - 2) + PAD2, 0)
+            aNm:SetWidth(NAME_W + STAT_W)
+            arow.nameTxt = aNm
+            -- tooltip
+            arow:SetScript("OnEnter", function(self)
+                local entry = IRR_BIS.altRows[self.slotId] and IRR_BIS.altRows[self.slotId][self.altRank]
+                local entryData = entry and entry.data
+                if not entryData then return end
+                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                GameTooltip:SetHyperlink("item:" .. entryData.id .. ":0:0:0:0:0:0:0")
+                local score = entryData.score and tonumber(entryData.score) or 0
+                if score > 0 then
+                    GameTooltip:AddLine(string.format("Rank #%d  Score: %.0f pts", self.altRank, score), 0.6, 0.8, 1)
+                else
+                    GameTooltip:AddLine("Rank #" .. self.altRank, 0.6, 0.6, 0.9)
+                end
+                GameTooltip:Show()
+                local compTip = ComparisonTooltip1 or ShoppingTooltip1
+                local eLink = GetInventoryItemLink("player", self.slotId)
+                if eLink and compTip then
+                    compTip:SetOwner(GameTooltip, "ANCHOR_NONE")
+                    compTip:ClearLines()
+                    compTip:SetHyperlink(eLink)
+                    compTip:SetPoint("TOPLEFT", GameTooltip, "TOPRIGHT", 2, 0)
+                    compTip:Show()
+                end
+            end)
+            arow:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+                local compTip = ComparisonTooltip1 or ShoppingTooltip1
+                if compTip then compTip:Hide() end
+            end)
+            -- store frame + placeholder for data
+            IRR_BIS.altRows[slotId][altRank] = { frame = arow, data = nil }
+        end
 
         IRR_BIS.rows[slot.id] = row
     end
 
-    -- Set scroll child size
-    scrollChild:SetHeight(#SLOT_LIST * ROW_H + 4)
+    -- Set scroll child size (each slot = ROW_H + 2 sub rows of SUB_H each + 1 sep)
+    scrollChild:SetHeight(#SLOT_LIST * (ROW_H + 2 * SUB_H + 1) + 4)
 
     -- ---- Refresh button (re-detect spec) ----
     local redetectBtn = CreateFrame("Button", nil, parent)
@@ -389,6 +577,9 @@ function IRR_RefreshBISPanel()
             IRR_BIS.specLbl:SetText("|cffff8800no spec (cls=" .. tostring(cls) .. ")|r")
         else
             IRR_BIS.specLbl:SetText("|cffff8800" .. tostring(specKey) .. " (nospec)|r")
+        end  -- inner if specKey
+    end  -- if IRR_BIS.specLbl
+
     -- Check whether we have data at all
     if not IRR_BIS_DATA then
         if IRR_BIS.noDataTxt then IRR_BIS.noDataTxt:Show() end
@@ -405,9 +596,14 @@ function IRR_RefreshBISPanel()
             local bisEntry = nil
             local bisRank  = nil
             local equippedRank = nil
+            local slotData = nil  -- hoisted so alt rows can access it
 
             if specKey and IRR_BIS_DATA[specKey] and IRR_BIS_DATA[specKey][phase] then
-                local slotData = IRR_BIS_DATA[specKey][phase][slot.id]
+                local rawSlot = IRR_BIS_DATA[specKey][phase][slot.id]
+                -- Normalise: data may be a direct entry {id=..} or an array {{id=..},..
+                if rawSlot then
+                    slotData = rawSlot.id and {rawSlot} or rawSlot
+                end
                 if slotData and #slotData > 0 then
                     bisEntry = slotData[1]  -- rank 1 = best BIS
 
@@ -427,33 +623,83 @@ function IRR_RefreshBISPanel()
             if not bisEntry then
                 -- No data for this slot
                 row.nameTxt:SetText("–")
-                row.nameTxt:SetTextColor(0.4, 0.4, 0.4)
+                row.nameTxt:SetTextColor(0.35, 0.35, 0.35)
                 row.statusTxt:SetText("")
+                if row.srcTxt   then row.srcTxt:SetText("") end
+                if row.iconTex  then row.iconTex:SetTexture("") end
             else
                 local equippedId = GetInventoryItemID("player", slot.id)
                 local hasBIS     = equippedId and equippedId == bisEntry.id
 
-                -- Name: show BIS item name (prefer client cache, fall back to stored)
-                local nameStr = Trunc(GetBISItemName(bisEntry.id, bisEntry.name), 18)
+                -- Icon + name from item cache
+                local iname, _, quality, _, _, _, _, _, _, texture = GetItemInfo(bisEntry.id)
+                local nameStr = iname or bisEntry.name or ("Item #" .. bisEntry.id)
                 row.nameTxt:SetText(nameStr)
+                if row.iconTex then
+                    row.iconTex:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+                end
+
+                -- Source (from scraped data)
+                if row.srcTxt then
+                    row.srcTxt:SetText(bisEntry.src or "")
+                end
+
+                -- Quality color for name
+                local qr, qg, qb = 0.9, 0.9, 0.9
+                if quality then qr, qg, qb = GetItemQualityColor(quality) end
 
                 if hasBIS then
-                    -- Player has the best BIS item
-                    row.nameTxt:SetTextColor(0.3, 0.9, 0.3)
+                    row.nameTxt:SetTextColor(qr, qg, qb)
                     row.statusTxt:SetText("|cff00ff00v|r")
                 elseif equippedRank then
-                    -- Player has a lower-ranked BIS item
-                    row.nameTxt:SetTextColor(1.0, 0.82, 0.0)
+                    row.nameTxt:SetTextColor(qr, qg, qb)
                     row.statusTxt:SetText("|cffffff00^|r")
                 else
-                    -- Player does not have any BIS item for this slot
-                    row.nameTxt:SetTextColor(0.9, 0.4, 0.4)
-                    row.statusTxt:SetText("|cffff4444!|r")
+                    row.nameTxt:SetTextColor(qr * 0.7, qg * 0.7, qb * 0.7)
+                    row.statusTxt:SetText("")
+                end
+            end
+
+            -- Alt rows (rank 2 / 3)
+            local altRows = IRR_BIS.altRows and IRR_BIS.altRows[slot.id]
+            if altRows then
+                for altRank = 2, 3 do
+                    local entry = altRows[altRank]
+                    if entry then
+                        local altEntry = slotData and slotData[altRank]
+                        entry.data = altEntry  -- store for tooltip access
+                        local arow = entry.frame
+                        if arow then
+                            if altEntry then
+                                local an, _, aq, _, _, _, _, _, _, atex = GetItemInfo(altEntry.id)
+                                arow.nameTxt:SetText(an or altEntry.name or ("Item #" .. altEntry.id))
+                                if aq then
+                                    local r,g,b = GetItemQualityColor(aq)
+                                    arow.nameTxt:SetTextColor(r*0.6, g*0.6, b*0.6)
+                                end
+                                if arow.iconTex then
+                                    arow.iconTex:SetTexture(atex or "Interface\\Icons\\INV_Misc_QuestionMark")
+                                end
+                                arow:Show()
+                            else
+                                arow:Hide()
+                            end
+                        end
+                    end
                 end
             end
         end
     end
 end
+
+-- Auto-refresh when item cache populates for previously-unknown items
+local bisItemEventFrame = CreateFrame("Frame")
+bisItemEventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+bisItemEventFrame:SetScript("OnEvent", function(self, event, itemId, success)
+    if success and IRR_BIS.frame and IRR_BIS.frame:IsVisible() then
+        IRR_RefreshBISPanel()
+    end
+end)
 
 -- Debug command: /bisdbg
 SLASH_BISDBG1 = "/bisdbg"

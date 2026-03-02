@@ -965,17 +965,17 @@ end
 local function BuildStatRows(parent)
     for i = 1, MAX_STAT_ROWS do
         local row = CreateFrame("Frame", nil, parent)
-        row:SetSize(SIDE_W - PAD*2 - 16, 16)
-        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((i-1)*16))
+        row:SetSize(SIDE_W - PAD*2 - 16, 24)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((i-1)*24))
 
         local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lbl:SetFont(lbl:GetFont(), 10, "")
+        lbl:SetFont(lbl:GetFont(), 12, "")
         lbl:SetPoint("LEFT", row, "LEFT", 0, 0)
         lbl:SetJustifyH("LEFT")
         lbl:SetWidth((SIDE_W - PAD*2 - 16) * 0.60)
 
         local val = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        val:SetFont(val:GetFont(), 10, "")
+        val:SetFont(val:GetFont(), 12, "")
         val:SetPoint("RIGHT", row, "RIGHT", 0, 0)
         val:SetJustifyH("RIGHT")
 
@@ -3701,7 +3701,7 @@ function SC_BuildMain()
     statsScroll:SetPoint("TOPLEFT",     statsTab, "TOPLEFT",      PAD,  -2)
     statsScroll:SetPoint("BOTTOMRIGHT", statsTab, "BOTTOMRIGHT", -22,    2)
     local statsCont = CreateFrame("Frame", nil, statsScroll)
-    statsCont:SetSize(SIDE_W - PAD*2 - 22, MAX_STAT_ROWS * 16)
+    statsCont:SetSize(SIDE_W - PAD*2 - 22, MAX_STAT_ROWS * 24)
     statsScroll:SetScrollChild(statsCont)
     BuildStatRows(statsCont)
 
