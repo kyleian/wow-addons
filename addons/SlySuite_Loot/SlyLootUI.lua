@@ -4,9 +4,9 @@
 
 local SL = SlyLoot  -- alias to namespace set in SlyLoot.lua
 
-local PANEL_W, PANEL_H = 360, 460
-local ROW_H = 20
-local TAB_H = 26
+local PANEL_W, PANEL_H = 420, 520
+local ROW_H = 22
+local TAB_H = 28
 
 -- ── Scroll helpers ────────────────────────────────────────────────────────────
 local function CreateScrollBox(parent, x, y, w, h)
