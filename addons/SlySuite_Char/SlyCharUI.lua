@@ -112,6 +112,24 @@ local SLOT_INVTYPES = {
     [0] ={INVTYPE_AMMO=true},
 }
 
+-- Blizzard's secure character-frame slot button names, keyed by inventory slotId.
+-- Used by the SecureActionButtonTemplate overlay so /click can resolve kit/oil
+-- targeting mode through Blizzard's own secure code path.
+local BLIZ_SLOT_NAMES = {
+    [1] ="CharacterHeadSlot",            [2] ="CharacterNeckSlot",
+    [3] ="CharacterShoulderSlot",        [4] ="CharacterShirtSlot",
+    [5] ="CharacterChestSlot",           [6] ="CharacterWaistSlot",
+    [7] ="CharacterLegsSlot",            [8] ="CharacterFeetSlot",
+    [9] ="CharacterWristSlot",           [10]="CharacterHandsSlot",
+    [11]="CharacterFinger0Slot",         [12]="CharacterFinger1Slot",
+    [13]="CharacterTrinket0Slot",        [14]="CharacterTrinket1Slot",
+    [15]="CharacterBackSlot",
+    [16]="CharacterMainHandSlot",
+    [17]="CharacterSecondaryHandSlot",
+    [18]="CharacterRangedSlot",
+    [19]="CharacterTabardSlot",
+}
+
 -- ---- Widget refs (module-level) ----
 local slotWidgets   = {}
 local tabFrames     = {}
@@ -120,6 +138,22 @@ local statRows      = {}
 local setRowWidgets = {}
 local repRows       = {}
 local skillRows     = {}
+-- Secure overlay buttons (per slot) that handle SpellIsTargeting() application.
+local _secureSlots  = {}
+-- One shared OnUpdate monitor that enables/disables the overlays.
+local _targetMonitor = CreateFrame("Frame")
+do
+    local _wasTargeting = false
+    _targetMonitor:SetScript("OnUpdate", function()
+        local t = SpellIsTargeting()
+        if t ~= _wasTargeting then
+            _wasTargeting = t
+            for _, sBtn in pairs(_secureSlots) do
+                sBtn:EnableMouse(t)
+            end
+        end
+    end)
+end
 local nitLockRows   = {}
 local nitRunRows    = {}
 local nitRunHeader  = nil
@@ -901,14 +935,8 @@ local function BuildSlot(parent, slotId, label, x, y)
             -- "item" cursor = bag item being dragged in — equip it.
             -- "spell" cursor = rogue poison or weapon enchant targeting — allow on
             --   weapon slots (16=mainhand, 17=offhand). Block on other slots.
-            -- Armor kits, oils, stones, and poisons use SpellIsTargeting() mode.
-            -- GetCursorInfo() returns nil during item-use targeting, so check this first.
-            if SpellIsTargeting() and slotId ~= 0 and GetInventoryItemTexture("player", slotId) then
-                GameTooltip:Hide()
-                local ok = pcall(PickupInventoryItem, slotId)
-                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
-                return
-            end
+            -- SpellIsTargeting() mode (armor kit / oil / stone / poison) is handled
+            -- by the SecureActionButtonTemplate overlay — no insecure pcall needed here.
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
                 -- Only block a spell cursor if the slot is empty — can't apply to nothing.
@@ -932,6 +960,21 @@ local function BuildSlot(parent, slotId, label, x, y)
             end
         end
     end)
+
+    -- SecureActionButtonTemplate overlay: when SpellIsTargeting() is active
+    -- (armor kit, oil, stone, poison being applied), left-click resolves the
+    -- pending application via Blizzard's own secure slot button.  The overlay
+    -- has EnableMouse(false) by default and is switched on by _targetMonitor.
+    local blizName = BLIZ_SLOT_NAMES[slotId]
+    if blizName then
+        local sBtn = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
+        sBtn:SetAllPoints(btn)
+        sBtn:SetAttribute("type", "macro")
+        sBtn:SetAttribute("macrotext", "/click "..blizName)
+        sBtn:RegisterForClicks("LeftButtonUp")
+        sBtn:EnableMouse(false)  -- only active while SpellIsTargeting()
+        _secureSlots[slotId] = sBtn
+    end
 
     local w = {frame=btn, icon=icon, border=border}
     slotWidgets[slotId] = w
