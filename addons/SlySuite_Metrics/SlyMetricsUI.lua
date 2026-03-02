@@ -4,14 +4,14 @@
 local W       = 280
 local TITLE_H = 20
 local TAB_H   = 18
-local ROW_H   = 14
-local ROW_PAD = 1
+local ROW_H   = 18
+local ROW_PAD = 2
 local PAD     = 4
 local DPS_MAX = 8
 local THR_MAX = 6
-local SECT_H  = 16
+local SECT_H  = 18
 local SEP_H   = 4
-local FOOT_H  = 13
+local FOOT_H  = 16
 
 local DPS_BLK = DPS_MAX * (ROW_H + ROW_PAD)
 local THR_BLK = THR_MAX * (ROW_H + ROW_PAD)
@@ -49,19 +49,19 @@ local function MakeRow(parent)
     r.bar:SetTexture(BAR_TEX)
 
     r.rank = r:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    r.rank:SetFont(r.rank:GetFont(), 7, "OUTLINE")
+    r.rank:SetFont(r.rank:GetFont(), 9, "OUTLINE")
     r.rank:SetPoint("LEFT", r, "LEFT", 2, 0)
-    r.rank:SetWidth(12)
+    r.rank:SetWidth(14)
     r.rank:SetJustifyH("CENTER")
 
     r.nm = r:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    r.nm:SetFont(r.nm:GetFont(), 8, "OUTLINE")
-    r.nm:SetPoint("LEFT", r, "LEFT", 16, 0)
-    r.nm:SetWidth(rw - 16 - 68)
+    r.nm:SetFont(r.nm:GetFont(), 10, "OUTLINE")
+    r.nm:SetPoint("LEFT", r, "LEFT", 18, 0)
+    r.nm:SetWidth(rw - 18 - 68)
     r.nm:SetJustifyH("LEFT")
 
     r.val = r:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    r.val:SetFont(r.val:GetFont(), 7, "OUTLINE")
+    r.val:SetFont(r.val:GetFont(), 9, "OUTLINE")
     r.val:SetPoint("RIGHT", r, "RIGHT", -2, 0)
     r.val:SetWidth(66)
     r.val:SetJustifyH("RIGHT")
@@ -299,7 +299,7 @@ function SM_BuildUI()
         b.tx = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         b.tx:SetAllPoints()
         b.tx:SetJustifyH("CENTER")
-        b.tx:SetFont(b.tx:GetFont(), 9, "OUTLINE")
+        b.tx:SetFont(b.tx:GetFont(), 11, "OUTLINE")
         b.tx:SetText(td.label)
 
         local pid = td.id
@@ -336,7 +336,7 @@ function SM_BuildUI()
     sep:SetColorTexture(0.15, 0.15, 0.25, 1)
 
     local thrLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    thrLabel:SetFont(thrLabel:GetFont(), 8, "OUTLINE")
+    thrLabel:SetFont(thrLabel:GetFont(), 10, "OUTLINE")
     thrLabel:SetPoint("TOPLEFT", f, "TOPLEFT", PAD+2, sepTop - 1)
     thrLabel:SetHeight(SECT_H)
     thrLabel:SetJustifyH("LEFT")
@@ -355,7 +355,7 @@ function SM_BuildUI()
 
     -- status footer
     local st = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    st:SetFont(st:GetFont(), 7, "OUTLINE")
+    st:SetFont(st:GetFont(), 9, "OUTLINE")
     st:SetPoint("BOTTOMLEFT",  f, "BOTTOMLEFT",   PAD+2, 3)
     st:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -(PAD+2), 3)
     st:SetJustifyH("CENTER")
