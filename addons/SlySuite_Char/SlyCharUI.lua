@@ -874,19 +874,11 @@ local function BuildSlot(parent, slotId, label, x, y)
     btn:SetScript("OnReceiveDrag", function(self)
         if slotId == 0 then return end
         local ctype = GetCursorInfo()
-        -- If no explicit cursor type, check if SlyBag just fired a use-targeting event
-        -- (armor kits, sharpening stones, oils, rogue poisons in non-spell form, etc.
-        -- enter a mode where GetCursorInfo() returns nil but PickupInventoryItem still
-        -- triggers the application at the C level).
-        local inTargeting = (not ctype)
-            and SlyBag and SlyBag._targeting
-            and (GetTime() - SlyBag._targeting) < 8
-        if not ctype and not inTargeting then return end
-        if inTargeting then SlyBag._targeting = nil end
-        -- "spell" cursor = rogue poison targeting or other weapon applicables.
-        -- Allow weapon slots (mainhand=16, offhand=17) to receive spell-cursor drops
-        -- (e.g. rogue poisons).  Block on all other slots to avoid intercepting casts.
-        if ctype == "spell" and slotId ~= 16 and slotId ~= 17 then return end
+        if not ctype then return end
+        -- Only block a spell cursor if the slot is empty — you can't apply an
+        -- enhancement to nothing, and an empty-slot click was likely accidental.
+        -- Occupied slots allow any cursor type (kits / oils / stones / poisons).
+        if ctype == "spell" and not GetInventoryItemTexture("player", slotId) then return end
         GameTooltip:Hide()
         local ok = pcall(PickupInventoryItem, slotId)
         if ok then UpdateSlot(slotWidgets[slotId], slotId) end
@@ -911,20 +903,8 @@ local function BuildSlot(parent, slotId, label, x, y)
             --   weapon slots (16=mainhand, 17=offhand). Block on other slots.
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
-                if ctype == "spell" and slotId ~= 16 and slotId ~= 17 then return end
-                local ok = pcall(PickupInventoryItem, slotId)
-                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
-                return
-            end
-            -- No Lua-visible cursor, but SlyBag may have just issued UseContainerItem
-            -- for an armor kit / oil / stone / poison — those enter an item-application
-            -- targeting mode where GetCursorInfo() returns nil.  If we're within 8s of
-            -- that event, attempt PickupInventoryItem (which triggers the application at
-            -- the C level) instead of opening the gear picker.
-            if slotId ~= 0
-               and SlyBag and SlyBag._targeting
-               and (GetTime() - SlyBag._targeting) < 8 then
-                SlyBag._targeting = nil
+                -- Only block a spell cursor if the slot is empty — can't apply to nothing.
+                if ctype == "spell" and not GetInventoryItemTexture("player", slotId) then return end
                 local ok = pcall(PickupInventoryItem, slotId)
                 if ok then UpdateSlot(slotWidgets[slotId], slotId) end
                 return
