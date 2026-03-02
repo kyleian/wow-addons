@@ -43,8 +43,15 @@ local function HookBlizzardBags()
             f:HookScript("OnShow", function(self)
                 self:Hide()   -- suppress the Blizzard frame
                 if SlyBagFrame then
-                    SlyBag_Refresh()
-                    SlyBagFrame:Show()
+                    -- Because all ContainerFrames are always hidden, AreAllBagsOpen()
+                    -- always returns false, so B always fires OpenAllBags rather than
+                    -- CloseAllBags. We toggle manually here to give proper B-key behaviour.
+                    if SlyBagFrame:IsShown() then
+                        SlyBagFrame:Hide()
+                    else
+                        SlyBag_Refresh()
+                        SlyBagFrame:Show()
+                    end
                 end
             end)
             f:Hide()          -- hide any already-visible frame at load time
