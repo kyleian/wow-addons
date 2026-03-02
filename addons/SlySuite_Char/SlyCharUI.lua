@@ -901,6 +901,14 @@ local function BuildSlot(parent, slotId, label, x, y)
             -- "item" cursor = bag item being dragged in — equip it.
             -- "spell" cursor = rogue poison or weapon enchant targeting — allow on
             --   weapon slots (16=mainhand, 17=offhand). Block on other slots.
+            -- Armor kits, oils, stones, and poisons use SpellIsTargeting() mode.
+            -- GetCursorInfo() returns nil during item-use targeting, so check this first.
+            if SpellIsTargeting() and slotId ~= 0 and GetInventoryItemTexture("player", slotId) then
+                GameTooltip:Hide()
+                local ok = pcall(PickupInventoryItem, slotId)
+                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
+                return
+            end
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
                 -- Only block a spell cursor if the slot is empty — can't apply to nothing.
