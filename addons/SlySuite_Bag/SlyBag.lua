@@ -9,6 +9,48 @@ local ADDON_NAME = "SlySuite_Bag"
 local ADDON_VERSION = "1.1.4"
 
 SlyBag = SlyBag or {}
+SlyBag.newItems = {}   -- { ["bag:slot"] = {bag,slot} } items gained this session
+SlyBag._prevInv = {}   -- [bagId][slot] = itemId string, for change detection
+
+-- -------------------------------------------------------
+-- New-item tracking
+-- -------------------------------------------------------
+local function _SBGetLink(bag, slot)
+    if C_Container and C_Container.GetContainerItemLink then
+        return C_Container.GetContainerItemLink(bag, slot)
+    end
+    return GetContainerItemLink(bag, slot)
+end
+local function _SBNumSlots(bag)
+    if C_Container and C_Container.GetContainerNumSlots then
+        return C_Container.GetContainerNumSlots(bag) or 0
+    end
+    return GetContainerNumSlots(bag) or 0
+end
+
+local function SnapshotInventory()
+    for bag = 0, 4 do
+        SlyBag._prevInv[bag] = {}
+        for slot = 1, _SBNumSlots(bag) do
+            local link = _SBGetLink(bag, slot)
+            SlyBag._prevInv[bag][slot] = link and link:match("|Hitem:(%d+):") or nil
+        end
+    end
+end
+
+local function TrackNewItems(bagId)
+    local prev = SlyBag._prevInv[bagId] or {}
+    local curr = {}
+    for slot = 1, _SBNumSlots(bagId) do
+        local link = _SBGetLink(bagId, slot)
+        local id = link and link:match("|Hitem:(%d+):") or nil
+        curr[slot] = id
+        if id and id ~= prev[slot] then
+            SlyBag.newItems[bagId.."|"..slot] = { bag=bagId, slot=slot }
+        end
+    end
+    SlyBag._prevInv[bagId] = curr
+end
 
 local DB_DEFAULTS = {
     position      = { point = "CENTER", x = 0, y = 0 },
@@ -77,14 +119,18 @@ ef:SetScript("OnEvent", function(self, event, arg1)
 
         SlyBag_BuildUI()
         HookBlizzardBags()
+        SnapshotInventory()  -- seed before tracking; nothing marked new on load
 
         if SlySuiteDataFrame and SlySuiteDataFrame.Register then
             SlySuiteDataFrame.Register(ADDON_NAME, ADDON_VERSION, function() end, {
-                description = "Bagnon-style bag window — all bags in one grid.",
+                description = "Bagnon-style bag window \226\128\148 all bags in one grid.",
                 slash       = "/slybag",
                 icon        = "Interface\\Buttons\\Button-Backpack-Up",
             })
         end
+    elseif event == "BAG_UPDATE" then
+        TrackNewItems(arg1)
+        if SlyBagFrame and SlyBagFrame:IsShown() then SlyBag_Refresh() end
     else
         if SlyBagFrame and SlyBagFrame:IsShown() then SlyBag_Refresh() end
     end

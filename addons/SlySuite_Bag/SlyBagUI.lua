@@ -214,7 +214,11 @@ local function NewSlotButton(parent, idx)
     b:SetScript("OnClick", function(self, btn)
         if self.bag == nil then return end
         if btn == "LeftButton" then
-            _PickupItem(self.bag, self.slot)
+            if MerchantFrame and MerchantFrame:IsShown() then
+                _UseItem(self.bag, self.slot)    -- sell at vendor
+            else
+                _PickupItem(self.bag, self.slot)
+            end
         elseif btn == "RightButton" then
             _UseItem(self.bag, self.slot)
         end
@@ -247,6 +251,29 @@ function SlyBag_Refresh()
     local SlyBagContent = SlyBagFrame.content
     local filter = searchText:lower()
 
+    -- Build New Items list from tracked acquisitions
+    local newItemList = {}
+    local skipSlots   = {}  -- bag|slot keys in newItemList; excluded from normal buckets
+    for key, loc in pairs(SlyBag.newItems or {}) do
+        local tex, stackCnt, _, quality, link = _ItemInfo(loc.bag, loc.slot)
+        if not link and tex then
+            link = _ItemLink and _ItemLink(loc.bag, loc.slot) or nil
+        end
+        if tex then
+            local itemName = (link and GetItemInfo(link)) or ""
+            local passes = (filter == "") or itemName:lower():find(filter, 1, true)
+            if passes then
+                newItemList[#newItemList+1] = {
+                    bag=loc.bag, slot=loc.slot, texture=tex,
+                    count=stackCnt or 0, quality=quality or -1, name=itemName,
+                }
+                skipSlots[loc.bag.."|"..loc.slot] = true
+            end
+        else
+            SlyBag.newItems[key] = nil  -- item gone; retire
+        end
+    end
+
     -- Collect and bucket all bag slots
     local buckets  = {}
     local setMap   = BuildSetMap()
@@ -269,7 +296,7 @@ function SlyBag_Refresh()
                 end
                 local passes = (filter == "")
                     or itemName:lower():find(filter, 1, true)
-                if passes then
+                if passes and not skipSlots[bag.."|"..slot] then
                     local it = {
                         bag=bag, slot=slot, texture=tex,
                         count=stackCnt or 0, quality=quality or -1, name=itemName,
@@ -302,8 +329,14 @@ function SlyBag_Refresh()
         end
     end
 
-    -- Build visible sections: gear sets first, then type categories
+    -- Build visible sections: new items first, then gear sets, then type categories
     local visible = {}
+    if #newItemList > 0 then
+        visible[#visible+1] = {
+            def = { label="New Items", r=1.00, g=0.85, b=0.15, bg={0.22,0.17,0.02} },
+            items = newItemList,
+        }
+    end
     for i, setName in ipairs(setNames) do
         local items = buckets["SET:"..setName]
         if items and #items > 0 then
@@ -490,5 +523,6 @@ function SlyBag_BuildUI()
     slotTx:SetPoint("BOTTOMRIGHT", f,"BOTTOMRIGHT", -(SIDE_PAD+2), 6)
     slotTx:SetTextColor(0.55,0.55,0.62)    f.slotTx = slotTx
     f:SetScript("OnShow", function() SlyBag_Refresh() end)
+    f:SetScript("OnHide", function() SlyBag.newItems = {} end)
     f:Hide()
 end
