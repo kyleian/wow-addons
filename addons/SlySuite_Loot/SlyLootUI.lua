@@ -1,14 +1,43 @@
--- SlyLootUI.lua
+﻿-- SlyLootUI.lua
 -- Panel for SlyLoot: tabbed [Rolls] / [Soft Res] interface.
--- Soft Res supports paste-import of softres.it CSV exports.
+-- Style: matches SlySuite dark theme (SlyChar style guide).
 
 local SL = SlyLoot  -- alias to namespace set in SlyLoot.lua
 
-local PANEL_W, PANEL_H = 420, 520
-local ROW_H = 22
-local TAB_H = 28
+-- ── Layout constants ─────────────────────────────────────────────────────────
+local PANEL_W = 420
+local PANEL_H = 520
+local HDR_H   = 28
+local TAB_H   = 24
+local PAD     = 8
+local ROW_H   = 20
+local FOOT_H  = 36
+local PW      = PANEL_W - PAD*2   -- usable inner width
+local CONT_TOP = -(HDR_H + TAB_H + 2)
+local CONT_H   = PANEL_H - HDR_H - TAB_H - 2 - FOOT_H
 
--- ── Scroll helpers ────────────────────────────────────────────────────────────
+-- ── Helpers ──────────────────────────────────────────────────────────────────
+local function FillBg(frame, r, g, b, a)
+    local t = frame:CreateTexture(nil, "BACKGROUND")
+    t:SetAllPoints(frame); t:SetColorTexture(r, g, b, a)
+    return t
+end
+
+local function MakeDiv(parent, yOff)
+    local d = parent:CreateTexture(nil, "ARTWORK")
+    d:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, yOff)
+    d:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, yOff)
+    d:SetHeight(1); d:SetColorTexture(0.20, 0.20, 0.27, 1)
+    return d
+end
+
+local function MakeLabel(parent, size, r, g, b)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fs:SetFont(fs:GetFont(), size or 10, "")
+    fs:SetTextColor(r or 1, g or 1, b or 1)
+    return fs
+end
+
 local function CreateScrollBox(parent, x, y, w, h)
     local sf = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
     sf:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -19,9 +48,8 @@ local function CreateScrollBox(parent, x, y, w, h)
     return sf, content
 end
 
--- ── Build UI ──────────────────────────────────────────────────────────────────
+-- ── Build UI ─────────────────────────────────────────────────────────────────
 function SL_BuildUI()
-    -- Ensure DB is initialised even if Init() was never called
     if not SlyLootDB then
         SlyLootDB = {}
         if SlyLoot and SlyLoot.Init then SlyLoot:Init() end
@@ -33,104 +61,135 @@ function SL_BuildUI()
         return
     end
 
-    local f = CreateFrame("Frame", "SlyLootPanel", UIParent, "BackdropTemplate")
+    -- Main frame
+    local f = CreateFrame("Frame", "SlyLootPanel", UIParent)
     f:SetSize(PANEL_W, PANEL_H)
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("DIALOG")
     f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         local pt, _, _, x, y = self:GetPoint()
-        SlyLootDB.position = { point = pt, x = x, y = y }
+        SlyLootDB.position = { point=pt, x=x, y=y }
     end)
-    f:SetBackdrop({
-        bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 16,
-        insets = { left=4, right=4, top=4, bottom=4 },
-    })
-    f:SetBackdropColor(0, 0, 0, 1)
 
-    -- Title bar
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOP", f, "TOP", 0, -10)
-    title:SetText("|cff00ccffSlyGargul|r")
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
-    close:SetScript("OnClick", function() f:Hide() end)
+    -- Background
+    local bord = f:CreateTexture(nil, "OVERLAY")
+    bord:SetAllPoints(f); bord:SetColorTexture(0.28, 0.28, 0.35, 1)
+    FillBg(f, 0.05, 0.05, 0.07, 0.97)
+    local inner = f:CreateTexture(nil, "BACKGROUND")
+    inner:SetPoint("TOPLEFT",     f, "TOPLEFT",      1, -1)
+    inner:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1,  1)
+    inner:SetColorTexture(0.05, 0.05, 0.07, 0.97)
 
-    -- ── Tab buttons ──────────────────────────────────────────────────────────
-    local TABS = { "Rolls", "Soft Res" }
+    -- Header bar
+    local hdr = CreateFrame("Frame", nil, f)
+    hdr:SetSize(PANEL_W, HDR_H)
+    hdr:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    FillBg(hdr, 0.09, 0.09, 0.14, 1)
+
+    local titleTx = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    titleTx:SetFont(titleTx:GetFont(), 13, "OUTLINE")
+    titleTx:SetPoint("LEFT", hdr, "LEFT", PAD, 0)
+    titleTx:SetText("|cff00ccffSlyGargul|r")
+
+    local closeBtn = CreateFrame("Button", nil, hdr, "UIPanelCloseButton")
+    closeBtn:SetSize(24, 24)
+    closeBtn:SetPoint("RIGHT", hdr, "RIGHT", -2, 0)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    local hdrSep = f:CreateTexture(nil, "ARTWORK")
+    hdrSep:SetPoint("TOPLEFT",  f, "TOPLEFT",  0, -HDR_H)
+    hdrSep:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -HDR_H)
+    hdrSep:SetHeight(1); hdrSep:SetColorTexture(0.25, 0.25, 0.32, 1)
+
+    -- Tab strip
+    local TABS    = { "Rolls", "Soft Res" }
     local tabBtns = {}
     local activeTab = "Rolls"
 
     local function HighlightTab(name)
         for _, t in ipairs(TABS) do
-            local btn = tabBtns[t]
+            local b = tabBtns[t]
             if t == name then
-                btn:GetNormalTexture():SetVertexColor(0.3, 1, 0.3)
+                b.bg:SetColorTexture(0.14, 0.30, 0.58, 1)
+                b.tx:SetTextColor(1, 1, 1)
             else
-                btn:GetNormalTexture():SetVertexColor(1, 1, 1)
+                b.bg:SetColorTexture(0.07, 0.07, 0.10, 1)
+                b.tx:SetTextColor(0.55, 0.55, 0.60)
             end
         end
     end
 
-    local function SwitchTab(name)
-        activeTab = name
-        HighlightTab(name)
-        SL.uiRefresh()
-    end
-
-    local tabW = math.floor((PANEL_W - 16) / #TABS)
+    local tw = math.floor(PANEL_W / #TABS)
     for i, t in ipairs(TABS) do
-        local btn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-        btn:SetSize(tabW, TAB_H)
-        btn:SetPoint("TOPLEFT", f, "TOPLEFT", 8 + (i-1)*tabW, -30)
-        btn:SetText(t)
-        btn:SetScript("OnClick", function() SwitchTab(t) end)
-        tabBtns[t] = btn
+        local b = CreateFrame("Button", nil, f)
+        b:SetSize(tw, TAB_H)
+        b:SetPoint("TOPLEFT", f, "TOPLEFT", (i-1)*tw, -HDR_H - 1)
+        b.bg = b:CreateTexture(nil, "BACKGROUND")
+        b.bg:SetAllPoints(); b.bg:SetColorTexture(0.07, 0.07, 0.10, 1)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(); hl:SetColorTexture(0.3, 0.5, 0.9, 0.18)
+        b.tx = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        b.tx:SetFont(b.tx:GetFont(), 11, "OUTLINE")
+        b.tx:SetAllPoints(); b.tx:SetJustifyH("CENTER")
+        b.tx:SetText(t)
+        tabBtns[t] = b
+        local tabName = t
+        b:SetScript("OnClick", function()
+            activeTab = tabName
+            HighlightTab(activeTab)
+            SL.uiRefresh()
+        end)
     end
 
-    -- ── ROLLS tab content ─────────────────────────────────────────────────────
+    local tabSep = f:CreateTexture(nil, "ARTWORK")
+    tabSep:SetPoint("TOPLEFT",  f, "TOPLEFT",  0, CONT_TOP)
+    tabSep:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, CONT_TOP)
+    tabSep:SetHeight(1); tabSep:SetColorTexture(0.20, 0.20, 0.27, 1)
+
+    -- ── ROLLS pane ────────────────────────────────────────────────────────────
     local rollsPane = CreateFrame("Frame", nil, f)
-    rollsPane:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -(30 + TAB_H + 4))
-    rollsPane:SetSize(PANEL_W - 16, PANEL_H - (30 + TAB_H + 4) - 38)
+    rollsPane:SetPoint("TOPLEFT",     f, "TOPLEFT",      PAD, CONT_TOP - 1)
+    rollsPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PAD, FOOT_H)
 
-    -- Current item bar
-    local itemBg = CreateFrame("Frame", nil, rollsPane)
-    itemBg:SetPoint("TOPLEFT", rollsPane, "TOPLEFT", 0, 0)
-    itemBg:SetSize(PANEL_W - 16, 40)
-    if itemBg.SetBackdrop then
-        itemBg:SetBackdrop({ bgFile="Interface\\Buttons\\WHITE8x8", edgeFile="", tileSize=8, tile=true, edgeSize=0, insets={left=0,right=0,top=0,bottom=0} })
-        itemBg:SetBackdropColor(0, 0.12, 0.25, 0.8)
-    end
+    -- Active-item bar (40px tall)
+    local itemBar = CreateFrame("Frame", nil, rollsPane)
+    itemBar:SetPoint("TOPLEFT",  rollsPane, "TOPLEFT",  0, 0)
+    itemBar:SetPoint("TOPRIGHT", rollsPane, "TOPRIGHT", 0, 0)
+    itemBar:SetHeight(40)
+    FillBg(itemBar, 0, 0.12, 0.25, 0.80)
 
-    local itemIcon = itemBg:CreateTexture(nil, "ARTWORK")
+    local itemIcon = itemBar:CreateTexture(nil, "ARTWORK")
     itemIcon:SetSize(32, 32)
-    itemIcon:SetPoint("LEFT", itemBg, "LEFT", 4, 0)
+    itemIcon:SetPoint("LEFT", itemBar, "LEFT", 4, 0)
 
-    local itemLabel = itemBg:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    itemLabel:SetPoint("LEFT", itemIcon, "RIGHT", 6, 4)
-    itemLabel:SetText("No active roll")
+    local itemLabel = itemBar:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    itemLabel:SetFont(itemLabel:GetFont(), 11, "")
+    itemLabel:SetPoint("TOPLEFT", itemIcon, "TOPRIGHT", 6, -5)
+    itemLabel:SetText("No active roll session")
 
-    local rollCount = itemBg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    rollCount:SetPoint("LEFT", itemIcon, "RIGHT", 6, -8)
+    local rollCount = itemBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    rollCount:SetFont(rollCount:GetFont(), 9, "")
+    rollCount:SetPoint("BOTTOMLEFT", itemIcon, "BOTTOMRIGHT", 6, 4)
     rollCount:SetTextColor(0.6, 0.8, 1)
     rollCount:SetText("")
 
-    -- Manual item input
-    local inputLabel = rollsPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    inputLabel:SetPoint("TOPLEFT", rollsPane, "TOPLEFT", 0, -46)
-    inputLabel:SetText("Item:")
+    MakeDiv(rollsPane, -42)
+
+    -- Item input row (y = -50)
+    local inputLbl = MakeLabel(rollsPane, 10, 0.7, 0.7, 0.7)
+    inputLbl:SetPoint("TOPLEFT", rollsPane, "TOPLEFT", 0, -50)
+    inputLbl:SetText("Item:")
 
     local itemInput = CreateFrame("EditBox", "SlyLootItemInput", rollsPane, "InputBoxTemplate")
-    itemInput:SetSize(PANEL_W - 116, 20)
-    itemInput:SetPoint("TOPLEFT", rollsPane, "TOPLEFT", 36, -44)
+    itemInput:SetSize(PW - 110, 20)
+    itemInput:SetPoint("TOPLEFT", rollsPane, "TOPLEFT", 38, -48)
     itemInput:SetAutoFocus(false)
     itemInput:SetScript("OnEscapePressed", itemInput.ClearFocus)
 
     local startBtn = CreateFrame("Button", nil, rollsPane, "UIPanelButtonTemplate")
-    startBtn:SetSize(60, 20)
+    startBtn:SetSize(66, 20)
     startBtn:SetPoint("LEFT", itemInput, "RIGHT", 4, 0)
     startBtn:SetText("Roll!")
     startBtn:SetScript("OnClick", function()
@@ -138,118 +197,160 @@ function SL_BuildUI()
         if txt and txt ~= "" then SL:StartRoll(nil, txt); itemInput:SetText("") end
     end)
 
-    -- Roll list header
-    local hdrName = rollsPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    hdrName:SetPoint("TOPLEFT", rollsPane, "TOPLEFT", 4, -72)
-    hdrName:SetText("|cffffffffPlayer|r")
-    local hdrRoll = rollsPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    hdrRoll:SetPoint("TOPRIGHT", rollsPane, "TOPRIGHT", -4, -72)
-    hdrRoll:SetText("|cffffffffRoll|r")
+    MakeDiv(rollsPane, -74)
 
-    local rollContentH = rollsPane:GetHeight() - 80
-    local rollSF, rollContent = CreateScrollBox(rollsPane, 0, -88, PANEL_W - 16, rollContentH - 2)
+    -- Roll list headers
+    local hdrName = MakeLabel(rollsPane, 10, 0.65, 0.65, 0.65)
+    hdrName:SetPoint("TOPLEFT",  rollsPane, "TOPLEFT",  4, -78)
+    hdrName:SetText("Player")
+    local hdrRoll = MakeLabel(rollsPane, 10, 0.65, 0.65, 0.65)
+    hdrRoll:SetPoint("TOPRIGHT", rollsPane, "TOPRIGHT", -4, -78)
+    hdrRoll:SetText("Roll")
+
+    local rollListH = CONT_H - 42 - 36 - 20
+    local rollSF, rollContent = CreateScrollBox(rollsPane, 0, -94, PW, rollListH)
     local rollRows = {}
     for i = 1, 20 do
         local row = CreateFrame("Frame", nil, rollContent)
-        row:SetSize(PANEL_W - 36, ROW_H)
+        row:SetSize(PW - 18, ROW_H)
         row:SetPoint("TOPLEFT", rollContent, "TOPLEFT", 0, -(i-1)*ROW_H)
+        if i % 2 == 0 then
+            local rbg = row:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints(); rbg:SetColorTexture(1,1,1,0.03)
+        end
         row.nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        row.nameFS:SetPoint("LEFT", row, "LEFT", 4, 0)
+        row.nameFS:SetFont(row.nameFS:GetFont(), 10, "")
+        row.nameFS:SetPoint("LEFT",  row, "LEFT",  4, 0)
         row.rollFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        row.rollFS:SetFont(row.rollFS:GetFont(), 10, "")
         row.rollFS:SetPoint("RIGHT", row, "RIGHT", -4, 0)
         row:Hide()
         rollRows[i] = row
     end
 
-    -- ── SOFT RES tab content ──────────────────────────────────────────────────
+
+    -- -- SOFT RES pane ----------------------------------------------------------
     local srPane = CreateFrame("Frame", nil, f)
-    srPane:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -(30 + TAB_H + 4))
-    srPane:SetSize(PANEL_W - 16, PANEL_H - (30 + TAB_H + 4) - 38)
+    srPane:SetPoint("TOPLEFT",     f, "TOPLEFT",      PAD, CONT_TOP - 1)
+    srPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PAD, FOOT_H)
 
-    local srHint = srPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    srHint:SetPoint("TOPLEFT", srPane, "TOPLEFT", 2, -2)
-    srHint:SetWidth(PANEL_W - 20)
-    srHint:SetJustifyH("LEFT")
-    srHint:SetTextColor(0.7, 0.9, 1)
-    srHint:SetText("|cffffcc00How to export:|r softres.gg → your raid → Export → Copy to clipboard\n|cffffffffPaste the CSV text below, then click Import:|r")
+    -- Step labels
+    local srStep1 = MakeLabel(srPane, 10, 1, 0.80, 0)
+    srStep1:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -6)
+    srStep1:SetText("Step 1:")
+    local srStep1Txt = MakeLabel(srPane, 10, 0.75, 0.85, 1)
+    srStep1Txt:SetPoint("LEFT", srStep1, "RIGHT", 4, 0)
+    srStep1Txt:SetText("softres.gg  →  your raid  →  Export  →  Copy CSV")
 
+    local srStep2 = MakeLabel(srPane, 10, 1, 0.80, 0)
+    srStep2:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -24)
+    srStep2:SetText("Step 2:")
+    local srStep2Txt = MakeLabel(srPane, 10, 0.75, 0.85, 1)
+    srStep2Txt:SetPoint("LEFT", srStep2, "RIGHT", 4, 0)
+    srStep2Txt:SetText("Paste the CSV text below, then click Import.")
+
+    MakeDiv(srPane, -42)
+
+    -- Paste box (y = -48, height = 72)
     local srInput = CreateFrame("EditBox", "SlyLootSRInput", srPane, "InputBoxTemplate")
-    srInput:SetSize(PANEL_W - 20, 60)
-    srInput:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -50)
+    srInput:SetSize(PW - 4, 72)
+    srInput:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -48)
     srInput:SetAutoFocus(false)
     srInput:SetMultiLine(true)
     srInput:SetMaxLetters(0)
     srInput:SetScript("OnEscapePressed", srInput.ClearFocus)
 
+    -- Buttons (y = -126)
     local srImportBtn = CreateFrame("Button", nil, srPane, "UIPanelButtonTemplate")
     srImportBtn:SetSize(80, 22)
-    srImportBtn:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -118)
+    srImportBtn:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -126)
     srImportBtn:SetText("Import")
     srImportBtn:SetScript("OnClick", function()
         local txt = srInput:GetText()
-        if txt and txt ~= "" then
-            SL:ImportSR(txt)
-            srInput:SetText("")
-        end
+        if txt and txt ~= "" then SL:ImportSR(txt); srInput:SetText("") end
     end)
 
     local srClearBtn = CreateFrame("Button", nil, srPane, "UIPanelButtonTemplate")
-    srClearBtn:SetSize(60, 22)
+    srClearBtn:SetSize(66, 22)
     srClearBtn:SetPoint("LEFT", srImportBtn, "RIGHT", 6, 0)
     srClearBtn:SetText("Clear")
     srClearBtn:SetScript("OnClick", function() SL:ClearSR() end)
 
-    local srCountFS = srPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    srCountFS:SetPoint("LEFT", srClearBtn, "RIGHT", 8, 0)
-    srCountFS:SetTextColor(0.7, 0.9, 0.5)
+    local srCountFS = MakeLabel(srPane, 10, 0.6, 0.9, 0.5)
+    srCountFS:SetPoint("LEFT", srClearBtn, "RIGHT", 10, 0)
     srCountFS:SetText("")
 
-    -- SR item list header
-    local srHdrItem = srPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    srHdrItem:SetPoint("TOPLEFT", srPane, "TOPLEFT", 4, -148)
-    srHdrItem:SetText("|cffffffffItem|r")
-    local srHdrPlayers = srPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    srHdrPlayers:SetPoint("TOPRIGHT", srPane, "TOPRIGHT", -4, -148)
-    srHdrPlayers:SetText("|cffffffffPlayers|r")
+    MakeDiv(srPane, -154)
 
-    local srListH = srPane:GetHeight() - 156
-    local srSF, srContent = CreateScrollBox(srPane, 0, -164, PANEL_W - 16, srListH - 2)
+    -- SR list headers
+    local srHdrItem = MakeLabel(srPane, 10, 0.65, 0.65, 0.65)
+    srHdrItem:SetPoint("TOPLEFT",  srPane, "TOPLEFT",  4, -158)
+    srHdrItem:SetText("Item")
+    local srHdrPlayers = MakeLabel(srPane, 10, 0.65, 0.65, 0.65)
+    srHdrPlayers:SetPoint("TOPRIGHT", srPane, "TOPRIGHT", -4, -158)
+    srHdrPlayers:SetText("Players")
+
+    -- SR scroll
+    local srListH = CONT_H - 172
+    local srSF, srContent = CreateScrollBox(srPane, 0, -172, PW, srListH)
     local srRows = {}
     for i = 1, 30 do
         local row = CreateFrame("Frame", nil, srContent)
-        row:SetSize(PANEL_W - 36, ROW_H)
+        row:SetSize(PW - 18, ROW_H)
         row:SetPoint("TOPLEFT", srContent, "TOPLEFT", 0, -(i-1)*ROW_H)
-        row.itemFS    = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        if i % 2 == 0 then
+            local rbg = row:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints(); rbg:SetColorTexture(1,1,1,0.03)
+        end
+        row.itemFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        row.itemFS:SetFont(row.itemFS:GetFont(), 10, "")
         row.itemFS:SetPoint("LEFT", row, "LEFT", 4, 0)
-        row.itemFS:SetWidth(math.floor((PANEL_W - 36) * 0.44))
+        row.itemFS:SetWidth(math.floor((PW - 18) * 0.45))
         row.itemFS:SetJustifyH("LEFT")
         row.playersFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        row.playersFS:SetFont(row.playersFS:GetFont(), 10, "")
         row.playersFS:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-        row.playersFS:SetWidth(math.floor((PANEL_W - 36) * 0.54))
+        row.playersFS:SetWidth(math.floor((PW - 18) * 0.53))
         row.playersFS:SetJustifyH("RIGHT")
         row:Hide()
         srRows[i] = row
     end
 
-    -- ── Bottom bar (shared) ───────────────────────────────────────────────────
+    -- -- Footer bar ------------------------------------------------------------
+    local footSep = f:CreateTexture(nil, "ARTWORK")
+    footSep:SetPoint("BOTTOMLEFT",  f, "BOTTOMLEFT",  0, FOOT_H)
+    footSep:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    footSep:SetHeight(1); footSep:SetColorTexture(0.20, 0.20, 0.27, 1)
+    local footBg = f:CreateTexture(nil, "BACKGROUND")
+    footBg:SetPoint("BOTTOMLEFT",  f, "BOTTOMLEFT",  1, 1)
+    footBg:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
+    footBg:SetHeight(FOOT_H - 2); footBg:SetColorTexture(0.09, 0.09, 0.14, 1)
+
     local endBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    endBtn:SetSize(110, 24)
-    endBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 10)
+    endBtn:SetSize(112, 22)
+    endBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, 7)
     endBtn:SetText("Declare Winner")
     endBtn:SetScript("OnClick", function() SL:EndRoll() end)
 
     local clearRollBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    clearRollBtn:SetSize(60, 24)
+    clearRollBtn:SetSize(56, 22)
     clearRollBtn:SetPoint("LEFT", endBtn, "RIGHT", 4, 0)
     clearRollBtn:SetText("Clear")
     clearRollBtn:SetScript("OnClick", function() SL:ClearRoll() end)
 
     local channels = { "raid", "party", "say" }
     for i, ch in ipairs(channels) do
-        local btn = CreateFrame("Button", "SlyLootCh_"..ch, f, "UIPanelButtonTemplate")
-        btn:SetSize(44, 22)
-        btn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8 - (3 - i) * 48, 10)
-        btn:SetText(ch)
+        local btn = CreateFrame("Button", "SlyLootCh_"..ch, f)
+        btn:SetSize(44, 20)
+        btn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PAD - (3-i)*48, 7)
+        btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+        btn.bg:SetAllPoints(); btn.bg:SetColorTexture(0.10, 0.10, 0.14, 1)
+        local bhl = btn:CreateTexture(nil, "HIGHLIGHT")
+        bhl:SetAllPoints(); bhl:SetColorTexture(1,1,1,0.12)
+        btn.tx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        btn.tx:SetFont(btn.tx:GetFont(), 9, "OUTLINE")
+        btn.tx:SetAllPoints(); btn.tx:SetJustifyH("CENTER")
+        btn.tx:SetText(ch)
         btn:SetScript("OnClick", function()
             SlyLootDB.announceChannel = ch
             SL:RefreshChannelBtns()
@@ -258,24 +359,23 @@ function SL_BuildUI()
 
     -- Restore position
     local p = SlyLootDB.position or { point="CENTER", x=200, y=0 }
-    f:ClearAllPoints(); f:SetPoint(p.point, UIParent, p.point, p.x, p.y)
+    f:ClearAllPoints()
+    f:SetPoint(p.point, UIParent, p.point, p.x, p.y)
     f:Show()
 
-    -- ── Refresh ───────────────────────────────────────────────────────────────
+    -- -- Refresh ---------------------------------------------------------------
     function SL.uiRefresh()
         if not SlyLootPanel or not SlyLootPanel:IsShown() then return end
-
-        -- show correct pane
         if activeTab == "Rolls" then
             rollsPane:Show(); srPane:Hide()
         else
             rollsPane:Hide(); srPane:Show()
         end
+        HighlightTab(activeTab)
 
-        -- Rolls pane refresh
         if activeTab == "Rolls" then
             if SL.activeItem then
-                itemLabel:SetText(SL.activeItem.name or SL.activeItem.link)
+                itemLabel:SetText(SL.activeItem.name or SL.activeItem.link or "?")
                 local n = 0; for _ in pairs(SL.rolls) do n = n + 1 end
                 rollCount:SetText(n .. " roll" .. (n == 1 and "" or "s") .. " received")
                 if SL.activeItem.icon then itemIcon:SetTexture(SL.activeItem.icon) end
@@ -284,7 +384,9 @@ function SL_BuildUI()
                 rollCount:SetText(""); itemIcon:SetTexture(nil)
             end
             local sorted = {}
-            for player, roll in pairs(SL.rolls) do sorted[#sorted+1] = { player=player, roll=roll } end
+            for player, roll in pairs(SL.rolls) do
+                sorted[#sorted+1] = { player=player, roll=roll }
+            end
             table.sort(sorted, function(a, b) return a.roll > b.roll end)
             rollContent:SetHeight(math.max(#sorted * ROW_H, 1))
             for i, row in ipairs(rollRows) do
@@ -293,13 +395,13 @@ function SL_BuildUI()
                     row.nameFS:SetText(entry.player)
                     row.rollFS:SetText(tostring(entry.roll))
                     local c = (i == 1) and {0.2,1,0.3} or {1,1,1}
-                    row.nameFS:SetTextColor(c[1],c[2],c[3]); row.rollFS:SetTextColor(c[1],c[2],c[3])
+                    row.nameFS:SetTextColor(c[1],c[2],c[3])
+                    row.rollFS:SetTextColor(c[1],c[2],c[3])
                     row:Show()
                 else row:Hide() end
             end
         end
 
-        -- SR pane refresh
         if activeTab == "Soft Res" then
             local items = SL.srItems or {}
             srCountFS:SetText(#items .. " item" .. (#items == 1 and "" or "s") .. " reserved")
@@ -307,13 +409,12 @@ function SL_BuildUI()
             for i, row in ipairs(srRows) do
                 local entry = items[i]
                 if entry then
-                    -- try to resolve numeric IDs to item names
                     local displayName = entry.name
                     if entry.id and tonumber(entry.id) then
                         local n = GetItemInfo(entry.id)
-                        if n then displayName = n ; entry.name = n end
+                        if n then displayName = n; entry.name = n end
                     end
-                    row.itemFS:SetText(displayName)
+                    row.itemFS:SetText(displayName or "?")
                     row.playersFS:SetText(table.concat(entry.players or {}, ", "))
                     row:Show()
                 else row:Hide() end
@@ -321,34 +422,35 @@ function SL_BuildUI()
         end
 
         SL:RefreshChannelBtns()
-        -- highlight active tab button without re-calling uiRefresh
-        HighlightTab(activeTab)
     end
 
     function SL:RefreshChannelBtns()
         for _, ch in ipairs(channels) do
             local btn = _G["SlyLootCh_"..ch]
             if btn then
-                if SlyLootDB.announceChannel == ch then
-                    btn:GetNormalTexture():SetVertexColor(0.3, 1, 0.3)
-                else
-                    btn:GetNormalTexture():SetVertexColor(1, 1, 1)
-                end
+                local active = (SlyLootDB.announceChannel == ch)
+                btn.bg:SetColorTexture(
+                    active and 0.14 or 0.10,
+                    active and 0.30 or 0.10,
+                    active and 0.58 or 0.14, 1)
+                btn.tx:SetTextColor(
+                    active and 1 or 0.55,
+                    active and 1 or 0.55,
+                    active and 1 or 0.60)
             end
         end
     end
 
-    -- set srRefresh callback used by SL:ImportSR / SL:ClearSR
     SL.srRefresh = function()
-        if activeTab ~= "Soft Res" then activeTab = "Soft Res" end
+        activeTab = "Soft Res"
         SL.uiRefresh()
     end
 
-    SwitchTab("Rolls")
+    HighlightTab(activeTab)
     SL.uiRefresh()
 end
 
--- ── Global helper: open panel on Soft Res tab ─────────────────────────────────
+-- -- Global helper: open panel on Soft Res tab ---------------------------------
 function SL_OpenSRTab()
     local ok, err = pcall(SL_BuildUI)
     if not ok then
@@ -356,7 +458,6 @@ function SL_OpenSRTab()
         if SS_LogError then SS_LogError("SlyLoot:SL_BuildUI", err) end
         return
     end
-    -- after build the panel exists; switch to SR tab via a deferred call
     C_Timer.After(0, function()
         if SlyLootPanel and SlyLootPanel:IsShown() and SL.srRefresh then
             SL.srRefresh()
