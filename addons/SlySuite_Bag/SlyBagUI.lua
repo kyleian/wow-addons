@@ -31,6 +31,7 @@ local QUAL_COLORS = {
 local CATEGORIES = {
     { id="WEAPON",     label="Weapons",          r=0.90, g=0.55, b=0.15, bg={0.22,0.12,0.04} },
     { id="ARMOR",      label="Armor",            r=0.30, g=0.60, b=1.00, bg={0.05,0.10,0.26} },
+    { id="RESISTANCE", label="Resistance Gear",  r=0.20, g=0.90, b=0.80, bg={0.04,0.20,0.18} },
     { id="CONSUMABLE", label="Consumables",      r=0.20, g=0.90, b=0.40, bg={0.04,0.20,0.08} },
     { id="TRADESKILL", label="Trade Goods",      r=0.80, g=0.75, b=0.30, bg={0.20,0.18,0.04} },
     { id="RECIPE",     label="Recipes",          r=1.00, g=0.50, b=0.80, bg={0.22,0.05,0.14} },
@@ -71,6 +72,32 @@ local function GetItemCategory(link)
     local _, _, _, _, _, itemType = GetItemInfo(link)
     if not itemType then return "MISC" end
     return TYPE_MAP[itemType] or "MISC"
+end
+
+-- Resistance-item detection via hidden scanning tooltip (cached per itemId)
+local _resScanTip
+local _resCache = {}
+local function IsResistanceItem(link)
+    if not link then return false end
+    local itemId = link:match("|Hitem:(%d+):")
+    if not itemId then return false end
+    if _resCache[itemId] ~= nil then return _resCache[itemId] end
+    if not _resScanTip then
+        _resScanTip = CreateFrame("GameTooltip", "SlyBagResistScan", nil, "GameTooltipTemplate")
+        _resScanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+    end
+    _resScanTip:ClearLines()
+    _resScanTip:SetHyperlink(link)
+    local found = false
+    for i = 2, _resScanTip:NumLines() do
+        local lf = _G["SlyBagResistScanTextLeft"..i]
+        if lf then
+            local txt = lf:GetText() or ""
+            if txt:find("Resistance") then found = true; break end
+        end
+    end
+    _resCache[itemId] = found
+    return found
 end
 
 -- Extract numeric item ID from a hyperlink
@@ -157,11 +184,24 @@ local function NewSlotButton(parent, idx)
     hl:SetAllPoints()
     hl:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
     hl:SetBlendMode("ADD")
-    local qb = b:CreateTexture(nil, "OVERLAY")
-    qb:SetPoint("TOPLEFT",     b, "TOPLEFT",     0, 0)
-    qb:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
-    qb:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-    qb:SetBlendMode("ADD") ; qb:SetAlpha(0.7) ; qb:Hide() ; b.qborder = qb
+    -- Quality border: 4 solid 2px edge textures (no texture file — avoids the
+    -- UI-ActionButton-Border size mismatch that caused a small square artefact)
+    local qTop = b:CreateTexture(nil, "OVERLAY")
+    qTop:SetPoint("TOPLEFT",  b, "TOPLEFT",  0,  0)
+    qTop:SetPoint("TOPRIGHT", b, "TOPRIGHT", 0,  0)
+    qTop:SetHeight(2); qTop:Hide(); b.qTop = qTop
+    local qBot = b:CreateTexture(nil, "OVERLAY")
+    qBot:SetPoint("BOTTOMLEFT",  b, "BOTTOMLEFT",  0, 0)
+    qBot:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+    qBot:SetHeight(2); qBot:Hide(); b.qBot = qBot
+    local qLeft = b:CreateTexture(nil, "OVERLAY")
+    qLeft:SetPoint("TOPLEFT",    b, "TOPLEFT",    0,  0)
+    qLeft:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 0,  0)
+    qLeft:SetWidth(2); qLeft:Hide(); b.qLeft = qLeft
+    local qRight = b:CreateTexture(nil, "OVERLAY")
+    qRight:SetPoint("TOPRIGHT",    b, "TOPRIGHT",    0, 0)
+    qRight:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+    qRight:SetWidth(2); qRight:Hide(); b.qRight = qRight
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     b:SetScript("OnEnter", function(self)
         if self.bag ~= nil then
@@ -247,7 +287,12 @@ function SlyBag_Refresh()
                             if not buckets[key] then buckets[key] = {} end
                             buckets[key][#buckets[key]+1] = it
                         else
-                            local cat = link and GetItemCategory(link) or "MISC"
+                            local cat
+                            if link and IsResistanceItem(link) then
+                                cat = "RESISTANCE"
+                            else
+                                cat = link and GetItemCategory(link) or "MISC"
+                            end
                             if not buckets[cat] then buckets[cat] = {} end
                             buckets[cat][#buckets[cat]+1] = it
                         end
@@ -329,8 +374,15 @@ function SlyBag_Refresh()
                 b.icon:SetTexture(it.texture) ; b.icon:SetAlpha(1)
                 b.count:SetText(it.count > 1 and it.count or "")
                 local qc = QUAL_COLORS[it.quality]
-                if qc then b.qborder:SetVertexColor(qc[1],qc[2],qc[3]); b.qborder:Show()
-                else b.qborder:Hide() end
+                if qc then
+                    local r,g,bv = qc[1],qc[2],qc[3]
+                    b.qTop:SetColorTexture(r,g,bv,1);   b.qTop:Show()
+                    b.qBot:SetColorTexture(r,g,bv,1);   b.qBot:Show()
+                    b.qLeft:SetColorTexture(r,g,bv,1);  b.qLeft:Show()
+                    b.qRight:SetColorTexture(r,g,bv,1); b.qRight:Show()
+                else
+                    b.qTop:Hide(); b.qBot:Hide(); b.qLeft:Hide(); b.qRight:Hide()
+                end
                 b:Show()
             end
             curY = curY - CELL
