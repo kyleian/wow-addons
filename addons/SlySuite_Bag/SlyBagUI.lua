@@ -219,10 +219,24 @@ local function NewSlotButton(parent, idx)
             else
                 _PickupItem(self.bag, self.slot)
             end
+            C_Timer.After(0.05, SlyBag_Refresh)
         elseif btn == "RightButton" then
             _UseItem(self.bag, self.slot)
+            -- Flag that a use-targeting event just fired (armor kits, poisons, oils, etc.)
+            -- so SlyChar gear slots know to call PickupInventoryItem instead of opening
+            -- the gear picker (GetCursorInfo() returns nil during item-use targeting mode).
+            SlyBag._targeting = GetTime()
+            -- Only refresh immediately if cursor doesn't now have a pending target
+            -- (refreshing mid-targeting can disrupt the application workflow).
+            local ctype = GetCursorInfo()
+            if not ctype then
+                C_Timer.After(0.05, SlyBag_Refresh)
+            else
+                -- Cursor has enchant/item; refresh after a longer delay to let the
+                -- user complete the application first.
+                C_Timer.After(0.5, SlyBag_Refresh)
+            end
         end
-        C_Timer.After(0.05, SlyBag_Refresh)
     end)
     b:Hide()
     return b
