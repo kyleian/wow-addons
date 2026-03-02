@@ -251,27 +251,34 @@ function SlyBag_Refresh()
     local SlyBagContent = SlyBagFrame.content
     local filter = searchText:lower()
 
-    -- Build New Items list from tracked acquisitions
+    -- Build New Items list from tracked acquisitions (expire after 75 seconds)
+    local NEW_ITEM_TTL = 75
     local newItemList = {}
     local skipSlots   = {}  -- bag|slot keys in newItemList; excluded from normal buckets
     local staleKeys   = {}  -- keys to remove after iteration
+    local now = GetTime()
     for key, loc in pairs(SlyBag.newItems or {}) do
-        local tex, stackCnt, _, quality, link = _ItemInfo(loc.bag, loc.slot)
-        if not link and tex then
-            link = _ItemLink and _ItemLink(loc.bag, loc.slot) or nil
-        end
-        if tex then
-            local itemName = (link and GetItemInfo(link)) or ""
-            local passes = (filter == "") or itemName:lower():find(filter, 1, true)
-            if passes then
-                newItemList[#newItemList+1] = {
-                    bag=loc.bag, slot=loc.slot, texture=tex,
-                    count=stackCnt or 0, quality=quality or -1, name=itemName,
-                }
-                skipSlots[loc.bag.."|"..loc.slot] = true
-            end
+        -- Expire old entries
+        if loc.time and (now - loc.time) > NEW_ITEM_TTL then
+            staleKeys[#staleKeys+1] = key
         else
-            staleKeys[#staleKeys+1] = key  -- item gone; retire after loop
+            local tex, stackCnt, _, quality, link = _ItemInfo(loc.bag, loc.slot)
+            if not link and tex then
+                link = _ItemLink and _ItemLink(loc.bag, loc.slot) or nil
+            end
+            if tex then
+                local itemName = (link and GetItemInfo(link)) or ""
+                local passes = (filter == "") or itemName:lower():find(filter, 1, true)
+                if passes then
+                    newItemList[#newItemList+1] = {
+                        bag=loc.bag, slot=loc.slot, texture=tex,
+                        count=stackCnt or 0, quality=quality or -1, name=itemName,
+                    }
+                    skipSlots[loc.bag.."|"..loc.slot] = true
+                end
+            else
+                staleKeys[#staleKeys+1] = key  -- item gone; retire after loop
+            end
         end
     end
     for _, k in ipairs(staleKeys) do SlyBag.newItems[k] = nil end

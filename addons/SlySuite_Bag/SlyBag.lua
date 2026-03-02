@@ -9,8 +9,9 @@ local ADDON_NAME = "SlySuite_Bag"
 local ADDON_VERSION = "1.1.4"
 
 SlyBag = SlyBag or {}
-SlyBag.newItems = {}   -- { ["bag:slot"] = {bag,slot} } items gained this session
+SlyBag.newItems = {}   -- { ["bag|slot"] = {bag,slot,time} } items gained this session
 SlyBag._prevInv = {}   -- [bagId][slot] = itemId string, for change detection
+SlyBag._ready   = false  -- true only after initial snapshot; gates TrackNewItems
 
 -- -------------------------------------------------------
 -- New-item tracking
@@ -36,9 +37,11 @@ local function SnapshotInventory()
             SlyBag._prevInv[bag][slot] = link and link:match("|Hitem:(%d+):") or nil
         end
     end
+    SlyBag._ready = true  -- only now do BAG_UPDATE events trigger tracking
 end
 
 local function TrackNewItems(bagId)
+    if not SlyBag._ready then return end  -- ignore pre-snapshot BAG_UPDATE events
     -- TBC Classic fires BAG_UPDATE with no argument; scan all bags in that case.
     local bags = (bagId ~= nil) and { bagId } or { 0, 1, 2, 3, 4 }
     for _, bid in ipairs(bags) do
@@ -49,7 +52,7 @@ local function TrackNewItems(bagId)
             local id = link and link:match("|Hitem:(%d+):") or nil
             curr[slot] = id
             if id and id ~= prev[slot] then
-                SlyBag.newItems[bid.."|"..slot] = { bag=bid, slot=slot }
+                SlyBag.newItems[bid.."|"..slot] = { bag=bid, slot=slot, time=GetTime() }
             end
         end
         SlyBag._prevInv[bid] = curr
