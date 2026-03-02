@@ -39,17 +39,21 @@ local function SnapshotInventory()
 end
 
 local function TrackNewItems(bagId)
-    local prev = SlyBag._prevInv[bagId] or {}
-    local curr = {}
-    for slot = 1, _SBNumSlots(bagId) do
-        local link = _SBGetLink(bagId, slot)
-        local id = link and link:match("|Hitem:(%d+):") or nil
-        curr[slot] = id
-        if id and id ~= prev[slot] then
-            SlyBag.newItems[bagId.."|"..slot] = { bag=bagId, slot=slot }
+    -- TBC Classic fires BAG_UPDATE with no argument; scan all bags in that case.
+    local bags = (bagId ~= nil) and { bagId } or { 0, 1, 2, 3, 4 }
+    for _, bid in ipairs(bags) do
+        local prev = SlyBag._prevInv[bid] or {}
+        local curr = {}
+        for slot = 1, _SBNumSlots(bid) do
+            local link = _SBGetLink(bid, slot)
+            local id = link and link:match("|Hitem:(%d+):") or nil
+            curr[slot] = id
+            if id and id ~= prev[slot] then
+                SlyBag.newItems[bid.."|"..slot] = { bag=bid, slot=slot }
+            end
         end
+        SlyBag._prevInv[bid] = curr
     end
-    SlyBag._prevInv[bagId] = curr
 end
 
 local DB_DEFAULTS = {

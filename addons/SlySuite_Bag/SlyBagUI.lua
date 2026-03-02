@@ -254,6 +254,7 @@ function SlyBag_Refresh()
     -- Build New Items list from tracked acquisitions
     local newItemList = {}
     local skipSlots   = {}  -- bag|slot keys in newItemList; excluded from normal buckets
+    local staleKeys   = {}  -- keys to remove after iteration
     for key, loc in pairs(SlyBag.newItems or {}) do
         local tex, stackCnt, _, quality, link = _ItemInfo(loc.bag, loc.slot)
         if not link and tex then
@@ -270,9 +271,10 @@ function SlyBag_Refresh()
                 skipSlots[loc.bag.."|"..loc.slot] = true
             end
         else
-            SlyBag.newItems[key] = nil  -- item gone; retire
+            staleKeys[#staleKeys+1] = key  -- item gone; retire after loop
         end
     end
+    for _, k in ipairs(staleKeys) do SlyBag.newItems[k] = nil end
 
     -- Collect and bucket all bag slots
     local buckets  = {}
