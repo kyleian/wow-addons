@@ -247,7 +247,7 @@ clFrame:SetScript("OnEvent", function(self, event)
     elseif subev == "SWING_MISSED" then
         if A1 == "ABSORB" then
             local amt = tonumber(A3) or 0
-            if amt > 0 and srcGUID and srcGUID ~= "" and band(srcFlags, FRIENDLY_FLAG) > 0 then
+            if amt > 0 and srcGUID and srcGUID ~= "" and srcFlags and band(srcFlags, FRIENDLY_FLAG) > 0 then
                 local act = ActorOwned(srcGUID, srcName)
                 if act then
                     act.dmg = act.dmg + amt ; totals.dmg = totals.dmg + amt
@@ -263,7 +263,7 @@ clFrame:SetScript("OnEvent", function(self, event)
         or subev == "DAMAGE_SHIELD_MISSED" then
         if A4 == "ABSORB" then
             local amt = tonumber(A6) or 0
-            if amt > 0 and srcGUID and srcGUID ~= "" and band(srcFlags, FRIENDLY_FLAG) > 0 then
+            if amt > 0 and srcGUID and srcGUID ~= "" and srcFlags and band(srcFlags, FRIENDLY_FLAG) > 0 then
                 local act = ActorOwned(srcGUID, srcName)
                 if act then
                     act.dmg = act.dmg + amt ; totals.dmg = totals.dmg + amt

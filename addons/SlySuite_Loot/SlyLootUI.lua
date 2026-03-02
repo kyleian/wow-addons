@@ -175,7 +175,7 @@ function SL_BuildUI()
 
     local srInput = CreateFrame("EditBox", "SlyLootSRInput", srPane, "InputBoxTemplate")
     srInput:SetSize(PANEL_W - 20, 60)
-    srInput:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -34)
+    srInput:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -50)
     srInput:SetAutoFocus(false)
     srInput:SetMultiLine(true)
     srInput:SetMaxLetters(0)
@@ -183,7 +183,7 @@ function SL_BuildUI()
 
     local srImportBtn = CreateFrame("Button", nil, srPane, "UIPanelButtonTemplate")
     srImportBtn:SetSize(80, 22)
-    srImportBtn:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -100)
+    srImportBtn:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -118)
     srImportBtn:SetText("Import")
     srImportBtn:SetScript("OnClick", function()
         local txt = srInput:GetText()
@@ -206,14 +206,14 @@ function SL_BuildUI()
 
     -- SR item list header
     local srHdrItem = srPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    srHdrItem:SetPoint("TOPLEFT", srPane, "TOPLEFT", 4, -128)
+    srHdrItem:SetPoint("TOPLEFT", srPane, "TOPLEFT", 4, -148)
     srHdrItem:SetText("|cffffffffItem|r")
     local srHdrPlayers = srPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    srHdrPlayers:SetPoint("TOPRIGHT", srPane, "TOPRIGHT", -4, -128)
+    srHdrPlayers:SetPoint("TOPRIGHT", srPane, "TOPRIGHT", -4, -148)
     srHdrPlayers:SetText("|cffffffffPlayers|r")
 
-    local srListH = srPane:GetHeight() - 136
-    local srSF, srContent = CreateScrollBox(srPane, 0, -144, PANEL_W - 16, srListH - 2)
+    local srListH = srPane:GetHeight() - 156
+    local srSF, srContent = CreateScrollBox(srPane, 0, -164, PANEL_W - 16, srListH - 2)
     local srRows = {}
     for i = 1, 30 do
         local row = CreateFrame("Frame", nil, srContent)
