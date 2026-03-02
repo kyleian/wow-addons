@@ -33,7 +33,7 @@ function SL_BuildUI()
         return
     end
 
-    local f = CreateFrame("Frame", "SlyLootPanel", UIParent)
+    local f = CreateFrame("Frame", "SlyLootPanel", UIParent, "BackdropTemplate")
     f:SetSize(PANEL_W, PANEL_H)
     f:SetFrameStrata("HIGH")
     f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
@@ -43,14 +43,13 @@ function SL_BuildUI()
         local pt, _, _, x, y = self:GetPoint()
         SlyLootDB.position = { point = pt, x = x, y = y }
     end)
-    if f.SetBackdrop then
-        f:SetBackdrop({
-            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
-            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-            tile = true, tileSize = 32, edgeSize = 16,
-            insets = { left=4, right=4, top=4, bottom=4 },
-        })
-    end
+    f:SetBackdrop({
+        bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 16,
+        insets = { left=4, right=4, top=4, bottom=4 },
+    })
+    f:SetBackdropColor(0, 0, 0, 1)
 
     -- Title bar
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -172,11 +171,11 @@ function SL_BuildUI()
     srHint:SetWidth(PANEL_W - 20)
     srHint:SetJustifyH("LEFT")
     srHint:SetTextColor(0.7, 0.9, 1)
-    srHint:SetText("Paste softres.it CSV export below (Name, ItemId/Name, …):")
+    srHint:SetText("|cffffcc00How to export:|r softres.gg → your raid → Export → Copy to clipboard\n|cffffffffPaste the CSV text below, then click Import:|r")
 
     local srInput = CreateFrame("EditBox", "SlyLootSRInput", srPane, "InputBoxTemplate")
     srInput:SetSize(PANEL_W - 20, 60)
-    srInput:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -18)
+    srInput:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -34)
     srInput:SetAutoFocus(false)
     srInput:SetMultiLine(true)
     srInput:SetMaxLetters(0)
@@ -184,7 +183,7 @@ function SL_BuildUI()
 
     local srImportBtn = CreateFrame("Button", nil, srPane, "UIPanelButtonTemplate")
     srImportBtn:SetSize(80, 22)
-    srImportBtn:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -84)
+    srImportBtn:SetPoint("TOPLEFT", srPane, "TOPLEFT", 0, -100)
     srImportBtn:SetText("Import")
     srImportBtn:SetScript("OnClick", function()
         local txt = srInput:GetText()
@@ -207,14 +206,14 @@ function SL_BuildUI()
 
     -- SR item list header
     local srHdrItem = srPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    srHdrItem:SetPoint("TOPLEFT", srPane, "TOPLEFT", 4, -112)
+    srHdrItem:SetPoint("TOPLEFT", srPane, "TOPLEFT", 4, -128)
     srHdrItem:SetText("|cffffffffItem|r")
     local srHdrPlayers = srPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    srHdrPlayers:SetPoint("TOPRIGHT", srPane, "TOPRIGHT", -4, -112)
+    srHdrPlayers:SetPoint("TOPRIGHT", srPane, "TOPRIGHT", -4, -128)
     srHdrPlayers:SetText("|cffffffffPlayers|r")
 
-    local srListH = srPane:GetHeight() - 120
-    local srSF, srContent = CreateScrollBox(srPane, 0, -128, PANEL_W - 16, srListH - 2)
+    local srListH = srPane:GetHeight() - 136
+    local srSF, srContent = CreateScrollBox(srPane, 0, -144, PANEL_W - 16, srListH - 2)
     local srRows = {}
     for i = 1, 30 do
         local row = CreateFrame("Frame", nil, srContent)
