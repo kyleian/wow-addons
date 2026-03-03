@@ -12,9 +12,17 @@ local ADDON_VERSION = "1.0.0"
 -- Public namespace
 SS = SS or {}
 SS.version  = ADDON_VERSION
-SS.registry = {}   -- ordered list preserving registration sequence
-SS.index    = {}   -- [name] = registry entry (same table reference)
+SS.registry = {}
+SS.index    = {}
 SS.ready    = false
+
+-- Cross-addon data transport: a named Frame is ALWAYS added to the true
+-- WoW global table, making it accessible from any addon regardless of env.
+-- We store live table references so updates are immediately visible.
+local _dataFrame = CreateFrame("Frame", "SlySuiteDataFrame")
+_dataFrame.registry = SS.registry   -- same table reference
+_dataFrame.index    = SS.index
+SlySuiteAPI = _dataFrame            -- also keep bare-global alias
 
 -- Sub-mod status constants
 SS.STATUS = {
@@ -23,6 +31,8 @@ SS.STATUS = {
     DISABLED = "DISABLED",
     LOADING  = "LOADING",
 }
+_dataFrame.STATUS = SS.STATUS
+SlySuiteAPI.STATUS = SS.STATUS
 
 -- -------------------------------------------------------
 -- Default saved variables structure
@@ -195,6 +205,7 @@ function SlySuite_Register(name, version, initFn, options)
         if SS_UIRefreshAll then SS_UIRefreshAll() end
     end
 end
+_dataFrame.Register = SlySuite_Register   -- cross-addon access
 
 -- -------------------------------------------------------
 -- SS_EnableSubMod(name)   /  SS_DisableSubMod(name)
@@ -212,6 +223,19 @@ function SS_EnableSubMod(name)
     if SS_UIRefreshAll then SS_UIRefreshAll() end
 end
 
+-- Store on data frame for cross-addon access
+_dataFrame.enableMod  = SS_EnableSubMod
+
+-- -------------------------------------------------------
+-- Safe accessor functions for use by other addons (SlyChar etc.)
+-- Using these avoids any risk of the two-letter 'SS' global being nil
+-- in the calling addon's environment.
+-- -------------------------------------------------------
+function SlySuite_GetRegistry()  return SS.registry  end
+function SlySuite_GetIndex()     return SS.index     end
+function SlySuite_GetStatus()    return SS.STATUS    end
+function SlySuite_GetDB()        return SS.db        end
+
 function SS_DisableSubMod(name)
     local entry = SS.index[name]
     if not entry then return end
@@ -223,6 +247,9 @@ function SS_DisableSubMod(name)
     print("|cff00ccff[Sly Suite]|r |cffffcc00" .. name
         .. "|r disabled. Type |cffffcc00/reload|r to fully unload.")
 end
+
+-- Store on data frame for cross-addon access
+_dataFrame.disableMod = SS_DisableSubMod
 
 -- -------------------------------------------------------
 -- SS_RetrySubMod(name)
@@ -255,6 +282,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             SlySuiteDB = SlySuiteDB or {}
             ApplyDefaults(SlySuiteDB, DB_DEFAULTS)
             SS.db = SlySuiteDB
+            -- Expose db through cross-addon data frame
+            _dataFrame.db  = SS.db
+            SlySuiteAPI.db = SS.db
 
             -- Back-fill dbRecord references for any early registrations
             for _, entry in ipairs(SS.registry) do
@@ -290,11 +320,13 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
             -- Install global Lua error hook so event-handler errors outside
             -- xpcall also land in the log (e.g. OnUpdate / addon event frames)
-            local _prevHandler = geterrorhandler()
-            seterrorhandler(function(errMsg)
-                SS_LogError("global", tostring(errMsg))
-                if _prevHandler then _prevHandler(errMsg) end
-            end)
+            if geterrorhandler and seterrorhandler then
+                local _prevHandler = geterrorhandler()
+                seterrorhandler(function(errMsg)
+                    SS_LogError("global", tostring(errMsg))
+                    if _prevHandler then _prevHandler(errMsg) end
+                end)
+            end
 
             if SS.db.options.showLoadPrint then
                 local total    = #SS.registry

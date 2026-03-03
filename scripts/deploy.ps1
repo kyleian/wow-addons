@@ -26,6 +26,21 @@ if ($config.deployment.backupWtfOnDeploy -and -not $DryRun) {
     }
 }
 
+# Remove stale old-name Sly* folders that were renamed to SlySuite_* in v1.2.0
+# These would cause double-load conflicts if left alongside the new names.
+$staleFolders = @("SlyChar","SlyBag","SlyLoot","SlyMount","SlyRepair","SlySlot","SlyUF","SlyItemizer","SlyAtlasLoot","SlyWeakAuras","SlyMetrics")
+foreach ($sf in $staleFolders) {
+    $stalePath = Join-Path $addonsPath $sf
+    if (Test-Path $stalePath) {
+        if ($DryRun) {
+            Write-Host "[DRY RUN] Would remove stale folder: $stalePath" -ForegroundColor Yellow
+        } else {
+            Remove-Item $stalePath -Recurse -Force
+            Write-Host "[deploy] Removed stale folder: $sf" -ForegroundColor DarkYellow
+        }
+    }
+}
+
 $addonsToDeploy = $config.addons | Where-Object { $_.enabled -eq $true }
 if ($AddonName -ne "") {
     $addonsToDeploy = $addonsToDeploy | Where-Object { $_.name -eq $AddonName }

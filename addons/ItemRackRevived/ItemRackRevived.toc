@@ -1,10 +1,21 @@
 ## Interface: 20505
 ## Title: ItemRack Revived
 ## Notes: Gear set manager with a movable character panel. /itemrack to open.
-## Version: 1.1.8
+## Version: 1.3.0
 ## Author: Custom
 ## SavedVariables: ItemRackRevivedDB
 
 ItemRackRevived.lua
 Sets.lua
+BIS_Shared.lua
+BIS_Data_WARRIOR.lua
+BIS_Data_PALADIN.lua
+BIS_Data_HUNTER.lua
+BIS_Data_ROGUE.lua
+BIS_Data_PRIEST.lua
+BIS_Data_SHAMAN.lua
+BIS_Data_MAGE.lua
+BIS_Data_WARLOCK.lua
+BIS_Data_DRUID.lua
+BIS.lua
 UI.lua
