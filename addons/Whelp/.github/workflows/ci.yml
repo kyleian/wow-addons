@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lua Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1"
+
+      - name: Setup LuaRocks
+        uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install luacheck
+        run: luarocks install luacheck
+
+      - name: Run luacheck
+        run: |
+          luacheck . --config .luacheckrc --no-color --codes
+
+  validate:
+    name: Validate TOC
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate TOC file
+        run: |
+          echo "Validating Whelp.toc..."
+
+          # Check Interface version
+          if ! grep -q "## Interface:" Whelp.toc; then
+            echo "ERROR: Missing Interface version"
+            exit 1
+          fi
+
+          # Check Title
+          if ! grep -q "## Title:" Whelp.toc; then
+            echo "ERROR: Missing Title"
+            exit 1
+          fi
+
+          # Check that all listed files exist
+          while IFS= read -r line; do
+            # Skip comments and empty lines
+            if [[ $line =~ ^#.*$ ]] || [[ -z $line ]] || [[ $line =~ ^## ]]; then
+              continue
+            fi
+
+            # Convert backslashes to forward slashes for compatibility
+            file=$(echo "$line" | tr '\\' '/')
+
+            if [[ ! -f "$file" ]]; then
+              echo "ERROR: File listed in TOC does not exist: $file"
+              exit 1
+            fi
+          done < Whelp.toc
+
+          echo "TOC validation passed!"
+
+  test:
+    name: Lua Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1"
+
+      - name: Setup LuaRocks
+        uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install busted
+        run: luarocks install busted
+
+      - name: Run tests
+        run: |
+          if [ -d "tests" ]; then
+            busted tests/
+          else
+            echo "No tests directory found, skipping tests"
+          fi
+
+  package:
+    name: Package Addon
+    runs-on: ubuntu-latest
+    needs: [lint, validate]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create package
+        run: |
+          VERSION=$(grep "## Version:" Whelp.toc | cut -d' ' -f3)
+          echo "Packaging version: $VERSION"
+
+          # Create release directory
+          mkdir -p release/Whelp
+
+          # Copy addon files
+          cp -r Core/ release/Whelp/
+          cp -r Data/ release/Whelp/
+          cp -r UI/ release/Whelp/
+          cp -r Libs/ release/Whelp/
+          cp Whelp.toc release/Whelp/
+          cp Whelp.lua release/Whelp/
+          cp Bindings.xml release/Whelp/
+          cp README.md release/Whelp/ 2>/dev/null || true
+          cp LICENSE release/Whelp/ 2>/dev/null || true
+          cp CHANGELOG.md release/Whelp/ 2>/dev/null || true
+
+          # Create zip
+          cd release
+          zip -r "Whelp-${VERSION}.zip" Whelp/
+
+          echo "Package created: Whelp-${VERSION}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whelp-addon
+          path: release/*.zip
+          retention-days: 30

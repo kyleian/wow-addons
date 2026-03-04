@@ -1,0 +1,9 @@
+<!-- Whelp Keybindings -->
+<Bindings>
+    <Binding name="WHELP_TOGGLE" header="WHELP" category="ADDONS">
+        Whelp_Toggle()
+    </Binding>
+    <Binding name="WHELP_SEARCH" category="ADDONS">
+        Whelp_Search()
+    </Binding>
+</Bindings>
