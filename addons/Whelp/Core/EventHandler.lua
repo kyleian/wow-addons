@@ -62,8 +62,9 @@ end)
 
 -- Initialize event handling for the addon
 function EventHandler:Initialize()
-    -- Register core events (ADDON_LOADED already handled by bootstrap above)
-    self:RegisterEvent("PLAYER_LOGIN", function()
+    -- PLAYER_ENTERING_WORLD fires on both fresh login and /reload;
+    -- PLAYER_LOGIN only fires on fresh login -- use ENTERING_WORLD as the trigger.
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
         Whelp:OnPlayerLogin()
     end)
 

@@ -33,13 +33,16 @@ function Whelp:OnAddonLoaded()
     -- Initialize database
     self.Database:Initialize()
 
-    -- Initialize event handler
+    -- Register slash commands now - PLAYER_LOGIN doesn't fire on /reload
+    self:RegisterSlashCommands()
+
+    -- Initialize event handler (registers PLAYER_ENTERING_WORLD, PLAYER_LOGIN, etc.)
     self.EventHandler:Initialize()
 
-    self:Debug("Database and events initialized")
+    self:Debug("Database, slash commands, and events initialized")
 end
 
--- Called when player logs in
+-- Called when player enters world (fires on both fresh login AND /reload)
 function Whelp:OnPlayerLogin()
     if isInitialized then return end
     isInitialized = true
@@ -47,9 +50,6 @@ function Whelp:OnPlayerLogin()
     -- Initialize UI components
     self.UI.MainFrame:Create()
     self.UI.MinimapButton:Initialize()
-
-    -- Register slash commands
-    self:RegisterSlashCommands()
 
     -- Welcome message
     local vendorCount = self.Database:GetVendorCount()
