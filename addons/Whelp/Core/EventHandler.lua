@@ -12,6 +12,16 @@ local EventHandler = Whelp.EventHandler
 local eventFrame = CreateFrame("Frame", "WhelpEventFrame")
 EventHandler.frame = eventFrame
 
+-- Bootstrap: register ADDON_LOADED directly at frame creation so the init
+-- chain can start.  All other events are registered inside Initialize().
+eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:SetScript("OnEvent", function(self, event, addonName)
+    if event == "ADDON_LOADED" and addonName == ADDON_NAME then
+        self:UnregisterAllEvents()          -- hand off to the full dispatcher
+        Whelp:OnAddonLoaded()
+    end
+end)
+
 -- Event callbacks
 local eventCallbacks = {}
 
@@ -52,13 +62,7 @@ end)
 
 -- Initialize event handling for the addon
 function EventHandler:Initialize()
-    -- Register core events
-    self:RegisterEvent("ADDON_LOADED", function(event, addonName)
-        if addonName == ADDON_NAME then
-            Whelp:OnAddonLoaded()
-        end
-    end)
-
+    -- Register core events (ADDON_LOADED already handled by bootstrap above)
     self:RegisterEvent("PLAYER_LOGIN", function()
         Whelp:OnPlayerLogin()
     end)
