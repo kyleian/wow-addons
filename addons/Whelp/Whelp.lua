@@ -28,18 +28,14 @@ function Whelp:OnAddonLoaded()
     if isLoaded then return end
     isLoaded = true
 
-    self:Debug("Addon loaded")
-
     -- Initialize database
-    self.Database:Initialize()
+    local ok, err = pcall(function() self.Database:Initialize() end)
+    if not ok then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[Whelp]|r Database init error: " .. tostring(err))
+    end
 
-    -- Register slash commands now - PLAYER_LOGIN doesn't fire on /reload
-    self:RegisterSlashCommands()
-
-    -- Initialize event handler (registers PLAYER_ENTERING_WORLD, PLAYER_LOGIN, etc.)
+    -- Initialize event handler (registers PLAYER_ENTERING_WORLD etc.)
     self.EventHandler:Initialize()
-
-    self:Debug("Database, slash commands, and events initialized")
 end
 
 -- Called when player enters world (fires on both fresh login AND /reload)
@@ -76,19 +72,17 @@ function Whelp:OnTargetChanged()
     end
 end
 
--- Register slash commands
-function Whelp:RegisterSlashCommands()
-    -- Primary slash command
-    SLASH_WHELP1 = "/whelp"
-    SLASH_WHELP2 = "/yelp"
-
-    SlashCmdList["WHELP"] = function(msg)
-        self:HandleSlashCommand(msg)
-    end
-end
-
 -- Handle slash commands
 function Whelp:HandleSlashCommand(msg)
+    -- Lazy UI init in case PLAYER_ENTERING_WORLD hasn't fired yet
+    if not isInitialized then
+        local ok, err = pcall(function()
+            self.UI.MainFrame:Create()
+            self.UI.MinimapButton:Initialize()
+        end)
+        if ok then isInitialized = true end
+    end
+
     local args = {}
     for word in msg:gmatch("%S+") do
         table.insert(args, word:lower())
@@ -220,6 +214,15 @@ function Whelp_Search()
     Whelp.UI.SearchBar:Toggle()
 end
 
+-- -------------------------------------------------------
+-- Slash commands - registered at file scope so they work
+-- on both fresh login AND /reload with no event chain needed.
+-- -------------------------------------------------------
+SLASH_WHELP1 = "/whelp"
+SLASH_WHELP2 = "/yelp"
+SlashCmdList["WHELP"] = function(msg)
+    Whelp:HandleSlashCommand(msg or "")
+end
 -- Keybinding names
 BINDING_HEADER_WHELP = "Whelp"
 BINDING_NAME_WHELP_TOGGLE = "Toggle Whelp"
