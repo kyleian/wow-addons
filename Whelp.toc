@@ -1,0 +1,43 @@
+## Interface: 20504
+## Title: Whelp
+## Notes: A Yelp-style rating system for player vendors and service providers in WoW TBC
+## Author: Kyle
+## Version: 1.0.0
+## SavedVariables: WhelpDB
+## SavedVariablesPerCharacter: WhelpCharDB
+## X-Category: Social
+## X-License: MIT
+## X-Website: https://github.com/kyle-ian/whelp-tbc-lua
+## X-Curse-Project-ID: whelp
+
+# Libraries
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+# Core
+Core\Constants.lua
+Core\Utils.lua
+Core\Database.lua
+Core\EventHandler.lua
+
+# Data
+Data\Categories.lua
+Data\VendorManager.lua
+Data\RatingSystem.lua
+
+# UI
+UI\Templates.lua
+UI\MainFrame.lua
+UI\VendorCard.lua
+UI\VendorDetail.lua
+UI\ReviewForm.lua
+UI\SearchBar.lua
+UI\MinimapButton.lua
+
+# Main
+Whelp.lua
+
+# Bindings (must be last)
+Bindings.xml
