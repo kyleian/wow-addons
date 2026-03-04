@@ -137,6 +137,14 @@
                        "sourceDir":  "addons\\SlySuite_Metrics",
                        "version":  "1.3.0",
                        "curseProjectId":  ""
+                   },
+                   {
+                       "name":  "Whelp",
+                       "enabled":  true,
+                       "description":  "Yelp-style vendor rating system. Rate and review player service providers (enchanters, boosters, crafters, etc). /whelp to open.",
+                       "sourceDir":  "addons\\Whelp",
+                       "version":  "1.0.0",
+                       "curseProjectId":  ""
                    }
                ],
     "deployment":  {

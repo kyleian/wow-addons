@@ -1,4 +1,4 @@
-## Interface: 20504
+## Interface: 20505
 ## Title: Whelp
 ## Notes: A Yelp-style rating system for player vendors and service providers in WoW TBC
 ## Author: Kyle
