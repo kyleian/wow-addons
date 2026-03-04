@@ -12,17 +12,7 @@ local EventHandler = Whelp.EventHandler
 local eventFrame = CreateFrame("Frame", "WhelpEventFrame")
 EventHandler.frame = eventFrame
 
--- Bootstrap: register ADDON_LOADED directly at frame creation so the init
--- chain can start.  All other events are registered inside Initialize().
-eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:SetScript("OnEvent", function(self, event, addonName)
-    if event == "ADDON_LOADED" and addonName == ADDON_NAME then
-        self:UnregisterAllEvents()          -- hand off to the full dispatcher
-        Whelp:OnAddonLoaded()
-    end
-end)
-
--- Event callbacks
+-- Event callbacks table (populated by RegisterEvent)
 local eventCallbacks = {}
 
 -- Register an event with a callback
@@ -43,7 +33,6 @@ function EventHandler:UnregisterEvent(event, callback)
                 break
             end
         end
-        -- If no more callbacks, unregister the event
         if #eventCallbacks[event] == 0 then
             eventFrame:UnregisterEvent(event)
             eventCallbacks[event] = nil
@@ -51,8 +40,19 @@ function EventHandler:UnregisterEvent(event, callback)
     end
 end
 
--- Main event handler
+-- Single unified OnEvent handler.
+-- Boots the addon on ADDON_LOADED (before Initialize() is ever called),
+-- then dispatches all subsequent events via eventCallbacks.
+eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
+    if event == "ADDON_LOADED" then
+        local addonName = ...
+        if addonName == ADDON_NAME then
+            eventFrame:UnregisterEvent("ADDON_LOADED")
+            Whelp:OnAddonLoaded()   -- calls EventHandler:Initialize() -> registers PLAYER_LOGIN etc.
+        end
+        return
+    end
     if eventCallbacks[event] then
         for _, callback in ipairs(eventCallbacks[event]) do
             callback(event, ...)
