@@ -74,7 +74,8 @@ function ECS_GetStats()
     local meleeHit = GetCombatRatingBonus(CR.HIT_MELEE) or 0
     table.insert(stats, { label="Melee Hit",      value=string.format("%.2f%%", meleeHit or 0) })
 
-    local meleeCrit = safe(GetCritChance) or 0
+    -- GetCritChance() returns total melee crit %; fall back to pure rating portion if unavailable
+    local meleeCrit = safe(GetCritChance) or GetCombatRatingBonus(CR.CRIT_MELEE) or 0
     table.insert(stats, { label="Melee Crit",     value=string.format("%.2f%%", meleeCrit) })
 
     local hasteM = GetCombatRatingBonus(CR.HASTE_MELEE)
@@ -97,7 +98,8 @@ function ECS_GetStats()
     local rangedHit = GetCombatRatingBonus(CR.HIT_RANGED)
     table.insert(stats, { label="Ranged Hit",     value=string.format("%.2f%%", rangedHit or 0) })
 
-    local rangedCrit = safe(GetRangedCritChance) or 0
+    -- GetRangedCritChance() returns total ranged crit %; fall back to pure rating portion if unavailable
+    local rangedCrit = safe(GetRangedCritChance) or GetCombatRatingBonus(CR.CRIT_RANGED) or 0
     table.insert(stats, { label="Ranged Crit",    value=string.format("%.2f%%", rangedCrit) })
 
     -- Spell
@@ -144,7 +146,11 @@ function ECS_GetStats()
         or  string.format("%.2f%%", spellHit)
     table.insert(stats, { label="Spell Hit",      value=hitLabel })
 
-    local spellCrit = safe(GetSpellCritChance) or 0
+    -- TBC Classic: GetSpellCritChance(school) requires a school argument (2=Holy baseline)
+    -- Try no-arg first (works on some builds), then Holy school, then rating-only fallback
+    local spellCrit = safe(GetSpellCritChance)
+                   or safe(GetSpellCritChance, 2)
+                   or GetCombatRatingBonus(CR.CRIT_SPELL) or 0
     table.insert(stats, { label="Spell Crit",     value=string.format("%.2f%%", spellCrit) })
 
     local hasteSpell = safe(UnitSpellHaste, "player") or GetCombatRatingBonus(CR.HASTE_SPELL)
