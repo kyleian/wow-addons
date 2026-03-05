@@ -42,6 +42,11 @@ local function CopperToString(copper)
     return table.concat(parts, " ")
 end
 
+-- Strip WoW UI color codes for use in SendChatMessage (which rejects |c..|r).
+local function StripColors(s)
+    return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
 local function GetAnnounceChannel()
     local ch = SlyRepairDB.announce
     if ch == "auto" then
@@ -57,7 +62,7 @@ end
 local function Announce(msg)
     local ch = GetAnnounceChannel()
     if ch then
-        SendChatMessage("[SlyRepair] " .. msg, ch)
+        SendChatMessage(StripColors("[SlyRepair] " .. msg), ch)
     end
 end
 

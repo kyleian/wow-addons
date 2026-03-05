@@ -14,6 +14,16 @@ function Templates:CreateBackdrop(frame, bgColor, borderColor)
     bgColor = bgColor or Whelp.Colors.BACKGROUND
     borderColor = borderColor or Whelp.Colors.BORDER
 
+    -- TBC Anniversary (20505): CreateFrame'd frames don't have SetBackdrop by
+    -- default; it lives in BackdropTemplateMixin. Mix it in on demand.
+    if not frame.SetBackdrop then
+        if BackdropTemplateMixin then
+            Mixin(frame, BackdropTemplateMixin)
+        else
+            return  -- client too old to support backdrop API; bail silently
+        end
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
