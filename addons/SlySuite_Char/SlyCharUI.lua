@@ -175,6 +175,8 @@ local barsScrollOffset    = 0
 local barsScrollInfoLabel = nil
 local MAX_NIT_LOCK_ROWS   = 15   -- reduced by 2 to make room for layer display
 local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
+local MAX_WHELP_ROWS      = 20  -- pre-built vendor row pool in the Whelp tab
+local WHELP_ROW_H         = 28  -- height per vendor row
 local nitLockScrollOffset = 0
 local nitScrollInfoLabel  = nil
 local suiteRowWidgets  = {}    -- [name]={row,dot,nameTx,statusTx,toggleBtn}
@@ -3325,67 +3327,48 @@ function SC_RefreshWhelp()
     local cont = tab._cont
     if not cont then return end
 
-    -- clear existing rows
+    -- hide all pooled rows and the status message
     for _, r in ipairs(tab._rows) do r:Hide() end
-    tab._rows = {}
+    if tab._statusMsg then tab._statusMsg:Hide() end
+
+    local function showStatus(text)
+        if tab._statusMsg then
+            tab._statusMsg:SetText(text)
+            tab._statusMsg:Show()
+        end
+        cont:SetHeight(20)
+    end
 
     if not (Whelp and Whelp.VendorManager and Whelp.Database and Whelp.db) then
-        local msg = cont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        msg:SetPoint("TOPLEFT", cont, "TOPLEFT", 0, 0)
-        msg:SetText("|cffff8844Whelp not loaded.|r")
-        cont:SetHeight(20)
+        showStatus("|cffff8844Whelp not loaded.|r")
         return
     end
 
-    local ROW_H = 28
     local vendors = Whelp.VendorManager:GetVendors({}, "rating") or {}
-
     if #vendors == 0 then
-        local msg = cont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        msg:SetPoint("TOPLEFT", cont, "TOPLEFT", 0, -2)
-        msg:SetText("|cff888888No vendors yet. Click +Add to add one.|r")
-        cont:SetHeight(20)
-        table.insert(tab._rows, msg)
+        showStatus("|cff888888No vendors yet. Click +Add to add one.|r")
         return
     end
 
-    local RW = SIDE_W - PAD*2 - 22
-    for i, vendor in ipairs(vendors) do
-        local yOff = -((i-1) * ROW_H) - 2
-        local row = CreateFrame("Frame", nil, cont)
-        row:SetSize(RW, ROW_H - 2)
-        row:SetPoint("TOPLEFT", cont, "TOPLEFT", 0, yOff)
-        local rbg = row:CreateTexture(nil, "BACKGROUND")
-        rbg:SetAllPoints() ; rbg:SetColorTexture(0.08, 0.08, 0.12, 0.8)
-        -- name
-        local nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        nameFS:SetFont(nameFS:GetFont(), 10, "")
-        nameFS:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -3)
-        nameFS:SetWidth(RW - 80)
-        nameFS:SetJustifyH("LEFT")
-        nameFS:SetText("|cffffffff" .. (vendor.name or "Unknown") .. "|r")
-        -- rating
-        local avgRating = vendor.averageRating or 0
-        local ratingFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ratingFS:SetFont(ratingFS:GetFont(), 9, "")
-        ratingFS:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, 3)
-        local stars = string.rep("*", math.floor(avgRating + 0.5)) .. string.rep("-", 5 - math.floor(avgRating + 0.5))
-        ratingFS:SetText(string.format("|cffffd700%s|r |cff888888%.1f (%d reviews)|r",
-            stars, avgRating, vendor.reviewCount or 0))
-        -- view button
-        local viewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        viewBtn:SetSize(38, 18)
-        viewBtn:SetPoint("TOPRIGHT", row, "TOPRIGHT", -2, -4)
-        viewBtn:SetText("View")
+    local shown = math.min(#vendors, #tab._rows)  -- capped at pool size
+    for i = 1, shown do
+        local vendor = vendors[i]
+        local row    = tab._rows[i]
+        row._nameFS:SetText("|cffffffff" .. (vendor.name or "Unknown") .. "|r")
+        local avg    = vendor.averageRating or 0
+        local filled = math.min(5, math.max(0, math.floor(avg + 0.5)))
+        local stars  = string.rep("*", filled) .. string.rep("-", 5 - filled)
+        row._ratingFS:SetText(string.format("|cffffd700%s|r |cff888888%.1f (%d)|r",
+            stars, avg, vendor.reviewCount or 0))
         local vref = vendor
-        viewBtn:SetScript("OnClick", function()
+        row._viewBtn:SetScript("OnClick", function()
             if Whelp and Whelp.UI and Whelp.UI.VendorDetail then
                 Whelp.UI.VendorDetail:Show(vref)
             end
         end)
-        table.insert(tab._rows, row)
+        row:Show()
     end
-    cont:SetHeight(math.max(20, #vendors * ROW_H))
+    cont:SetHeight(math.max(20, shown * WHELP_ROW_H))
 end
 
 -- ============================================================
@@ -4151,8 +4134,42 @@ function SC_BuildMain()
     end)
 
     -- store refs for refresh
-    whelpTab._cont   = whelpCont
-    whelpTab._rows   = {}
+    whelpTab._cont = whelpCont
+    do
+        -- Pre-build one status FontString + MAX_WHELP_ROWS pooled vendor row frames.
+        -- SC_RefreshWhelp only shows/hides and updates text; it never calls
+        -- CreateFrame or CreateFontString at runtime.
+        local statusFs = whelpCont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        statusFs:SetPoint("TOPLEFT", whelpCont, "TOPLEFT", 0, -2)
+        statusFs:SetWidth(SIDE_W - PAD*2 - 22) ; statusFs:SetJustifyH("LEFT")
+        statusFs:Hide()
+        whelpTab._statusMsg = statusFs
+
+        local RW = SIDE_W - PAD*2 - 22
+        whelpTab._rows = {}
+        for i = 1, MAX_WHELP_ROWS do
+            local row = CreateFrame("Frame", nil, whelpCont)
+            row:SetSize(RW, WHELP_ROW_H - 2)
+            row:SetPoint("TOPLEFT", whelpCont, "TOPLEFT", 0, -((i-1)*WHELP_ROW_H) - 2)
+            row:Hide()
+            local rbg = row:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints() ; rbg:SetColorTexture(0.08, 0.08, 0.12, 0.8)
+            local nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            nameFS:SetFont(nameFS:GetFont(), 10, "")
+            nameFS:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -3)
+            nameFS:SetWidth(RW - 80) ; nameFS:SetJustifyH("LEFT")
+            local ratingFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            ratingFS:SetFont(ratingFS:GetFont(), 9, "")
+            ratingFS:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, 3)
+            local viewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            viewBtn:SetSize(38, 18) ; viewBtn:SetPoint("TOPRIGHT", row, "TOPRIGHT", -2, -4)
+            viewBtn:SetText("View")
+            row._nameFS   = nameFS
+            row._ratingFS = ratingFS
+            row._viewBtn  = viewBtn
+            whelpTab._rows[i] = row
+        end
+    end
 
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")

@@ -1,9 +1,4 @@
 <!-- Whelp Keybindings -->
-<Bindings>
-    <Binding name="WHELP_TOGGLE" header="WHELP" category="ADDONS">
-        Whelp_Toggle()
-    </Binding>
-    <Binding name="WHELP_SEARCH" category="ADDONS">
-        Whelp_Search()
-    </Binding>
-</Bindings>
+<!-- Disabled: TBC Anniversary client (20505) does not support <Binding> XML elements. -->
+<!-- Use /whelp slash command or the Whelp tab inside SlyChar (/slychar) instead. -->
+<Bindings/>

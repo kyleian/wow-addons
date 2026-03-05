@@ -39,5 +39,5 @@ UI\MinimapButton.lua
 # Main
 Whelp.lua
 
-# Bindings (must be last)
-Bindings.xml
+# Bindings disabled: TBC Anniversary (20505) does not support the <Binding> XML element
+# Bindings.xml
