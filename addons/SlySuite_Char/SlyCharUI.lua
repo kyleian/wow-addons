@@ -3315,7 +3315,77 @@ function SC_RefreshAll()
     elseif tab == "misc"   then SC_RefreshMisc()
     elseif tab == "social" then SC_RefreshNIT()
     elseif tab == "suite"  then SC_RefreshSuite()
+    elseif tab == "whelp"  then SC_RefreshWhelp()
     end
+end
+
+function SC_RefreshWhelp()
+    local tab = tabFrames["whelp"]
+    if not tab then return end
+    local cont = tab._cont
+    if not cont then return end
+
+    -- clear existing rows
+    for _, r in ipairs(tab._rows) do r:Hide() end
+    tab._rows = {}
+
+    if not (Whelp and Whelp.VendorManager and Whelp.Database and Whelp.db) then
+        local msg = cont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        msg:SetPoint("TOPLEFT", cont, "TOPLEFT", 0, 0)
+        msg:SetText("|cffff8844Whelp not loaded.|r")
+        cont:SetHeight(20)
+        return
+    end
+
+    local ROW_H = 28
+    local vendors = Whelp.VendorManager:GetVendors({}, "rating") or {}
+
+    if #vendors == 0 then
+        local msg = cont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        msg:SetPoint("TOPLEFT", cont, "TOPLEFT", 0, -2)
+        msg:SetText("|cff888888No vendors yet. Click +Add to add one.|r")
+        cont:SetHeight(20)
+        table.insert(tab._rows, msg)
+        return
+    end
+
+    local RW = SIDE_W - PAD*2 - 22
+    for i, vendor in ipairs(vendors) do
+        local yOff = -((i-1) * ROW_H) - 2
+        local row = CreateFrame("Frame", nil, cont)
+        row:SetSize(RW, ROW_H - 2)
+        row:SetPoint("TOPLEFT", cont, "TOPLEFT", 0, yOff)
+        local rbg = row:CreateTexture(nil, "BACKGROUND")
+        rbg:SetAllPoints() ; rbg:SetColorTexture(0.08, 0.08, 0.12, 0.8)
+        -- name
+        local nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nameFS:SetFont(nameFS:GetFont(), 10, "")
+        nameFS:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -3)
+        nameFS:SetWidth(RW - 80)
+        nameFS:SetJustifyH("LEFT")
+        nameFS:SetText("|cffffffff" .. (vendor.name or "Unknown") .. "|r")
+        -- rating
+        local avgRating = vendor.averageRating or 0
+        local ratingFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ratingFS:SetFont(ratingFS:GetFont(), 9, "")
+        ratingFS:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, 3)
+        local stars = string.rep("*", math.floor(avgRating + 0.5)) .. string.rep("-", 5 - math.floor(avgRating + 0.5))
+        ratingFS:SetText(string.format("|cffffd700%s|r |cff888888%.1f (%d reviews)|r",
+            stars, avgRating, vendor.reviewCount or 0))
+        -- view button
+        local viewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        viewBtn:SetSize(38, 18)
+        viewBtn:SetPoint("TOPRIGHT", row, "TOPRIGHT", -2, -4)
+        viewBtn:SetText("View")
+        local vref = vendor
+        viewBtn:SetScript("OnClick", function()
+            if Whelp and Whelp.UI and Whelp.UI.VendorDetail then
+                Whelp.UI.VendorDetail:Show(vref)
+            end
+        end)
+        table.insert(tab._rows, row)
+    end
+    cont:SetHeight(math.max(20, #vendors * ROW_H))
 end
 
 -- ============================================================
@@ -3708,12 +3778,13 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 4)
+    local tbW = math.floor(SIDE_W / 5)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="misc",   label="Misc"},
         {key="social", label="Social"},
+        {key="whelp",  label="Whelp"},
     }
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
@@ -4036,6 +4107,52 @@ function SC_BuildMain()
         nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
         SC_RefreshNIT()
     end)
+
+    -- ── Whelp tab ─────────────────────────────────────────────────────────
+    local whelpTab = CreateFrame("Frame", nil, side)
+    whelpTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
+    whelpTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
+    whelpTab:SetHeight(tcH) ; whelpTab:Hide()
+    tabFrames["whelp"] = whelpTab
+
+    -- header row: title + Add button
+    local whelpHdr = whelpTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    whelpHdr:SetPoint("TOPLEFT", whelpTab, "TOPLEFT", PAD, -4)
+    whelpHdr:SetText("|cff66d4ffWhelp|r  Vendor Ratings")
+
+    local whelpAddBtn = CreateFrame("Button", nil, whelpTab, "UIPanelButtonTemplate")
+    whelpAddBtn:SetSize(46, 18)
+    whelpAddBtn:SetPoint("TOPRIGHT", whelpTab, "TOPRIGHT", -PAD, -2)
+    whelpAddBtn:SetText("+Add")
+    whelpAddBtn:SetScript("OnClick", function()
+        if Whelp and Whelp.UI and Whelp.UI.MainFrame then
+            Whelp.UI.MainFrame:Show()
+            Whelp.UI.MainFrame:SelectTab("addvendor")
+        end
+    end)
+
+    -- scroll area for vendor rows
+    local whelpScroll = CreateFrame("ScrollFrame", nil, whelpTab, "UIPanelScrollFrameTemplate")
+    whelpScroll:SetPoint("TOPLEFT",     whelpTab, "TOPLEFT",      PAD,    -22)
+    whelpScroll:SetPoint("BOTTOMRIGHT", whelpTab, "BOTTOMRIGHT", -22,     22)
+    local whelpCont = CreateFrame("Frame", nil, whelpScroll)
+    whelpCont:SetSize(SIDE_W - PAD*2 - 22, 1)
+    whelpScroll:SetScrollChild(whelpCont)
+
+    -- bottom: open full window button
+    local whelpOpenBtn = CreateFrame("Button", nil, whelpTab, "UIPanelButtonTemplate")
+    whelpOpenBtn:SetSize(SIDE_W - PAD*2, 18)
+    whelpOpenBtn:SetPoint("BOTTOMLEFT", whelpTab, "BOTTOMLEFT", PAD, 2)
+    whelpOpenBtn:SetText("Open Full Whelp Window")
+    whelpOpenBtn:SetScript("OnClick", function()
+        if Whelp and Whelp.UI and Whelp.UI.MainFrame then
+            Whelp.UI.MainFrame:Toggle()
+        end
+    end)
+
+    -- store refs for refresh
+    whelpTab._cont   = whelpCont
+    whelpTab._rows   = {}
 
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")

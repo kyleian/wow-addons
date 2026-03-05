@@ -91,8 +91,14 @@ function Whelp:HandleSlashCommand(msg)
     local cmd = args[1] or ""
 
     if cmd == "" or cmd == "open" or cmd == "show" then
-        -- Open main UI
-        self.UI.MainFrame:Toggle()
+        -- Prefer opening inside SlyChar if available
+        if SC_ShowMain and SC_SwitchTab then
+            SC_ShowMain()
+            SC_SwitchTab("whelp")
+            if SC_RefreshWhelp then SC_RefreshWhelp() end
+        elseif self.UI and self.UI.MainFrame then
+            self.UI.MainFrame:Toggle()
+        end
 
     elseif cmd == "search" then
         -- Open search
