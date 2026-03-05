@@ -91,13 +91,19 @@ function Whelp:HandleSlashCommand(msg)
     local cmd = args[1] or ""
 
     if cmd == "" or cmd == "open" or cmd == "show" then
-        -- Prefer opening inside SlyChar if available
-        if SC_ShowMain and SC_SwitchTab then
-            SC_ShowMain()
-            SC_SwitchTab("whelp")
-            if SC_RefreshWhelp then SC_RefreshWhelp() end
+        -- Open the Whelp flyout panel docked to SlyChar if available,
+        -- otherwise fall back to the standalone Whelp window.
+        local wp = _G["SlyWhelpPanelFrame"]
+        if wp then
+            if wp:IsShown() then wp:Hide()
+            else
+                -- Ensure SlyChar is visible first
+                if SC_ShowMain then SC_ShowMain() end
+                wp:Show()
+            end
         elseif self.UI and self.UI.MainFrame then
-            self.UI.MainFrame:Toggle()
+            local mf = self.UI.MainFrame:Create()
+            mf:Show()
         end
 
     elseif cmd == "search" then

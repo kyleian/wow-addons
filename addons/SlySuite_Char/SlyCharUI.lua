@@ -3315,24 +3315,22 @@ function SC_RefreshAll()
     elseif tab == "misc"   then SC_RefreshMisc()
     elseif tab == "social" then SC_RefreshNIT()
     elseif tab == "suite"  then SC_RefreshSuite()
-    elseif tab == "whelp"  then SC_RefreshWhelp()
     end
 end
 
 function SC_RefreshWhelp()
-    local tab = tabFrames["whelp"]
-    if not tab then return end
-    local cont = tab._cont
+    local panel = _G["SlyWhelpPanelFrame"]
+    if not panel then return end
+    local cont = panel._cont
     if not cont then return end
 
-    -- hide all pooled rows and the status message
-    for _, r in ipairs(tab._rows) do r:Hide() end
-    if tab._statusMsg then tab._statusMsg:Hide() end
+    for _, r in ipairs(panel._rows) do r:Hide() end
+    if panel._statusMsg then panel._statusMsg:Hide() end
 
     local function showStatus(text)
-        if tab._statusMsg then
-            tab._statusMsg:SetText(text)
-            tab._statusMsg:Show()
+        if panel._statusMsg then
+            panel._statusMsg:SetText(text)
+            panel._statusMsg:Show()
         end
         cont:SetHeight(20)
     end
@@ -3344,14 +3342,14 @@ function SC_RefreshWhelp()
 
     local vendors = Whelp.VendorManager:GetVendors({}, "rating") or {}
     if #vendors == 0 then
-        showStatus("|cff888888No vendors yet. Click +Add to add one.|r")
+        showStatus("|cff888888No vendors yet. Click +Add.|r")
         return
     end
 
-    local shown = math.min(#vendors, #tab._rows)  -- capped at pool size
+    local shown = math.min(#vendors, #panel._rows)
     for i = 1, shown do
         local vendor = vendors[i]
-        local row    = tab._rows[i]
+        local row    = panel._rows[i]
         row._nameFS:SetText("|cffffffff" .. (vendor.name or "Unknown") .. "|r")
         local avg    = vendor.averageRating or 0
         local filled = math.min(5, math.max(0, math.floor(avg + 0.5)))
@@ -3360,13 +3358,19 @@ function SC_RefreshWhelp()
             stars, avg, vendor.reviewCount or 0))
         local vref = vendor
         row._viewBtn:SetScript("OnClick", function()
-            if Whelp and Whelp.UI and Whelp.UI.VendorDetail then
-                Whelp.UI.VendorDetail:Show(vref)
+            if Whelp and Whelp.UI and Whelp.UI.MainFrame then
+                local mf = Whelp.UI.MainFrame:Create()
+                Whelp.UI.MainFrame:SelectTab("browse")
+                mf:Show()
+                -- navigate to detail if VendorDetail available
+                if Whelp.UI.VendorDetail then
+                    Whelp.UI.VendorDetail:Show(vref)
+                end
             end
         end)
         row:Show()
     end
-    cont:SetHeight(math.max(20, shown * 28))  -- 28px per vendor row
+    cont:SetHeight(math.max(20, shown * 28))
 end
 
 -- ============================================================
@@ -3759,13 +3763,12 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 5)
+    local tbW = math.floor(SIDE_W / 4)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="misc",   label="Misc"},
         {key="social", label="Social"},
-        {key="whelp",  label="Whelp"},
     }
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
@@ -4089,86 +4092,6 @@ function SC_BuildMain()
         SC_RefreshNIT()
     end)
 
-    -- ── Whelp tab ─────────────────────────────────────────────────────────
-    local whelpTab = CreateFrame("Frame", nil, side)
-    whelpTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    whelpTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    whelpTab:SetHeight(tcH) ; whelpTab:Hide()
-    tabFrames["whelp"] = whelpTab
-
-    -- header row: title + Add button
-    local whelpHdr = whelpTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    whelpHdr:SetPoint("TOPLEFT", whelpTab, "TOPLEFT", PAD, -4)
-    whelpHdr:SetText("|cff66d4ffWhelp|r  Vendor Ratings")
-
-    local whelpAddBtn = CreateFrame("Button", nil, whelpTab, "UIPanelButtonTemplate")
-    whelpAddBtn:SetSize(46, 18)
-    whelpAddBtn:SetPoint("TOPRIGHT", whelpTab, "TOPRIGHT", -PAD, -2)
-    whelpAddBtn:SetText("+Add")
-    whelpAddBtn:SetScript("OnClick", function()
-        if Whelp and Whelp.UI and Whelp.UI.MainFrame then
-            Whelp.UI.MainFrame:Show()
-            Whelp.UI.MainFrame:SelectTab("addvendor")
-        end
-    end)
-
-    -- scroll area for vendor rows
-    local whelpScroll = CreateFrame("ScrollFrame", nil, whelpTab, "UIPanelScrollFrameTemplate")
-    whelpScroll:SetPoint("TOPLEFT",     whelpTab, "TOPLEFT",      PAD,    -22)
-    whelpScroll:SetPoint("BOTTOMRIGHT", whelpTab, "BOTTOMRIGHT", -22,     22)
-    local whelpCont = CreateFrame("Frame", nil, whelpScroll)
-    whelpCont:SetSize(SIDE_W - PAD*2 - 22, 1)
-    whelpScroll:SetScrollChild(whelpCont)
-
-    -- bottom: open full window button
-    local whelpOpenBtn = CreateFrame("Button", nil, whelpTab, "UIPanelButtonTemplate")
-    whelpOpenBtn:SetSize(SIDE_W - PAD*2, 18)
-    whelpOpenBtn:SetPoint("BOTTOMLEFT", whelpTab, "BOTTOMLEFT", PAD, 2)
-    whelpOpenBtn:SetText("Open Full Whelp Window")
-    whelpOpenBtn:SetScript("OnClick", function()
-        if Whelp and Whelp.UI and Whelp.UI.MainFrame then
-            Whelp.UI.MainFrame:Toggle()
-        end
-    end)
-
-    -- store refs for refresh
-    whelpTab._cont = whelpCont
-    do
-        -- Pre-build one status FontString + 20 pooled vendor row frames.
-        -- SC_RefreshWhelp only shows/hides and updates text; it never calls
-        -- CreateFrame or CreateFontString at runtime.
-        local statusFs = whelpCont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        statusFs:SetPoint("TOPLEFT", whelpCont, "TOPLEFT", 0, -2)
-        statusFs:SetWidth(SIDE_W - PAD*2 - 22) ; statusFs:SetJustifyH("LEFT")
-        statusFs:Hide()
-        whelpTab._statusMsg = statusFs
-
-        local RW = SIDE_W - PAD*2 - 22
-        whelpTab._rows = {}
-        for i = 1, 20 do  -- 20 pooled rows; literals avoid adding upvalues to SC_BuildMain
-            local row = CreateFrame("Frame", nil, whelpCont)
-            row:SetSize(RW, 26)           -- 28px row height minus 2px gap
-            row:SetPoint("TOPLEFT", whelpCont, "TOPLEFT", 0, -((i-1)*28) - 2)
-            row:Hide()
-            local rbg = row:CreateTexture(nil, "BACKGROUND")
-            rbg:SetAllPoints() ; rbg:SetColorTexture(0.08, 0.08, 0.12, 0.8)
-            local nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            nameFS:SetFont(nameFS:GetFont(), 10, "")
-            nameFS:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -3)
-            nameFS:SetWidth(RW - 80) ; nameFS:SetJustifyH("LEFT")
-            local ratingFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            ratingFS:SetFont(ratingFS:GetFont(), 9, "")
-            ratingFS:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, 3)
-            local viewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            viewBtn:SetSize(38, 18) ; viewBtn:SetPoint("TOPRIGHT", row, "TOPRIGHT", -2, -4)
-            viewBtn:SetText("View")
-            row._nameFS   = nameFS
-            row._ratingFS = ratingFS
-            row._viewBtn  = viewBtn
-            whelpTab._rows[i] = row
-        end
-    end
-
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")
     stripDiv:SetSize(1, FRAME_H - HDR_H - FOOT_H)
@@ -4234,6 +4157,14 @@ function SC_BuildMain()
                   SlyLootPanel:SetUserPlaced(true)
                   SlyLootPanel:ClearAllPoints()
                   SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
+              end
+          end },
+        { tip="Whelp",      desc="Vendor ratings & reviews", lbl="Wh",  r=0.20, g=0.78, b=1.00,
+          fn=function()
+              local wp = _G["SlyWhelpPanelFrame"]
+              if wp then
+                  if wp:IsShown() then wp:Hide()
+                  else wp:Show() end
               end
           end },
     }
@@ -4351,6 +4282,135 @@ function SC_BuildMain()
         suiteCont = spContent
 
         suitePanel:HookScript("OnShow", function() SC_RefreshSuite() end)
+    end
+
+    -- ── Whelp flyout panel (right-side) ────────────────────────────────────
+    do
+        local WP_W = 260
+        local WP_H = FRAME_H - HDR_H - FOOT_H
+        local wpanel = CreateFrame("Frame", "SlyWhelpPanelFrame", UIParent)
+        wpanel:SetSize(WP_W, WP_H)
+        wpanel:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, -HDR_H)
+        wpanel:SetFrameStrata("DIALOG")
+        wpanel:SetMovable(true)
+        wpanel:EnableMouse(true)
+        wpanel:RegisterForDrag("LeftButton")
+        wpanel:SetScript("OnDragStart", wpanel.StartMoving)
+        wpanel:SetScript("OnDragStop",  wpanel.StopMovingOrSizing)
+        wpanel:Hide()
+
+        -- Background
+        FillBg(wpanel, 0.04, 0.04, 0.08, 0.97)
+        local wpBord = wpanel:CreateTexture(nil, "OVERLAY")
+        wpBord:SetAllPoints(wpanel) ; wpBord:SetColorTexture(0.22, 0.18, 0.32, 1)
+        local wpInner = wpanel:CreateTexture(nil, "BACKGROUND")
+        wpInner:SetPoint("TOPLEFT",     wpanel, "TOPLEFT",      1, -1)
+        wpInner:SetPoint("BOTTOMRIGHT", wpanel, "BOTTOMRIGHT", -1,  1)
+        wpInner:SetColorTexture(0.04, 0.04, 0.08, 0.97)
+
+        -- Header bar
+        local wpHdr = CreateFrame("Frame", nil, wpanel)
+        wpHdr:SetSize(WP_W, HDR_H)
+        wpHdr:SetPoint("TOPLEFT", wpanel, "TOPLEFT", 0, 0)
+        FillBg(wpHdr, 0.07, 0.06, 0.13, 1)
+
+        local wpTitle = wpHdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        wpTitle:SetFont(wpTitle:GetFont(), 12, "OUTLINE")
+        wpTitle:SetPoint("LEFT", wpHdr, "LEFT", PAD, 0)
+        wpTitle:SetTextColor(0.40, 0.80, 1.00)
+        wpTitle:SetText("Whelp  |cffaaaaaa Vendor Ratings|r")
+
+        local wpClose = CreateFrame("Button", nil, wpHdr, "UIPanelCloseButton")
+        wpClose:SetSize(22, 22)
+        wpClose:SetPoint("RIGHT", wpHdr, "RIGHT", -2, 0)
+        wpClose:SetScript("OnClick", function() wpanel:Hide() end)
+
+        local wpAddBtn = CreateFrame("Button", nil, wpHdr, "UIPanelButtonTemplate")
+        wpAddBtn:SetSize(50, 18)
+        wpAddBtn:SetPoint("RIGHT", wpClose, "LEFT", -4, 0)
+        wpAddBtn:SetText("+Add")
+        wpAddBtn:SetScript("OnClick", function()
+            if Whelp and Whelp.UI and Whelp.UI.MainFrame then
+                local mf = Whelp.UI.MainFrame:Create()
+                Whelp.UI.MainFrame:SelectTab("addvendor")
+                mf:Show()
+            else
+                DEFAULT_CHAT_FRAME:AddMessage("|cff66d4ff[Whelp]|r Whelp is not loaded.")
+            end
+        end)
+
+        -- Header separator
+        local wpSep = wpanel:CreateTexture(nil, "ARTWORK")
+        wpSep:SetSize(WP_W, 1)
+        wpSep:SetPoint("TOPLEFT", wpanel, "TOPLEFT", 0, -HDR_H)
+        wpSep:SetColorTexture(0.25, 0.20, 0.38, 1)
+
+        -- Browse All button (footer)
+        local wpBrowse = CreateFrame("Button", nil, wpanel, "UIPanelButtonTemplate")
+        wpBrowse:SetSize(WP_W - 12, 18)
+        wpBrowse:SetPoint("BOTTOMLEFT", wpanel, "BOTTOMLEFT", 6, 4)
+        wpBrowse:SetText("Browse All in Whelp")
+        wpBrowse:SetScript("OnClick", function()
+            if Whelp and Whelp.UI and Whelp.UI.MainFrame then
+                local mf = Whelp.UI.MainFrame:Create()
+                mf:Show()
+            end
+        end)
+
+        -- Footer separator
+        local wpFSep = wpanel:CreateTexture(nil, "ARTWORK")
+        wpFSep:SetSize(WP_W, 1)
+        wpFSep:SetPoint("BOTTOMLEFT", wpanel, "BOTTOMLEFT", 0, 26)
+        wpFSep:SetColorTexture(0.18, 0.14, 0.28, 1)
+
+        -- Scroll area for vendor rows
+        local wpScroll = CreateFrame("ScrollFrame", nil, wpanel, "UIPanelScrollFrameTemplate")
+        wpScroll:SetPoint("TOPLEFT",     wpanel, "TOPLEFT",      6,   -(HDR_H + 2))
+        wpScroll:SetPoint("BOTTOMRIGHT", wpanel, "BOTTOMRIGHT", -22,   28)
+        local wpCont = CreateFrame("Frame", nil, wpScroll)
+        wpCont:SetSize(WP_W - 8 - 22, 1)
+        wpScroll:SetScrollChild(wpCont)
+
+        -- Status FontString (empty / error states)
+        local wpStatus = wpCont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        wpStatus:SetPoint("TOPLEFT", wpCont, "TOPLEFT", 4, -6)
+        wpStatus:SetWidth(WP_W - 8 - 22) ; wpStatus:SetJustifyH("LEFT")
+        wpStatus:Hide()
+        wpanel._statusMsg = wpStatus
+
+        -- Pre-build 20 pooled vendor rows
+        local WRW = WP_W - 8 - 22
+        wpanel._cont = wpCont
+        wpanel._rows = {}
+        for i = 1, 20 do
+            local row = CreateFrame("Frame", nil, wpCont)
+            row:SetSize(WRW, 26)
+            row:SetPoint("TOPLEFT", wpCont, "TOPLEFT", 0, -((i-1)*28) - 2)
+            row:Hide()
+            local rowParity = (i % 2 == 0)
+            local rbg = row:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints()
+            rbg:SetColorTexture(rowParity and 0.07 or 0.05,
+                                rowParity and 0.06 or 0.04,
+                                rowParity and 0.11 or 0.08, 0.9)
+            local nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            nameFS:SetFont(nameFS:GetFont(), 10, "")
+            nameFS:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -3)
+            nameFS:SetWidth(WRW - 50) ; nameFS:SetJustifyH("LEFT")
+            local ratingFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            ratingFS:SetFont(ratingFS:GetFont(), 9, "")
+            ratingFS:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, 3)
+            local viewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            viewBtn:SetSize(38, 18)
+            viewBtn:SetPoint("TOPRIGHT", row, "TOPRIGHT", -2, -4)
+            viewBtn:SetText("View")
+            row._nameFS   = nameFS
+            row._ratingFS = ratingFS
+            row._viewBtn  = viewBtn
+            wpanel._rows[i] = row
+        end
+
+        wpanel:HookScript("OnShow", function() SC_RefreshWhelp() end)
     end
 
     -- Suite strip button (S) — toggles suite flyout above X button
