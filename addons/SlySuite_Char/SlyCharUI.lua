@@ -964,18 +964,21 @@ local function BuildSlot(parent, slotId, label, x, y)
         end
     end)
 
-    -- SecureActionButtonTemplate overlay: when SpellIsTargeting() is active
-    -- (armor kit, oil, stone, poison being applied), left-click resolves the
-    -- pending application via Blizzard's own secure slot button.  The overlay
-    -- has EnableMouse(false) by default and is switched on by _targetMonitor.
-    local blizName = BLIZ_SLOT_NAMES[slotId]
-    if blizName then
-        local sBtn = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
+    -- SecureHandlerClickTemplate overlay: runs PickupInventoryItem(slotId) in
+    -- WoW's restricted (secure) Lua environment where protected functions are
+    -- accessible without taint.  This correctly handles:
+    --   • SpellIsTargeting() = true  (inscriptions, armor kits, oils, stones)
+    --   • GetCursorInfo() = "enchant" (profession enchant scrolls from bags)
+    --   • GetCursorInfo() = "item"   (bag items dragged onto a slot)
+    -- The overlay has EnableMouse(false) by default; _targetMonitor enables it
+    -- whenever SpellIsTargeting() or GetCursorInfo() is non-nil.
+    -- We skip ammo slot 0 because PickupInventoryItem(0) is invalid in TBC.
+    if slotId ~= 0 then
+        local sBtn = CreateFrame("Button", nil, btn, "SecureHandlerClickTemplate")
         sBtn:SetAllPoints(btn)
-        sBtn:SetAttribute("type", "macro")
-        sBtn:SetAttribute("macrotext", "/click "..blizName)
+        sBtn:SetAttribute("_onclick", "PickupInventoryItem(" .. slotId .. ")")
         sBtn:RegisterForClicks("LeftButtonUp")
-        sBtn:EnableMouse(false)  -- only active while SpellIsTargeting()
+        sBtn:EnableMouse(false)
         _secureSlots[slotId] = sBtn
     end
 
