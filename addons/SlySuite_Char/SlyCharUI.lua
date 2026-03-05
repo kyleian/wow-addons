@@ -175,8 +175,6 @@ local barsScrollOffset    = 0
 local barsScrollInfoLabel = nil
 local MAX_NIT_LOCK_ROWS   = 15   -- reduced by 2 to make room for layer display
 local MAX_NIT_RUN_ROWS    = 0   -- section removed; space used for per-alt view
-local MAX_WHELP_ROWS      = 20  -- pre-built vendor row pool in the Whelp tab
-local WHELP_ROW_H         = 28  -- height per vendor row
 local nitLockScrollOffset = 0
 local nitScrollInfoLabel  = nil
 local suiteRowWidgets  = {}    -- [name]={row,dot,nameTx,statusTx,toggleBtn}
@@ -3368,7 +3366,7 @@ function SC_RefreshWhelp()
         end)
         row:Show()
     end
-    cont:SetHeight(math.max(20, shown * WHELP_ROW_H))
+    cont:SetHeight(math.max(20, shown * 28))  -- 28px per vendor row
 end
 
 -- ============================================================
@@ -4136,7 +4134,7 @@ function SC_BuildMain()
     -- store refs for refresh
     whelpTab._cont = whelpCont
     do
-        -- Pre-build one status FontString + MAX_WHELP_ROWS pooled vendor row frames.
+        -- Pre-build one status FontString + 20 pooled vendor row frames.
         -- SC_RefreshWhelp only shows/hides and updates text; it never calls
         -- CreateFrame or CreateFontString at runtime.
         local statusFs = whelpCont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -4147,10 +4145,10 @@ function SC_BuildMain()
 
         local RW = SIDE_W - PAD*2 - 22
         whelpTab._rows = {}
-        for i = 1, MAX_WHELP_ROWS do
+        for i = 1, 20 do  -- 20 pooled rows; literals avoid adding upvalues to SC_BuildMain
             local row = CreateFrame("Frame", nil, whelpCont)
-            row:SetSize(RW, WHELP_ROW_H - 2)
-            row:SetPoint("TOPLEFT", whelpCont, "TOPLEFT", 0, -((i-1)*WHELP_ROW_H) - 2)
+            row:SetSize(RW, 26)           -- 28px row height minus 2px gap
+            row:SetPoint("TOPLEFT", whelpCont, "TOPLEFT", 0, -((i-1)*28) - 2)
             row:Hide()
             local rbg = row:CreateTexture(nil, "BACKGROUND")
             rbg:SetAllPoints() ; rbg:SetColorTexture(0.08, 0.08, 0.12, 0.8)
