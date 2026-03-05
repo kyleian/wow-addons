@@ -964,19 +964,29 @@ local function BuildSlot(parent, slotId, label, x, y)
         end
     end)
 
-    -- SecureHandlerClickTemplate overlay: runs PickupInventoryItem(slotId) in
-    -- WoW's restricted (secure) Lua environment where protected functions are
-    -- accessible without taint.  This correctly handles:
-    --   • SpellIsTargeting() = true  (inscriptions, armor kits, oils, stones)
-    --   • GetCursorInfo() = "enchant" (profession enchant scrolls from bags)
-    --   • GetCursorInfo() = "item"   (bag items dragged onto a slot)
-    -- The overlay has EnableMouse(false) by default; _targetMonitor enables it
-    -- whenever SpellIsTargeting() or GetCursorInfo() is non-nil.
-    -- We skip ammo slot 0 because PickupInventoryItem(0) is invalid in TBC.
-    if slotId ~= 0 then
-        local sBtn = CreateFrame("Button", nil, btn, "SecureHandlerClickTemplate")
+    -- Secure overlay for enchant/cursor/SpellIsTargeting application.
+    -- Two distinct situations need handling:
+    --
+    --   1. SpellIsTargeting() = true (armor kit, inscription, oil, stone...) —
+    --      PickupInventoryItem does NOT resolve spell targeting; only Blizzard's
+    --      own protected slot button can do that.  We proxy via
+    --      SecureActionButtonTemplate + "/click CharacterXxxSlot".
+    --
+    --   2. GetCursorInfo() != nil (item/enchant dragged from bags) —
+    --      Blizzard's slot button OnClick calls PickupInventoryItem which swaps
+    --      or applies the cursor item to the slot, so same proxy works.
+    --
+    -- The "/click CharacterXxxSlot" macro targets the always-loaded Blizzard
+    -- slot button (present even when CharacterFrame is hidden) and runs its
+    -- fully protected handler.  The overlay sits on top of our btn and is
+    -- enabled by _targetMonitor only when a cursor/spell is pending, so normal
+    -- left-clicks still reach the insecure btn beneath.
+    local blizName = BLIZ_SLOT_NAMES[slotId]
+    if blizName then
+        local sBtn = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
         sBtn:SetAllPoints(btn)
-        sBtn:SetAttribute("_onclick", "PickupInventoryItem(" .. slotId .. ")")
+        sBtn:SetAttribute("type", "macro")
+        sBtn:SetAttribute("macrotext", "/click " .. blizName .. " LeftButton")
         sBtn:RegisterForClicks("LeftButtonUp")
         sBtn:EnableMouse(false)
         _secureSlots[slotId] = sBtn
