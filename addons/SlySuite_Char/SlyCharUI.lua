@@ -145,7 +145,11 @@ local _targetMonitor = CreateFrame("Frame")
 do
     local _wasTargeting = false
     _targetMonitor:SetScript("OnUpdate", function()
-        local t = SpellIsTargeting()
+        -- Activate secure overlays whenever a spell is targeting (armor kit,
+        -- oil, stone, poison) OR any cursor type is set (enchant scroll, item
+        -- drag).  Both cases need Blizzard's protected /click path because
+        -- PickupInventoryItem is restricted in TBC Anniversary.
+        local t = SpellIsTargeting() or (GetCursorInfo() ~= nil)
         if t ~= _wasTargeting then
             _wasTargeting = t
             for _, sBtn in pairs(_secureSlots) do
@@ -931,12 +935,11 @@ local function BuildSlot(parent, slotId, label, x, y)
                 return
             end
             -- If cursor has an item/enchant on it, equip or apply it.
-            -- "enchant" cursor = profession enchant or sharpening stone/wizard oil.
-            -- "item" cursor = bag item being dragged in — equip it.
-            -- "spell" cursor = rogue poison or weapon enchant targeting — allow on
-            --   weapon slots (16=mainhand, 17=offhand). Block on other slots.
-            -- SpellIsTargeting() mode (armor kit / oil / stone / poison) is handled
-            -- by the SecureActionButtonTemplate overlay — no insecure pcall needed here.
+            -- NOTE: When any cursor type is active OR SpellIsTargeting(), the
+            -- SecureActionButtonTemplate overlay has EnableMouse(true) and
+            -- intercepts the click via /click CharacterXxxSlot — so this insecure
+            -- path only fires when _secureSlots has no overlay for this slot (e.g.
+            -- ammo slot 0 is excluded from BLIZ_SLOT_NAMES).
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
                 -- Only block a spell cursor if the slot is empty — can't apply to nothing.
