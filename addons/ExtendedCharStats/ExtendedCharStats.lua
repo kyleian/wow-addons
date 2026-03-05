@@ -71,14 +71,12 @@ function ECS_GetStats()
     local apTotal = (apBase or 0) + (apPos or 0) - (apNeg or 0)
     table.insert(stats, { section="OFFENSE", label="Attack Power",   value=fmt(apTotal) })
 
-    -- GetHitModifier() returns total melee hit from ALL sources: gear rating,
-    -- talents (Precision, Weapon Expertise, etc.) and buffs/auras.  Fall back
-    -- to rating-only if the function is unavailable.
-    local meleeHit = safe(GetHitModifier) or GetCombatRatingBonus(CR.HIT_MELEE) or 0
-    -- Annotate when talent hit is contributing more than just rating.
+    -- GetHitModifier() returns ONLY the flat (non-rating) hit from talents and
+    -- buffs (Precision, World Enlarger, etc.).  Add it to the rating portion.
     local meleeHitRating = GetCombatRatingBonus(CR.HIT_MELEE) or 0
-    local meleeHitTalent = meleeHit - meleeHitRating
-    local meleeHitLabel = meleeHitTalent > 0.005
+    local meleeHitTalent = safe(GetHitModifier) or 0
+    local meleeHit       = meleeHitRating + meleeHitTalent
+    local meleeHitLabel  = meleeHitTalent > 0.005
         and string.format("%.2f%% |cff88dd88(+%.2f%% talents)|r", meleeHit, meleeHitTalent)
         or  string.format("%.2f%%", meleeHit)
     table.insert(stats, { label="Melee Hit",      value=meleeHitLabel })
@@ -104,13 +102,12 @@ function ECS_GetStats()
     local rapTotal = (rapBase or 0) + (rapPos or 0) - (rapNeg or 0)
     table.insert(stats, { section="RANGED", label="Ranged AP",     value=fmt(rapTotal) })
 
-    -- GetRangedHitModifier() (WotLK+) gives total ranged hit; fall back to rating
-    -- only on TBC where the function may not exist (hunters still get Focused Aim
-    -- as a flat % but no universal API exposes it pre-WotLK).  Try both.
-    local rangedHit = safe(GetRangedHitModifier) or GetCombatRatingBonus(CR.HIT_RANGED) or 0
+    -- GetRangedHitModifier() returns ONLY flat (non-rating) ranged hit.
+    -- Add to rating for the true total.
     local rangedHitRating = GetCombatRatingBonus(CR.HIT_RANGED) or 0
-    local rangedHitTalent = rangedHit - rangedHitRating
-    local rangedHitLabel = rangedHitTalent > 0.005
+    local rangedHitTalent = safe(GetRangedHitModifier) or 0
+    local rangedHit       = rangedHitRating + rangedHitTalent
+    local rangedHitLabel  = rangedHitTalent > 0.005
         and string.format("%.2f%% |cff88dd88(+%.2f%% talents)|r", rangedHit, rangedHitTalent)
         or  string.format("%.2f%%", rangedHit)
     table.insert(stats, { label="Ranged Hit",     value=rangedHitLabel })
@@ -138,24 +135,15 @@ function ECS_GetStats()
     local healPower = safe(GetSpellBonusHealing) or spellPowerBase
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
-    -- GetSpellHitModifier() returns total spell hit from ALL sources: gear
-    -- rating, talents (Suppression, Shadow Focus, Elemental Precision, etc.)
-    -- and flat aura bonuses.  It already includes Heroic Presence if active.
-    -- Fall back to rating-only + manual Heroic Presence check on older builds.
-    local spellHitTotal = safe(GetSpellHitModifier)
-    local spellHit, heroicPresence = 0, 0
-    if spellHitTotal then
-        spellHit = spellHitTotal
-        -- Show talent contribution if it exceeds the pure rating value.
-        local spellHitRating = GetCombatRatingBonus(CR.HIT_SPELL) or 0
-        local spellHitExtra  = spellHit - spellHitRating
-        local hitLabel = spellHitExtra > 0.005
-            and string.format("%.2f%% |cff88dd88(+%.2f%% talents/auras)|r", spellHit, spellHitExtra)
-            or  string.format("%.2f%%", spellHit)
-        table.insert(stats, { label="Spell Hit",      value=hitLabel })
-    else
-        -- Legacy fallback: rating + manual Heroic Presence detection.
-        spellHit = GetCombatRatingBonus(CR.HIT_SPELL) or 0
+    -- GetSpellHitModifier() returns ONLY flat (non-rating) spell hit: talents
+    -- (Suppression, Shadow Focus, Elemental Precision, etc.) and aura bonuses
+    -- like Heroic Presence.  Add to rating for the true total.
+    -- Manual Heroic Presence fallback covers builds where the function is nil.
+    local spellHitRating = GetCombatRatingBonus(CR.HIT_SPELL) or 0
+    local spellHitExtra  = safe(GetSpellHitModifier)
+    if not spellHitExtra then
+        -- Manual Heroic Presence detection as the aura-sourced fallback.
+        local heroicPresence = 0
         local _, playerRace = UnitRace("player")
         if playerRace == "Draenei" then
             heroicPresence = 1
@@ -165,12 +153,13 @@ function ECS_GetStats()
                 if race == "Draenei" then heroicPresence = 1 ; break end
             end
         end
-        spellHit = spellHit + heroicPresence
-        local hitLabel = heroicPresence > 0
-            and string.format("%.2f%% |cff88aaff(+1 Heroic Presence)|r", spellHit)
-            or  string.format("%.2f%%", spellHit)
-        table.insert(stats, { label="Spell Hit",      value=hitLabel })
+        spellHitExtra = heroicPresence
     end
+    local spellHit = spellHitRating + spellHitExtra
+    local spellHitLabel = spellHitExtra > 0.005
+        and string.format("%.2f%% |cff88dd88(+%.2f%% talents/auras)|r", spellHit, spellHitExtra)
+        or  string.format("%.2f%%", spellHit)
+    table.insert(stats, { label="Spell Hit",      value=spellHitLabel })
 
     -- TBC Classic: GetSpellCritChance(school) requires a school argument (2=Holy baseline)
     -- Try no-arg first (works on some builds), then Holy school, then rating-only fallback
