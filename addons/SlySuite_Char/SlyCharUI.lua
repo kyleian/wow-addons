@@ -112,22 +112,14 @@ local SLOT_INVTYPES = {
     [0] ={INVTYPE_AMMO=true},
 }
 
--- Blizzard's secure character-frame slot button names, keyed by inventory slotId.
--- Used by the SecureActionButtonTemplate overlay so /click can resolve kit/oil
--- targeting mode through Blizzard's own secure code path.
-local BLIZ_SLOT_NAMES = {
-    [1] ="CharacterHeadSlot",            [2] ="CharacterNeckSlot",
-    [3] ="CharacterShoulderSlot",        [4] ="CharacterShirtSlot",
-    [5] ="CharacterChestSlot",           [6] ="CharacterWaistSlot",
-    [7] ="CharacterLegsSlot",            [8] ="CharacterFeetSlot",
-    [9] ="CharacterWristSlot",           [10]="CharacterHandsSlot",
-    [11]="CharacterFinger0Slot",         [12]="CharacterFinger1Slot",
-    [13]="CharacterTrinket0Slot",        [14]="CharacterTrinket1Slot",
-    [15]="CharacterBackSlot",
-    [16]="CharacterMainHandSlot",
-    [17]="CharacterSecondaryHandSlot",
-    [18]="CharacterRangedSlot",
-    [19]="CharacterTabardSlot",
+-- Blizzard inventory slot IDs for equipment slots (used by secure overlay macro).
+-- /use <slotId> resolves spell targeting, cursor-item equip, and enchant application
+-- onto the item in that equipment slot -- no CharacterFrame needed.
+local EQUIP_SLOT_IDS = {
+    [1]=true,  [2]=true,  [3]=true,  [4]=true,  [5]=true,
+    [6]=true,  [7]=true,  [8]=true,  [9]=true,  [10]=true,
+    [11]=true, [12]=true, [13]=true, [14]=true, [15]=true,
+    [16]=true, [17]=true, [18]=true, [19]=true,
 }
 
 -- ---- Widget refs (module-level) ----
@@ -965,28 +957,19 @@ local function BuildSlot(parent, slotId, label, x, y)
     end)
 
     -- Secure overlay for enchant/cursor/SpellIsTargeting application.
-    -- Two distinct situations need handling:
-    --
-    --   1. SpellIsTargeting() = true (armor kit, inscription, oil, stone...) —
-    --      PickupInventoryItem does NOT resolve spell targeting; only Blizzard's
-    --      own protected slot button can do that.  We proxy via
-    --      SecureActionButtonTemplate + "/click CharacterXxxSlot".
-    --
-    --   2. GetCursorInfo() != nil (item/enchant dragged from bags) —
-    --      Blizzard's slot button OnClick calls PickupInventoryItem which swaps
-    --      or applies the cursor item to the slot, so same proxy works.
-    --
-    -- The "/click CharacterXxxSlot" macro targets the always-loaded Blizzard
-    -- slot button (present even when CharacterFrame is hidden) and runs its
-    -- fully protected handler.  The overlay sits on top of our btn and is
-    -- enabled by _targetMonitor only when a cursor/spell is pending, so normal
-    -- left-clicks still reach the insecure btn beneath.
-    local blizName = BLIZ_SLOT_NAMES[slotId]
-    if blizName then
+    -- "/use N" where N is the equipment slot ID is the WoW-native way to
+    -- resolve ALL pending cursor/spell interactions onto gear slots:
+    --   SpellIsTargeting() = true  → resolves the pending targeting onto slot N
+    --   GetCursorInfo() = "item"   → equips cursor item to slot N
+    --   GetCursorInfo() = "enchant"→ applies enchant to item in slot N
+    -- This does NOT require CharacterFrame to be open or visible.
+    -- The overlay sits on top of btn with EnableMouse(false) normally;
+    -- _targetMonitor enables it whenever cursor/spell is pending.
+    if EQUIP_SLOT_IDS[slotId] then
         local sBtn = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
         sBtn:SetAllPoints(btn)
         sBtn:SetAttribute("type", "macro")
-        sBtn:SetAttribute("macrotext", "/click " .. blizName .. " LeftButton")
+        sBtn:SetAttribute("macrotext", "/use " .. slotId)
         sBtn:RegisterForClicks("LeftButtonUp")
         sBtn:EnableMouse(false)
         _secureSlots[slotId] = sBtn
