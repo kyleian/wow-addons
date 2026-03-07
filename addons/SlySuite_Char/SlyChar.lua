@@ -17,6 +17,7 @@ local DB_DEFAULTS = {
     lastTab   = "stats",
     theme     = "shadow",
     collapsed = {},      -- {[sectionKey]=true} for collapsed stat sections
+    hidden    = {},      -- {[sectionKey]=true} for fully hidden stat sections
 }
 
 SC.db = {}

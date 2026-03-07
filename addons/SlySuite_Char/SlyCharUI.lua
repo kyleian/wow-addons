@@ -1033,6 +1033,7 @@ local function BuildStatRows(parent)
         val:SetPoint("RIGHT", row, "RIGHT", 0, 0)
         val:SetJustifyH("RIGHT")
 
+        row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         row:Hide()
         statRows[i] = {row=row, lbl=lbl, val=val}
     end
@@ -1044,42 +1045,57 @@ function SC_RefreshStats()
         w.lbl:SetText("")
         w.val:SetText("")
         w.row:SetScript("OnClick", nil)
+        w.row:SetScript("OnEnter", nil)
+        w.row:SetScript("OnLeave", nil)
         w.row:EnableMouse(false)
     end
     local ri = 0
     local currentSection = nil
     local collapsed = SC.db and SC.db.collapsed or {}
+    local hidden    = SC.db and SC.db.hidden    or {}
+    local hiddenCount = 0
 
     local function addSection(secKey)
         currentSection = secKey
+        if hidden[secKey] then
+            hiddenCount = hiddenCount + 1
+            return
+        end
         ri = ri + 1
         local w = statRows[ri]
         if not w then return end
-        local arrow = collapsed[secKey] and "|cffaaaaaa\226\150\182|r " or "|cffaaaaaa\226\150\188|r "
-        w.lbl:SetText(arrow .. "|cff66d4ff" .. secKey .. "|r")
+        local arrow = collapsed[secKey] and "[+] " or "[-] "
+        w.lbl:SetText("|cffaaaaaa" .. arrow .. "|r|cff66d4ff" .. secKey .. "|r")
         w.val:SetText("")
         w.row:EnableMouse(true)
-        w.row:SetScript("OnClick", function()
-            if collapsed[secKey] then
-                collapsed[secKey] = nil
+        w.row:SetScript("OnClick", function(self, btn)
+            if btn == "RightButton" then
+                hidden[secKey] = true
+                SC_RefreshStats()
             else
-                collapsed[secKey] = true
+                if collapsed[secKey] then
+                    collapsed[secKey] = nil
+                else
+                    collapsed[secKey] = true
+                end
+                SC_RefreshStats()
             end
-            SC_RefreshStats()
         end)
         w.row:SetScript("OnEnter", function()
-            local arr = collapsed[secKey] and "|cffaaaaaa\226\150\182|r " or "|cffaaaaaa\226\150\188|r "
-            w.lbl:SetText(arr .. "|cffffffff" .. secKey .. "|r")
+            local arr = collapsed[secKey] and "[+] " or "[-] "
+            w.lbl:SetText("|cffaaaaaa" .. arr .. "|r|cffffffff" .. secKey .. "|r")
+            w.val:SetText("|cff666666right-click: hide|r")
         end)
         w.row:SetScript("OnLeave", function()
-            local arr = collapsed[secKey] and "|cffaaaaaa\226\150\182|r " or "|cffaaaaaa\226\150\188|r "
-            w.lbl:SetText(arr .. "|cff66d4ff" .. secKey .. "|r")
+            local arr = collapsed[secKey] and "[+] " or "[-] "
+            w.lbl:SetText("|cffaaaaaa" .. arr .. "|r|cff66d4ff" .. secKey .. "|r")
+            w.val:SetText("")
         end)
         w.row:Show()
     end
 
     local function addRow(lbl, val)
-        if currentSection and collapsed[currentSection] then return end
+        if currentSection and (collapsed[currentSection] or hidden[currentSection]) then return end
         ri = ri + 1
         local w = statRows[ri]
         if not w then return end
@@ -1107,6 +1123,29 @@ function SC_RefreshStats()
                 end
                 if s.label then addRow(s.label, s.value) end
             end
+        end
+    end
+
+    -- Footer: show hidden count + click to restore all
+    if hiddenCount > 0 then
+        ri = ri + 1
+        local w = statRows[ri]
+        if w then
+            local txt = "|cffff9900" .. hiddenCount .. " section(s) hidden  [click to show all]|r"
+            w.lbl:SetText(txt)
+            w.val:SetText("")
+            w.row:EnableMouse(true)
+            w.row:SetScript("OnClick", function()
+                SC.db.hidden = {}
+                SC_RefreshStats()
+            end)
+            w.row:SetScript("OnEnter", function()
+                w.lbl:SetText("|cffffffff" .. hiddenCount .. " section(s) hidden  [click to show all]|r")
+            end)
+            w.row:SetScript("OnLeave", function()
+                w.lbl:SetText(txt)
+            end)
+            w.row:Show()
         end
     end
 end
