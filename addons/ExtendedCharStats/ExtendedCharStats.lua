@@ -91,12 +91,16 @@ function ECS_GetStats()
     -- MELEE HIT sources:
     --   Rating  = GetCombatRatingBonus(CR.HIT_MELEE)  — gear hit rating
     --   Talent  = GetHitModifier()                    — flat % from talents (Precision etc.)
-    local mHitRating = GetCombatRatingBonus(CR.HIT_MELEE) or 0
-    local mHitTalent = safe(GetHitModifier) or 0
+    local mHitRating  = GetCombatRatingBonus(CR.HIT_MELEE) or 0
+    local mHitFlatAPI = safe(GetHitModifier)  -- nil = API absent; number = flat bonus
+    local mHitTalent  = mHitFlatAPI or 0
     addStat(stats, "Melee Hit", mHitRating + mHitTalent, {
         { label="Rating", val=mHitRating },
         { label="Talent", val=mHitTalent },
     })
+    table.insert(stats, { label="  [HitMod API]",
+        value = mHitFlatAPI == nil and "|cffff6600API unavailable|r"
+                or string.format("%.2f%%", mHitFlatAPI) })
 
     -- MELEE CRIT sources:
     --   Rating      = GetCombatRatingBonus(CR.CRIT_MELEE)  — gear crit rating
@@ -129,13 +133,17 @@ function ECS_GetStats()
 
     -- RANGED HIT sources:
     --   Rating  = GetCombatRatingBonus(CR.HIT_RANGED)  — gear hit rating
-    --   Talent  = GetRangedHitModifier()               — Focused Aim, etc. (may not exist in TBC)
-    local rHitRating = GetCombatRatingBonus(CR.HIT_RANGED) or 0
-    local rHitTalent = safe(GetRangedHitModifier) or 0
+    --   Talent  = GetRangedHitModifier()               — Focused Aim, etc.
+    local rHitRating  = GetCombatRatingBonus(CR.HIT_RANGED) or 0
+    local rHitFlatAPI = safe(GetRangedHitModifier)  -- nil = API absent
+    local rHitTalent  = rHitFlatAPI or 0
     addStat(stats, "Ranged Hit", rHitRating + rHitTalent, {
         { label="Rating", val=rHitRating },
         { label="Talent", val=rHitTalent },
     })
+    table.insert(stats, { label="  [RangedHitMod API]",
+        value = rHitFlatAPI == nil and "|cffff6600API unavailable|r"
+                or string.format("%.2f%%", rHitFlatAPI) })
 
     -- RANGED CRIT sources:
     --   Rating      = GetCombatRatingBonus(CR.CRIT_RANGED)
@@ -168,16 +176,24 @@ function ECS_GetStats()
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
     -- SPELL HIT sources:
-    --   Rating      = GetCombatRatingBonus(CR.HIT_SPELL)
-    --   Talent/Aura = GetSpellHitModifier()  — Suppression, Shadow Focus, Heroic Presence, etc.
-    --                 Returns 0 when present but no bonus active (differs from nil = API absent).
+    --   Rating      = GetCombatRatingBonus(CR.HIT_SPELL)  — gear hit rating
+    --   Talent/Aura = GetSpellHitModifier()               — flat % from ALL non-rating sources:
+    --                   global talents (Suppression, Shadow Focus, etc.)
+    --                   school-specific talents (Elemental Precision for Mages, etc.)
+    --                   auras (Heroic Presence)
+    --                 Returns 0 when present but no bonus active.
+    --                 Returns nil when the API itself doesn't exist on this build.
+    --
+    -- If GetSpellHitModifier is nil we fall back to manual Heroic Presence detection.
+    -- School-specific hit (e.g. Elemental Precision) cannot be independently
+    -- queried in TBC — it should appear inside GetSpellHitModifier()'s return value.
     local sHitRating  = GetCombatRatingBonus(CR.HIT_SPELL) or 0
-    local sHitFlatAPI = safe(GetSpellHitModifier)  -- nil = API absent; 0 = present, no bonus
+    local sHitFlatAPI = safe(GetSpellHitModifier)  -- nil = API absent; number = flat bonus (may be 0)
     local sHitTalent
     if sHitFlatAPI ~= nil then
         sHitTalent = sHitFlatAPI
     else
-        -- Heroic Presence manual fallback (TBC builds without GetSpellHitModifier)
+        -- API absent: manual Heroic Presence only (school-specific talents not capturable)
         sHitTalent = 0
         local _, playerRace = UnitRace("player")
         if playerRace == "Draenei" then
@@ -189,10 +205,16 @@ function ECS_GetStats()
             end
         end
     end
+    -- Show diagnostic: what did the API actually return?
+    local sHitAPINote = sHitFlatAPI == nil
+        and "|cffff6600API unavailable|r"
+        or  string.format("%.2f%%", sHitFlatAPI)
     addStat(stats, "Spell Hit", sHitRating + sHitTalent, {
-        { label="Rating",      val=sHitRating  },
-        { label="Talent/Aura", val=sHitTalent  },
+        { label="Rating",                     val=sHitRating  },
+        { label="Talent/Aura",                val=sHitTalent  },
     })
+    -- Always show the raw GetSpellHitModifier() result so mismatches are visible
+    table.insert(stats, { label="  [SpellHitMod API]", value=sHitAPINote })
 
     -- SPELL CRIT sources:
     --   Rating     = GetCombatRatingBonus(CR.CRIT_SPELL)
