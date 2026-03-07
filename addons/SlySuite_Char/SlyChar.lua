@@ -39,6 +39,11 @@ end
 -- --------------------------------------------------------
 function SC_ShowMain()
     if not SlyCharMainFrame then
+        if InCombatLockdown() then
+            -- SC_BuildMain creates secure buttons which is forbidden in combat.
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Open the character sheet once out of combat first.")
+            return
+        end
         SC_BuildMain()
     end
     local pos = SC.db.position
@@ -69,6 +74,15 @@ end
 local function HookCharacterFrame()
     if not CharacterFrame then return end
     CharacterFrame:HookScript("OnShow", function(self)
+        if InCombatLockdown() then
+            -- CharacterFrame:Hide() is restricted in combat; let both frames coexist.
+            -- SlyChar will open alongside the default frame if already built.
+            if SlyCharMainFrame then
+                SlyCharMainFrame:Show()
+                SC_RefreshAll()
+            end
+            return
+        end
         self:Hide()                 -- suppress the default frame
         SC_ToggleMain()             -- toggle our panel
     end)

@@ -139,10 +139,13 @@ do
     _targetMonitor:SetScript("OnUpdate", function()
         -- Activate secure overlays whenever a spell is targeting (armor kit,
         -- oil, stone, poison) OR any cursor type is set (enchant scroll, item
-        -- drag).  Both cases need Blizzard's protected /click path because
+        -- drag).  Both cases need Blizzard's protected /use path because
         -- PickupInventoryItem is restricted in TBC Anniversary.
         local t = SpellIsTargeting() or (GetCursorInfo() ~= nil)
         if t ~= _wasTargeting then
+            -- EnableMouse on SecureActionButtonTemplate buttons is a restricted
+            -- operation during combat lockdown.  Defer until out of combat.
+            if InCombatLockdown() then return end
             _wasTargeting = t
             for _, sBtn in pairs(_secureSlots) do
                 sBtn:EnableMouse(t)
