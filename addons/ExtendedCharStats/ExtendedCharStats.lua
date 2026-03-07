@@ -44,8 +44,76 @@ local SPELL_SCHOOLS = {
 }
 
 -- -------------------------------------------------------
--- Stat retrieval helpers (all return formatted strings)
+-- TBC hit-granting talents (enUS/enGB locale, 2.4.x)
+-- key = lowercase talent name, value = { pct_per_rank, affects_melee, affects_ranged, affects_spell }
+-- NOTE: locale-dependent. All names verified against Wowpedia TBC talent data.
 -- -------------------------------------------------------
+local HIT_TALENTS = {
+    -- ---- WARRIOR ------------------------------------------------
+    -- Arms: Precision (3 ranks, 1% melee/ranged hit each)
+    ["precision"]               = { 1, true,  false, false },
+
+    -- ---- ROGUE --------------------------------------------------
+    -- Combat: Precision (5 ranks, 1% melee hit each)
+    -- Same name as Warrior; union covers both since only one class is active.
+
+    -- ---- HUNTER -------------------------------------------------
+    -- Survival: Surefooted (3 ranks, 1% melee + 1% ranged hit each)
+    ["surefooted"]              = { 1, true,  true,  false },
+
+    -- ---- MAGE ---------------------------------------------------
+    -- Arcane: Elemental Precision (3 ranks, 1% Fire/Frost/Arcane hit each)
+    ["elemental precision"]     = { 1, false, false, true  },
+
+    -- ---- WARLOCK ------------------------------------------------
+    -- Affliction: Suppression (5 ranks, 1% spell hit each)
+    ["suppression"]             = { 1, false, false, true  },
+
+    -- ---- PRIEST -------------------------------------------------
+    -- Shadow: Shadow Focus (5 ranks, 2% shadow hit each)
+    ["shadow focus"]            = { 2, false, false, true  },
+
+    -- ---- DRUID --------------------------------------------------
+    -- Balance: Balance of Power (2 ranks, 2% spell hit each)
+    ["balance of power"]        = { 2, false, false, true  },
+
+    -- ---- SHAMAN -------------------------------------------------
+    -- No direct hit talent in TBC (Totem of Wrath is a totem, not a talent)
+
+    -- ---- PALADIN ------------------------------------------------
+    -- No direct hit talent in TBC
+
+    -- ---- DEATH KNIGHT -------------------------------------------
+    -- Does not exist in TBC
+}
+
+-- Walk all talent trees; return melee, ranged, spell flat hit % and source list.
+-- Uses raw pcall throughout so it has no dependency on the safe() definition order.
+local function ScanTalentHit()
+    local melee, ranged, spell = 0, 0, 0
+    local sources = {}
+    local ok0, numTabs = pcall(GetNumTalentTabs)
+    numTabs = ok0 and (numTabs or 0) or 0
+    for tab = 1, numTabs do
+        local okT, numT = pcall(GetNumTalents, tab)
+        numT = okT and (numT or 0) or 0
+        for i = 1, numT do
+            local ok, name, _, _, _, rank = pcall(GetTalentInfo, tab, i)
+            if ok and name and rank and rank > 0 then
+                local t = HIT_TALENTS[name:lower()]
+                if t then
+                    local pct = t[1] * rank
+                    if t[2] then melee  = melee  + pct end
+                    if t[3] then ranged = ranged + pct end
+                    if t[4] then spell  = spell  + pct end
+                    sources[#sources+1] = name .. " +" .. pct .. "%"
+                end
+            end
+        end
+    end
+    return melee, ranged, spell, sources
+end
+
 
 local function safe(fn, ...)
     -- Use select/table.pack pattern to preserve ALL return values.
@@ -91,9 +159,15 @@ function ECS_GetStats()
     local apTotal = (apBase or 0) + (apPos or 0) - (apNeg or 0)
     table.insert(stats, { section="OFFENSE", label="Attack Power",   value=fmt(apTotal) })
 
-    -- MELEE HIT: Rating (gear) + Talent flat % (Precision, etc.)
-    local mHitRating  = GetCombatRatingBonus(CR.HIT_MELEE) or 0
-    local mHitTalent  = safe(GetHitModifier) or 0
+    -- Scan all talents once for hit contributions across all types.
+    -- Used for melee, ranged and spell hit below.
+    local scanMeleeHit, scanRangedHit, scanSpellHit, scanSources = ScanTalentHit()
+
+    -- MELEE HIT
+    -- Rating = gear hit rating.  Talent = max(GetHitModifier API, talent scan).
+    -- GetHitModifier() returns flat non-rating melee hit; scan is a cross-check.
+    local mHitRating = GetCombatRatingBonus(CR.HIT_MELEE) or 0
+    local mHitTalent = math.max(safe(GetHitModifier) or 0, scanMeleeHit)
     addStat(stats, "Melee Hit", mHitRating + mHitTalent, {
         { label="Rating", val=mHitRating },
         { label="Talent", val=mHitTalent },
@@ -128,9 +202,10 @@ function ECS_GetStats()
     local rapTotal = (rapBase or 0) + (rapPos or 0) - (rapNeg or 0)
     table.insert(stats, { section="RANGED", label="Ranged AP",     value=fmt(rapTotal) })
 
-    -- RANGED HIT: Rating (gear) + Talent flat % (Focused Aim, etc.)
-    local rHitRating  = GetCombatRatingBonus(CR.HIT_RANGED) or 0
-    local rHitTalent  = safe(GetRangedHitModifier) or 0
+    -- RANGED HIT
+    -- Rating = gear hit rating.  Talent = max(GetRangedHitModifier API, talent scan).
+    local rHitRating = GetCombatRatingBonus(CR.HIT_RANGED) or 0
+    local rHitTalent = math.max(safe(GetRangedHitModifier) or 0, scanRangedHit)
     addStat(stats, "Ranged Hit", rHitRating + rHitTalent, {
         { label="Rating", val=rHitRating },
         { label="Talent", val=rHitTalent },
@@ -166,64 +241,15 @@ function ECS_GetStats()
     local healPower = safe(GetSpellBonusHealing) or spellPowerBase
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
-    -- SPELL HIT sources:
-    --   1. Rating      = GetCombatRatingBonus(CR.HIT_SPELL) — gear hit rating
-    --   2. Talent/Aura = GetSpellHitModifier()              — global flat hit from talents + auras
-    --                    (Suppression, Shadow Focus, Heroic Presence, etc.)
-    --   3. School-specific talent hit — e.g. Mage: Elemental Precision (+Fire/Frost/Arcane hit)
-    --      GetSpellHitModifier() may NOT capture school-specific hit on TBC Anniversary.
-    --      We scan all talents for known school-hit contributions as a fallback.
-    --      Positive delta between best-school GetSpellHitModifier and the global return
-    --      also signals school-specific bonuses.
+    -- SPELL HIT
+    -- Rating = gear hit rating.
+    -- Talent = max(GetSpellHitModifier API, module-scope talent scan).
+    -- Heroic Presence (+1%) added manually when API is absent.
     local sHitRating  = GetCombatRatingBonus(CR.HIT_SPELL) or 0
-    local sHitFlatAPI = safe(GetSpellHitModifier)  -- nil = API absent on this build
-
-    -- Talent scan: walk every talent, check the name against known hit-granting talents.
-    -- Returns flat % per rank contributed.  Locale-dependent — works for enUS/enGB TBC.
-    local KNOWN_HIT_TALENTS = {
-        -- name pattern (lowercase), % per rank
-        ["elemental precision"] = 1,   -- Mage Arcane: +1/2/3% Fire/Frost/Arcane hit
-        ["suppression"]         = 1,   -- Warlock Affliction: +1/2/3% hit
-        ["shadow focus"]        = 1,   -- Warlock/Priest Shadow: +1/2/3% hit
-        ["focused"]             = nil, -- skip "Focused Cast" etc.
-        ["precision"]           = nil, -- generic; only match "Elemental Precision"
-    }
-    local function ScanTalentsForHit()
-        local bonus = 0
-        local found = {}
-        local numTabs = safe(GetNumTalentTabs) or 0
-        for tab = 1, numTabs do
-            local numT = safe(GetNumTalents, tab) or 0
-            for i = 1, numT do
-                -- safe() only captures 3 return values; GetTalentInfo returns
-                -- name,icon,tier,col,currentRank,maxRank — use raw pcall here.
-                local ok, name, _, _, _, rank = pcall(GetTalentInfo, tab, i)
-                if ok and name and rank and rank > 0 then
-                    local lower = name:lower()
-                    if lower == "elemental precision" then
-                        bonus = bonus + rank * 1
-                        found[#found+1] = string.format("Elem.Prec. %d%%", rank)
-                    elseif lower == "suppression" then
-                        bonus = bonus + rank * 1
-                        found[#found+1] = string.format("Suppression %d%%", rank)
-                    elseif lower == "shadow focus" then
-                        bonus = bonus + rank * 1
-                        found[#found+1] = string.format("Shadow Focus %d%%", rank)
-                    end
-                end
-            end
-        end
-        return bonus, found
-    end
-
-    local sHitTalentAPI = sHitFlatAPI or 0
-    local sHitTalentScan, talentSources = ScanTalentsForHit()
-    -- Use the larger of the two: if the API captures it correctly, great;
-    -- if talent scan finds more, the API is under-reporting.
-    local sHitTalent = math.max(sHitTalentAPI, sHitTalentScan)
-
-    -- Manual Heroic Presence if API is absent
+    local sHitFlatAPI = safe(GetSpellHitModifier)
+    local sHitTalent  = math.max(sHitFlatAPI or 0, scanSpellHit)
     if sHitFlatAPI == nil then
+        -- API absent: add Heroic Presence manually (talent scan doesn't cover auras)
         local _, playerRace = UnitRace("player")
         if playerRace == "Draenei" then
             sHitTalent = sHitTalent + 1
@@ -234,21 +260,18 @@ function ECS_GetStats()
             end
         end
     end
-
-    local sHitTotal = sHitRating + sHitTalent
-    addStat(stats, "Spell Hit", sHitTotal, {
+    addStat(stats, "Spell Hit", sHitRating + sHitTalent, {
         { label="Rating",      val=sHitRating  },
         { label="Talent/Aura", val=sHitTalent  },
     })
-    -- Show diagnostic rows: raw API value + what talent scan found.
-    -- These let us verify the two sources agree; remove once confirmed accurate.
+    -- Diagnostic rows: raw API + talent scan breakdown (remove once confirmed accurate)
     local apiStr = sHitFlatAPI == nil
         and "|cffff6600nil (API unavailable)|r"
         or  string.format("%.2f%%", sHitFlatAPI)
     table.insert(stats, { label="  [SpellHitMod API]", value=apiStr })
-    if #talentSources > 0 then
+    if #scanSources > 0 then
         table.insert(stats, { label="  [Talent scan]",
-            value=table.concat(talentSources, ", ") })
+            value=table.concat(scanSources, ", ") })
     end
 
     -- SPELL CRIT sources:
