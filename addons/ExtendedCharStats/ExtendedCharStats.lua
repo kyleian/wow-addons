@@ -50,7 +50,7 @@ local SPELL_SCHOOLS = {
 -- -------------------------------------------------------
 local HIT_TALENTS = {
     -- ---- WARRIOR ------------------------------------------------
-    -- Arms: Precision (3 ranks, 1% melee/ranged hit each)
+    -- Arms: Precision (3 ranks, 1% melee hit each — melee only in TBC)
     ["precision"]               = { 1, true,  false, false },
 
     -- ---- ROGUE --------------------------------------------------
@@ -60,8 +60,14 @@ local HIT_TALENTS = {
     -- ---- HUNTER -------------------------------------------------
     -- Survival: Surefooted (3 ranks, 1% melee + 1% ranged hit each)
     ["surefooted"]              = { 1, true,  true,  false },
+    -- Marksmanship: Focused Aim (3 ranks, 1% ranged hit each)
+    ["focused aim"]             = { 1, false, true,  false },
 
     -- ---- MAGE ---------------------------------------------------
+    -- Arcane: Arcane Focus (5 ranks, 2% Arcane spell hit each — Arcane school only)
+    -- NOTE: school-specific; GetSpellHitModifier may or may not include it.
+    -- math.max(API, scan) handles both cases without double-counting.
+    ["arcane focus"]            = { 2, false, false, true  },
     -- Arcane: Elemental Precision (3 ranks, 1% Fire/Frost/Arcane hit each)
     ["elemental precision"]     = { 1, false, false, true  },
 
