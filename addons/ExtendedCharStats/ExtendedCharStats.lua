@@ -48,8 +48,11 @@ local SPELL_SCHOOLS = {
 -- -------------------------------------------------------
 
 local function safe(fn, ...)
-    local ok, v1, v2, v3 = pcall(fn, ...)
-    if ok then return v1, v2, v3 end
+    -- Use select/table.pack pattern to preserve ALL return values.
+    -- WoW API functions can return up to ~8 values; explicit capture covers
+    -- every case used in this file without needing a table.
+    local ok, v1, v2, v3, v4, v5, v6, v7, v8 = pcall(fn, ...)
+    if ok then return v1, v2, v3, v4, v5, v6, v7, v8 end
     return nil
 end
 
@@ -192,12 +195,14 @@ function ECS_GetStats()
         for tab = 1, numTabs do
             local numT = safe(GetNumTalents, tab) or 0
             for i = 1, numT do
-                local name, _, _, _, rank = safe(GetTalentInfo, tab, i)
-                if name and rank and rank > 0 then
+                -- safe() only captures 3 return values; GetTalentInfo returns
+                -- name,icon,tier,col,currentRank,maxRank — use raw pcall here.
+                local ok, name, _, _, _, rank = pcall(GetTalentInfo, tab, i)
+                if ok and name and rank and rank > 0 then
                     local lower = name:lower()
                     if lower == "elemental precision" then
                         bonus = bonus + rank * 1
-                        found[#found+1] = string.format("Elemental Prec. %d%%", rank)
+                        found[#found+1] = string.format("Elem.Prec. %d%%", rank)
                     elseif lower == "suppression" then
                         bonus = bonus + rank * 1
                         found[#found+1] = string.format("Suppression %d%%", rank)
