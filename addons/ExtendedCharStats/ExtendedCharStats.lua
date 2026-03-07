@@ -291,47 +291,52 @@ function ECS_GetStats()
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
     -- SPELL HIT per school
-    -- GetSpellHitModifier() returns the global non-rating total the game engine
-    -- knows about (globally-applying talents + most auras).  We use it as a floor.
-    -- School-specific talents (Arcane Focus, Elem. Precision, Shadow Focus) may or
-    -- may not be folded into that value; to avoid double-counting we only show the
-    -- school-specific EXTRA above the API baseline as an additional per-school row.
+    -- GetSpellHitModifier() = non-rating hit the engine reports globally (floor).
+    -- School-specific talents (Arcane Focus, Elem. Precision, Shadow Focus) add on
+    -- top for specific schools.
     --
-    --   sHitBase          = rating + max(API, heroic)    <- applies to all schools
-    --   schoolExtra[s]    = max(0, spellBySchool[s] - API)  <- above-API school bonus
-    --   schoolTotal[s]    = sHitBase + schoolExtra[s]
+    -- Per-school total (non-rating) = max(API, schoolScan + heroicBonus)
+    --   * If the API already captured the school talent → max picks the API value  (no double-count)
+    --   * If the API missed it (or school scan is higher) → scan value wins
+    --
+    -- Display: header = best school total.  Sub-row for each school that has a
+    -- non-zero school-specific talent bonus from the scan (always show them so the
+    -- player can see which schools are boosted regardless of API behaviour).
     local sHitRating = GetCombatRatingBonus(CR.HIT_SPELL) or 0
     local sHitAPI    = safe(GetSpellHitModifier) or 0
-    local sHitBase   = sHitRating + math.max(sHitAPI, heroicBonus)
 
-    -- Find the best school total for the header value
-    local bestSpellHit = sHitBase
+    -- Per-school non-rating hit (the higher of: API floor OR school scan + heroic)
+    local schoolHitFlat = {}
     for _, sid in ipairs(ALL_SPELL_SCHOOLS) do
-        local extra = math.max(0, (spellBySchool[sid] or 0) - sHitAPI)
-        local tot   = sHitBase + extra
+        local scanPct = (spellBySchool[sid] or 0) + heroicBonus
+        schoolHitFlat[sid] = math.max(sHitAPI, scanPct)
+    end
+
+    -- Header = best school total
+    local bestSpellHit = 0
+    for _, sid in ipairs(ALL_SPELL_SCHOOLS) do
+        local tot = sHitRating + schoolHitFlat[sid]
         if tot > bestSpellHit then bestSpellHit = tot end
     end
 
     table.insert(stats, { label="Spell Hit", value=string.format("%.2f%%", bestSpellHit) })
-    -- Base sub-rows (apply to all schools equally)
     if sHitRating > 0.005 then
-        table.insert(stats, { label="  Rating",      value=string.format("%.2f%%", sHitRating) })
+        table.insert(stats, { label="  Rating", value=string.format("%.2f%%", sHitRating) })
     end
     if sHitAPI > 0.005 then
-        table.insert(stats, { label="  Talent/Aura", value=string.format("%.2f%%", sHitAPI) })
+        table.insert(stats, { label="  Talent/Aura (all)", value=string.format("%.2f%%", sHitAPI) })
     end
     if heroicBonus > 0 then
-        table.insert(stats, { label="  Heroic Presence", value="+1%" })
+        table.insert(stats, { label="  Heroic Presence", value="+1% (all)" })
     end
-    -- Per-school rows: only emit schools that exceed the base (school-specific bonus)
+    -- Per-school rows: show every school that has a scan-based bonus
     for _, sid in ipairs(ALL_SPELL_SCHOOLS) do
         local scanPct = spellBySchool[sid] or 0
-        local extra   = math.max(0, scanPct - sHitAPI)
-        if extra > 0.005 then
-            local schoolTotal = sHitBase + extra
+        if scanPct > 0.005 then
+            local schoolTotal = sHitRating + schoolHitFlat[sid]
             table.insert(stats, {
                 label = "  " .. SCHOOL_NAMES[sid],
-                value = string.format("%.2f%% (+%d%% talent)", schoolTotal, extra)
+                value = string.format("%.2f%% (+%d%% talent)", schoolTotal, scanPct)
             })
         end
     end
