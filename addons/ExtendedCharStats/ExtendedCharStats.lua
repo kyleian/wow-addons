@@ -61,6 +61,23 @@ local function fmt(n, decimals)
     return string.format("%d", math.floor(n + 0.5))
 end
 
+-- Format a stat total with an optional source breakdown annotation.
+-- parts = list of {val=number, label=string}; only non-zero parts are shown.
+-- If two or more parts contribute, appends a grey "(X gear + Y talent)" note.
+local function fmtStat(total, parts)
+    local nonzero = {}
+    for _, p in ipairs(parts) do
+        if p.val and p.val > 0.005 then
+            nonzero[#nonzero+1] = string.format("%.2f %s", p.val, p.label)
+        end
+    end
+    local base = string.format("%.2f%%", total)
+    if #nonzero >= 2 then
+        return base .. "  |cffaaaaaa(" .. table.concat(nonzero, " + ") .. ")|r"
+    end
+    return base
+end
+
 -- Returns a stat table for the current player to populate the panel
 function ECS_GetStats()
     local stats = {}
@@ -71,19 +88,24 @@ function ECS_GetStats()
     local apTotal = (apBase or 0) + (apPos or 0) - (apNeg or 0)
     table.insert(stats, { section="OFFENSE", label="Attack Power",   value=fmt(apTotal) })
 
-    -- GetHitModifier() returns ONLY the flat (non-rating) hit from talents and
-    -- buffs (Precision, World Enlarger, etc.).  Add it to the rating portion.
-    local meleeHitRating = GetCombatRatingBonus(CR.HIT_MELEE) or 0
-    local meleeHitTalent = safe(GetHitModifier) or 0
-    local meleeHit       = meleeHitRating + meleeHitTalent
-    local meleeHitLabel  = meleeHitTalent > 0.005
-        and string.format("%.2f%% |cff88dd88(+%.2f%% talents)|r", meleeHit, meleeHitTalent)
-        or  string.format("%.2f%%", meleeHit)
-    table.insert(stats, { label="Melee Hit",      value=meleeHitLabel })
+    -- MELEE HIT
+    -- GetCombatRatingBonus = hit from gear rating.
+    -- GetHitModifier()     = flat hit from talents/buffs (Precision, etc.).
+    -- Total = sum of both.  safe() returns nil if the API doesn't exist.
+    local mHitRating = GetCombatRatingBonus(CR.HIT_MELEE) or 0
+    local mHitFlat   = safe(GetHitModifier) or 0
+    local mHitTotal  = mHitRating + mHitFlat
+    table.insert(stats, { label="Melee Hit",
+        value = fmtStat(mHitTotal, {{val=mHitRating,label="gear"},{val=mHitFlat,label="talent"}}) })
 
-    -- GetCritChance() returns total melee crit %; fall back to pure rating portion if unavailable
-    local meleeCrit = safe(GetCritChance) or GetCombatRatingBonus(CR.CRIT_MELEE) or 0
-    table.insert(stats, { label="Melee Crit",     value=string.format("%.2f%%", meleeCrit) })
+    -- MELEE CRIT
+    -- GetCritChance() returns total melee crit from ALL sources (rating + agi + talents).
+    -- Anything above the rating portion is agi/talents combined.
+    local mCritTotal  = safe(GetCritChance) or 0
+    local mCritRating = GetCombatRatingBonus(CR.CRIT_MELEE) or 0
+    local mCritOther  = math.max(0, mCritTotal - mCritRating)
+    table.insert(stats, { label="Melee Crit",
+        value = fmtStat(mCritTotal, {{val=mCritRating,label="gear"},{val=mCritOther,label="agi/talent"}}) })
 
     local hasteM = GetCombatRatingBonus(CR.HASTE_MELEE)
     table.insert(stats, { label="Melee Haste",    value=string.format("%.2f%%", hasteM or 0) })
@@ -102,19 +124,22 @@ function ECS_GetStats()
     local rapTotal = (rapBase or 0) + (rapPos or 0) - (rapNeg or 0)
     table.insert(stats, { section="RANGED", label="Ranged AP",     value=fmt(rapTotal) })
 
-    -- GetRangedHitModifier() returns ONLY flat (non-rating) ranged hit.
-    -- Add to rating for the true total.
-    local rangedHitRating = GetCombatRatingBonus(CR.HIT_RANGED) or 0
-    local rangedHitTalent = safe(GetRangedHitModifier) or 0
-    local rangedHit       = rangedHitRating + rangedHitTalent
-    local rangedHitLabel  = rangedHitTalent > 0.005
-        and string.format("%.2f%% |cff88dd88(+%.2f%% talents)|r", rangedHit, rangedHitTalent)
-        or  string.format("%.2f%%", rangedHit)
-    table.insert(stats, { label="Ranged Hit",     value=rangedHitLabel })
+    -- RANGED HIT
+    -- GetRangedHitModifier() = flat hit from ranged talents (Focused Aim, etc.).
+    -- May not exist in TBC; safe() returns nil and we fall back to 0.
+    local rHitRating = GetCombatRatingBonus(CR.HIT_RANGED) or 0
+    local rHitFlat   = safe(GetRangedHitModifier) or 0
+    local rHitTotal  = rHitRating + rHitFlat
+    table.insert(stats, { label="Ranged Hit",
+        value = fmtStat(rHitTotal, {{val=rHitRating,label="gear"},{val=rHitFlat,label="talent"}}) })
 
-    -- GetRangedCritChance() returns total ranged crit %; fall back to pure rating portion if unavailable
-    local rangedCrit = safe(GetRangedCritChance) or GetCombatRatingBonus(CR.CRIT_RANGED) or 0
-    table.insert(stats, { label="Ranged Crit",    value=string.format("%.2f%%", rangedCrit) })
+    -- RANGED CRIT
+    -- GetRangedCritChance() = total ranged crit from all sources.
+    local rCritTotal  = safe(GetRangedCritChance) or 0
+    local rCritRating = GetCombatRatingBonus(CR.CRIT_RANGED) or 0
+    local rCritOther  = math.max(0, rCritTotal - rCritRating)
+    table.insert(stats, { label="Ranged Crit",
+        value = fmtStat(rCritTotal, {{val=rCritRating,label="gear"},{val=rCritOther,label="agi/talent"}}) })
 
     -- Spell
     -- Spell power: highest value across valid TBC schools (2-7); school 0 is invalid in TBC.
@@ -135,38 +160,46 @@ function ECS_GetStats()
     local healPower = safe(GetSpellBonusHealing) or spellPowerBase
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
-    -- GetSpellHitModifier() returns ONLY flat (non-rating) spell hit: talents
-    -- (Suppression, Shadow Focus, Elemental Precision, etc.) and aura bonuses
-    -- like Heroic Presence.  Add to rating for the true total.
-    -- Manual Heroic Presence fallback covers builds where the function is nil.
-    local spellHitRating = GetCombatRatingBonus(CR.HIT_SPELL) or 0
-    local spellHitExtra  = safe(GetSpellHitModifier)
-    if not spellHitExtra then
-        -- Manual Heroic Presence detection as the aura-sourced fallback.
-        local heroicPresence = 0
+    -- SPELL HIT
+    -- GetSpellHitModifier() = flat spell hit from talents/auras (Suppression,
+    -- Shadow Focus, Heroic Presence, etc.).  Returns 0 if no talent/aura bonus
+    -- is active (distinct from nil = API unavailable).
+    local sHitRating    = GetCombatRatingBonus(CR.HIT_SPELL) or 0
+    local sHitFlatAPI   = safe(GetSpellHitModifier)   -- nil if API absent, 0 if present but no bonus
+    local sHitFlat
+    if sHitFlatAPI ~= nil then
+        sHitFlat = sHitFlatAPI
+    else
+        -- Fallback: manual Heroic Presence detection only.
+        sHitFlat = 0
         local _, playerRace = UnitRace("player")
         if playerRace == "Draenei" then
-            heroicPresence = 1
+            sHitFlat = 1
         else
             for i = 1, 4 do
                 local _, race = UnitRace("party" .. i)
-                if race == "Draenei" then heroicPresence = 1 ; break end
+                if race == "Draenei" then sHitFlat = 1 ; break end
             end
         end
-        spellHitExtra = heroicPresence
     end
-    local spellHit = spellHitRating + spellHitExtra
-    local spellHitLabel = spellHitExtra > 0.005
-        and string.format("%.2f%% |cff88dd88(+%.2f%% talents/auras)|r", spellHit, spellHitExtra)
-        or  string.format("%.2f%%", spellHit)
-    table.insert(stats, { label="Spell Hit",      value=spellHitLabel })
+    local sHitTotal = sHitRating + sHitFlat
+    table.insert(stats, { label="Spell Hit",
+        value = fmtStat(sHitTotal, {{val=sHitRating,label="gear"},{val=sHitFlat,label="talent/aura"}}) })
 
-    -- TBC Classic: GetSpellCritChance(school) requires a school argument (2=Holy baseline)
-    -- Try no-arg first (works on some builds), then Holy school, then rating-only fallback
-    local spellCrit = safe(GetSpellCritChance)
-                   or safe(GetSpellCritChance, 2)
-                   or GetCombatRatingBonus(CR.CRIT_SPELL) or 0
-    table.insert(stats, { label="Spell Crit",     value=string.format("%.2f%%", spellCrit) })
+    -- SPELL CRIT
+    -- BUG TRAP: GetSpellCritChance() with NO args returns 0 (not nil) in TBC —
+    -- 0 is truthy in Lua so `safe(fn) or fallback` would stop at 0 incorrectly.
+    -- Must pass a school index (2-7).  Take the max across all schools to handle
+    -- school-specific talent bonuses (e.g. Pyromaniac = +Fire crit only).
+    local sCritTotal = 0
+    for _, school in ipairs(SPELL_SCHOOLS) do
+        local sc = safe(GetSpellCritChance, school.id) or 0
+        if sc > sCritTotal then sCritTotal = sc end
+    end
+    local sCritRating = GetCombatRatingBonus(CR.CRIT_SPELL) or 0
+    local sCritOther  = math.max(0, sCritTotal - sCritRating)
+    table.insert(stats, { label="Spell Crit",
+        value = fmtStat(sCritTotal, {{val=sCritRating,label="gear"},{val=sCritOther,label="int/talent"}}) })
 
     local hasteSpell = safe(UnitSpellHaste, "player") or GetCombatRatingBonus(CR.HASTE_SPELL)
     table.insert(stats, { label="Spell Haste",    value=string.format("%.2f%%", hasteSpell or 0) })
