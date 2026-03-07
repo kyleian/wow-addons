@@ -163,11 +163,29 @@ function ECS_GetStats()
     -- Used for melee, ranged and spell hit below.
     local scanMeleeHit, scanRangedHit, scanSpellHit, scanSources = ScanTalentHit()
 
+    -- Heroic Presence: Draenei racial aura (+1% all hit types).
+    -- GetHitModifier / GetSpellHitModifier are SUPPOSED to include this, but on
+    -- TBC Anniversary the spell-hit API omits it.  We compute it manually and fold
+    -- it into the scan total via math.max so it is never double-counted:
+    --   math.max(API, scan + heroic) = API  if API already includes it
+    --   math.max(API, scan + heroic) = scan+heroic  if API is missing it
+    local heroicBonus = 0
+    local _, playerRace = UnitRace("player")
+    if playerRace == "Draenei" then
+        heroicBonus = 1
+    else
+        for i = 1, 4 do
+            local _, race = UnitRace("party" .. i)
+            if race == "Draenei" then heroicBonus = 1 ; break end
+        end
+    end
+
     -- MELEE HIT
-    -- Rating = gear hit rating.  Talent = max(GetHitModifier API, talent scan).
-    -- GetHitModifier() returns flat non-rating melee hit; scan is a cross-check.
+    -- Authoritative formula (matches paper doll): Rating + GetHitModifier().
+    -- GetHitModifier() returns all non-rating melee hit (talents + auras).
+    -- math.max guards against the API omitting Heroic Presence on this client.
     local mHitRating = GetCombatRatingBonus(CR.HIT_MELEE) or 0
-    local mHitTalent = math.max(safe(GetHitModifier) or 0, scanMeleeHit)
+    local mHitTalent = math.max(safe(GetHitModifier) or 0, scanMeleeHit + heroicBonus)
     addStat(stats, "Melee Hit", mHitRating + mHitTalent, {
         { label="Rating", val=mHitRating },
         { label="Talent", val=mHitTalent },
@@ -203,9 +221,9 @@ function ECS_GetStats()
     table.insert(stats, { section="RANGED", label="Ranged AP",     value=fmt(rapTotal) })
 
     -- RANGED HIT
-    -- Rating = gear hit rating.  Talent = max(GetRangedHitModifier API, talent scan).
+    -- Authoritative formula: Rating + GetRangedHitModifier().
     local rHitRating = GetCombatRatingBonus(CR.HIT_RANGED) or 0
-    local rHitTalent = math.max(safe(GetRangedHitModifier) or 0, scanRangedHit)
+    local rHitTalent = math.max(safe(GetRangedHitModifier) or 0, scanRangedHit + heroicBonus)
     addStat(stats, "Ranged Hit", rHitRating + rHitTalent, {
         { label="Rating", val=rHitRating },
         { label="Talent", val=rHitTalent },
@@ -242,33 +260,25 @@ function ECS_GetStats()
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
     -- SPELL HIT
-    -- Rating = gear hit rating.
-    -- Talent = max(GetSpellHitModifier API, module-scope talent scan).
-    -- Heroic Presence (+1%) added manually when API is absent.
+    -- Authoritative formula (matches paper doll): Rating + GetSpellHitModifier().
+    -- GetSpellHitModifier() returns all non-rating spell hit (talents + auras).
+    -- On TBC Anniversary this API omits Heroic Presence; math.max with
+    -- (scan + heroicBonus) ensures HP is always counted without double-counting.
     local sHitRating  = GetCombatRatingBonus(CR.HIT_SPELL) or 0
     local sHitFlatAPI = safe(GetSpellHitModifier)
-    local sHitTalent  = math.max(sHitFlatAPI or 0, scanSpellHit)
-    if sHitFlatAPI == nil then
-        -- API absent: add Heroic Presence manually (talent scan doesn't cover auras)
-        local _, playerRace = UnitRace("player")
-        if playerRace == "Draenei" then
-            sHitTalent = sHitTalent + 1
-        else
-            for i = 1, 4 do
-                local _, race = UnitRace("party" .. i)
-                if race == "Draenei" then sHitTalent = sHitTalent + 1 ; break end
-            end
-        end
-    end
+    local sHitTalent  = math.max(sHitFlatAPI or 0, scanSpellHit + heroicBonus)
     addStat(stats, "Spell Hit", sHitRating + sHitTalent, {
         { label="Rating",      val=sHitRating  },
         { label="Talent/Aura", val=sHitTalent  },
     })
-    -- Diagnostic rows: raw API + talent scan breakdown (remove once confirmed accurate)
+    -- Diagnostic rows: raw API + scan breakdown so discrepancies are visible
     local apiStr = sHitFlatAPI == nil
         and "|cffff6600nil (API unavailable)|r"
         or  string.format("%.2f%%", sHitFlatAPI)
     table.insert(stats, { label="  [SpellHitMod API]", value=apiStr })
+    if heroicBonus > 0 then
+        table.insert(stats, { label="  [Heroic Presence]", value="+1% (Draenei)" })
+    end
     if #scanSources > 0 then
         table.insert(stats, { label="  [Talent scan]",
             value=table.concat(scanSources, ", ") })
