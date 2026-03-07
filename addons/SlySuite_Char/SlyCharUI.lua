@@ -1018,7 +1018,7 @@ end
 -- ============================================================
 local function BuildStatRows(parent)
     for i = 1, MAX_STAT_ROWS do
-        local row = CreateFrame("Frame", nil, parent)
+        local row = CreateFrame("Button", nil, parent)
         row:SetSize(SIDE_W - PAD*2 - 16, 24)
         row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((i-1)*24))
 
@@ -1040,24 +1040,55 @@ end
 
 function SC_RefreshStats()
     for _, w in ipairs(statRows) do
-        w.row:Hide() ; w.lbl:SetText("") ; w.val:SetText("")
+        w.row:Hide()
+        w.lbl:SetText("")
+        w.val:SetText("")
+        w.row:SetScript("OnClick", nil)
+        w.row:EnableMouse(false)
     end
     local ri = 0
-    local function addRow(lbl, val, sec)
+    local currentSection = nil
+    local collapsed = SC.db and SC.db.collapsed or {}
+
+    local function addSection(secKey)
+        currentSection = secKey
         ri = ri + 1
         local w = statRows[ri]
         if not w then return end
-        if sec then
-            w.lbl:SetText("|cff66d4ff" .. lbl .. "|r")
-            w.val:SetText("")
-        else
-            w.lbl:SetText("|cffbbbbbb" .. lbl .. "|r")
-            w.val:SetText("|cffffd700" .. (val or "n/a") .. "|r")
-        end
+        local arrow = collapsed[secKey] and "|cffaaaaaa\226\150\182|r " or "|cffaaaaaa\226\150\188|r "
+        w.lbl:SetText(arrow .. "|cff66d4ff" .. secKey .. "|r")
+        w.val:SetText("")
+        w.row:EnableMouse(true)
+        w.row:SetScript("OnClick", function()
+            if collapsed[secKey] then
+                collapsed[secKey] = nil
+            else
+                collapsed[secKey] = true
+            end
+            SC_RefreshStats()
+        end)
+        w.row:SetScript("OnEnter", function()
+            local arr = collapsed[secKey] and "|cffaaaaaa\226\150\182|r " or "|cffaaaaaa\226\150\188|r "
+            w.lbl:SetText(arr .. "|cffffffff" .. secKey .. "|r")
+        end)
+        w.row:SetScript("OnLeave", function()
+            local arr = collapsed[secKey] and "|cffaaaaaa\226\150\182|r " or "|cffaaaaaa\226\150\188|r "
+            w.lbl:SetText(arr .. "|cff66d4ff" .. secKey .. "|r")
+        end)
         w.row:Show()
     end
 
-    addRow("BASE STATS", nil, true)
+    local function addRow(lbl, val)
+        if currentSection and collapsed[currentSection] then return end
+        ri = ri + 1
+        local w = statRows[ri]
+        if not w then return end
+        w.lbl:SetText("|cffbbbbbb" .. lbl .. "|r")
+        w.val:SetText("|cffffd700" .. (val or "n/a") .. "|r")
+        w.row:Show()
+    end
+
+    addSection("BASE STATS")
     local NAMES = {"Strength","Agility","Stamina","Intellect","Spirit"}
     for i = 1, 5 do
         local base, pos, neg = UnitStat("player", i)
@@ -1071,7 +1102,7 @@ function SC_RefreshStats()
             local lastSec = nil
             for _, s in ipairs(stats) do
                 if s.section and s.section ~= lastSec then
-                    addRow(s.section, nil, true)
+                    addSection(s.section)
                     lastSec = s.section
                 end
                 if s.label then addRow(s.label, s.value) end

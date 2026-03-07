@@ -13,9 +13,10 @@ local ADDON_NAME = "SlySuite_Char"
 -- SavedVariables defaults
 -- --------------------------------------------------------
 local DB_DEFAULTS = {
-    position = nil,     -- {point, x, y} for SlyCharMainFrame
-    lastTab  = "stats",
-    theme    = "shadow",
+    position  = nil,     -- {point, x, y} for SlyCharMainFrame
+    lastTab   = "stats",
+    theme     = "shadow",
+    collapsed = {},      -- {[sectionKey]=true} for collapsed stat sections
 }
 
 SC.db = {}
