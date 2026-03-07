@@ -201,12 +201,13 @@ function ECS_GetStats()
     -- MELEE HIT
     -- Total = Rating + max(GetHitModifier API, talent scan + Heroic Presence).
     -- Sub-rows show each contributing talent by name.
-    local mHitRating = GetCombatRatingBonus(CR.HIT_MELEE) or 0
+    local mHitRating    = GetCombatRatingBonus(CR.HIT_MELEE) or 0
+    local mHitRatingPts = GetCombatRating(CR.HIT_MELEE) or 0
     local mHitAPI    = safe(GetHitModifier) or 0
     local mHitTalent = math.max(mHitAPI, scanMeleeHit + heroicBonus)
     table.insert(stats, { label="Melee Hit", value=string.format("%.2f%%", mHitRating + mHitTalent) })
     if mHitRating > 0.005 then
-        table.insert(stats, { label="  Rating", value=string.format("%.2f%%", mHitRating) })
+        table.insert(stats, { label="  Rating", value=string.format("%d pts (%.2f%%)", mHitRatingPts, mHitRating) })
     end
     for _, s in ipairs(meleeSrc) do
         table.insert(stats, { label="  "..s.name, value=string.format("+%d%%", s.pct) })
@@ -246,12 +247,13 @@ function ECS_GetStats()
 
     -- RANGED HIT
     -- Total = Rating + max(GetRangedHitModifier API, talent scan + Heroic Presence).
-    local rHitRating = GetCombatRatingBonus(CR.HIT_RANGED) or 0
+    local rHitRating    = GetCombatRatingBonus(CR.HIT_RANGED) or 0
+    local rHitRatingPts = GetCombatRating(CR.HIT_RANGED) or 0
     local rHitAPI    = safe(GetRangedHitModifier) or 0
     local rHitTalent = math.max(rHitAPI, scanRangedHit + heroicBonus)
     table.insert(stats, { label="Ranged Hit", value=string.format("%.2f%%", rHitRating + rHitTalent) })
     if rHitRating > 0.005 then
-        table.insert(stats, { label="  Rating", value=string.format("%.2f%%", rHitRating) })
+        table.insert(stats, { label="  Rating", value=string.format("%d pts (%.2f%%)", rHitRatingPts, rHitRating) })
     end
     for _, s in ipairs(rangedSrc) do
         table.insert(stats, { label="  "..s.name, value=string.format("+%d%%", s.pct) })
@@ -302,7 +304,8 @@ function ECS_GetStats()
     -- Display: header = best school total.  Sub-row for each school that has a
     -- non-zero school-specific talent bonus from the scan (always show them so the
     -- player can see which schools are boosted regardless of API behaviour).
-    local sHitRating = GetCombatRatingBonus(CR.HIT_SPELL) or 0
+    local sHitRating    = GetCombatRatingBonus(CR.HIT_SPELL) or 0
+    local sHitRatingPts = GetCombatRating(CR.HIT_SPELL) or 0
     local sHitAPI    = safe(GetSpellHitModifier) or 0
 
     -- Per-school non-rating hit (the higher of: API floor OR school scan + heroic)
@@ -321,7 +324,7 @@ function ECS_GetStats()
 
     table.insert(stats, { label="Spell Hit", value=string.format("%.2f%%", bestSpellHit) })
     if sHitRating > 0.005 then
-        table.insert(stats, { label="  Rating", value=string.format("%.2f%%", sHitRating) })
+        table.insert(stats, { label="  Rating", value=string.format("%d pts (%.2f%%)", sHitRatingPts, sHitRating) })
     end
     if sHitAPI > 0.005 then
         table.insert(stats, { label="  Talent/Aura (all)", value=string.format("%.2f%%", sHitAPI) })
