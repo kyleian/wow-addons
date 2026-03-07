@@ -44,60 +44,64 @@ local SPELL_SCHOOLS = {
 }
 
 -- -------------------------------------------------------
--- TBC hit-granting talents (enUS/enGB locale, 2.4.x)
--- key = lowercase talent name, value = { pct_per_rank, affects_melee, affects_ranged, affects_spell }
--- NOTE: locale-dependent. All names verified against Wowpedia TBC talent data.
--- -------------------------------------------------------
-local HIT_TALENTS = {
-    -- ---- WARRIOR ------------------------------------------------
-    -- Arms: Precision (3 ranks, 1% melee hit each — melee only in TBC)
-    ["precision"]               = { 1, true,  false, false },
-
-    -- ---- ROGUE --------------------------------------------------
-    -- Combat: Precision (5 ranks, 1% melee hit each)
-    -- Same name as Warrior; union covers both since only one class is active.
-
-    -- ---- HUNTER -------------------------------------------------
-    -- Survival: Surefooted (3 ranks, 1% melee + 1% ranged hit each)
-    ["surefooted"]              = { 1, true,  true,  false },
-    -- Marksmanship: Focused Aim (3 ranks, 1% ranged hit each)
-    ["focused aim"]             = { 1, false, true,  false },
-
-    -- ---- MAGE ---------------------------------------------------
-    -- Arcane: Arcane Focus (5 ranks, 2% Arcane spell hit each — Arcane school only)
-    -- NOTE: school-specific; GetSpellHitModifier may or may not include it.
-    -- math.max(API, scan) handles both cases without double-counting.
-    ["arcane focus"]            = { 2, false, false, true  },
-    -- Arcane: Elemental Precision (3 ranks, 1% Fire/Frost/Arcane hit each)
-    ["elemental precision"]     = { 1, false, false, true  },
-
-    -- ---- WARLOCK ------------------------------------------------
-    -- Affliction: Suppression (5 ranks, 1% spell hit each)
-    ["suppression"]             = { 1, false, false, true  },
-
-    -- ---- PRIEST -------------------------------------------------
-    -- Shadow: Shadow Focus (5 ranks, 2% shadow hit each)
-    ["shadow focus"]            = { 2, false, false, true  },
-
-    -- ---- DRUID --------------------------------------------------
-    -- Balance: Balance of Power (2 ranks, 2% spell hit each)
-    ["balance of power"]        = { 2, false, false, true  },
-
-    -- ---- SHAMAN -------------------------------------------------
-    -- No direct hit talent in TBC (Totem of Wrath is a totem, not a talent)
-
-    -- ---- PALADIN ------------------------------------------------
-    -- No direct hit talent in TBC
-
-    -- ---- DEATH KNIGHT -------------------------------------------
-    -- Does not exist in TBC
+-- TBC spell school IDs used for per-school hit breakdown.
+local ALL_SPELL_SCHOOLS = { 2, 3, 4, 5, 6, 7 }   -- Holy/Fire/Nature/Frost/Shadow/Arcane
+local SCHOOL_NAMES = {
+    [2]="Holy", [3]="Fire", [4]="Nature", [5]="Frost", [6]="Shadow", [7]="Arcane"
 }
 
--- Walk all talent trees; return melee, ranged, spell flat hit % and source list.
--- Uses raw pcall throughout so it has no dependency on the safe() definition order.
+-- TBC hit-granting talents (enUS/enGB locale, 2.4.x)
+-- Format: { pct_per_rank, affects_melee, affects_ranged, spell_schools }
+--   spell_schools: nil      = no spell hit
+--                 "all"    = every TBC spell school (2-7)
+--                 {id,...} = specific school IDs only
+-- -------------------------------------------------------
+local HIT_TALENTS = {
+    -- ---- WARRIOR (Arms) / ROGUE (Combat) ------------------------
+    -- Precision: melee hit only (3 ranks Warrior / 5 ranks Rogue, 1%/rank)
+    ["precision"]           = { 1, true,  false, nil       },
+
+    -- ---- HUNTER -------------------------------------------------
+    -- Survival: Surefooted (3 ranks, +1% melee AND ranged hit/rank)
+    ["surefooted"]          = { 1, true,  true,  nil       },
+    -- Marksmanship: Focused Aim (3 ranks, +1% ranged hit/rank)
+    ["focused aim"]         = { 1, false, true,  nil       },
+
+    -- ---- MAGE ---------------------------------------------------
+    -- Arcane: Arcane Focus (5 ranks, +2%/rank — Arcane school ONLY)
+    ["arcane focus"]        = { 2, false, false, {7}       },
+    -- Arcane: Elemental Precision (3 ranks, +1%/rank — Fire, Frost, Arcane)
+    ["elemental precision"] = { 1, false, false, {3,5,7}  },
+
+    -- ---- WARLOCK ------------------------------------------------
+    -- Affliction: Suppression (5 ranks, +1%/rank — all spell schools)
+    ["suppression"]         = { 1, false, false, "all"    },
+
+    -- ---- PRIEST -------------------------------------------------
+    -- Shadow: Shadow Focus (5 ranks, +2%/rank — Shadow school ONLY)
+    ["shadow focus"]        = { 2, false, false, {6}       },
+
+    -- ---- DRUID --------------------------------------------------
+    -- Balance: Balance of Power (2 ranks, +2%/rank — all spell schools)
+    ["balance of power"]    = { 2, false, false, "all"    },
+
+    -- ---- SHAMAN / PALADIN / DEATH KNIGHT ------------------------
+    -- No direct hit talent in TBC
+}
+
+-- Walk all talent trees for hit contributions.
+-- Returns:
+--   melee         (number, flat % hit bonus)
+--   ranged        (number, flat % hit bonus)
+--   spellBySchool (table [schoolId]=%, all schools initialised to 0)
+--   meleeSrc      (list of { name=string, pct=number })
+--   rangedSrc     (list of { name=string, pct=number })
 local function ScanTalentHit()
-    local melee, ranged, spell = 0, 0, 0
-    local sources = {}
+    local melee, ranged = 0, 0
+    local spellBySchool = {}
+    for _, sid in ipairs(ALL_SPELL_SCHOOLS) do spellBySchool[sid] = 0 end
+    local meleeSrc, rangedSrc = {}, {}
+
     local ok0, numTabs = pcall(GetNumTalentTabs)
     numTabs = ok0 and (numTabs or 0) or 0
     for tab = 1, numTabs do
@@ -108,16 +112,28 @@ local function ScanTalentHit()
             if ok and name and rank and rank > 0 then
                 local t = HIT_TALENTS[name:lower()]
                 if t then
-                    local pct = t[1] * rank
-                    if t[2] then melee  = melee  + pct end
-                    if t[3] then ranged = ranged + pct end
-                    if t[4] then spell  = spell  + pct end
-                    sources[#sources+1] = name .. " +" .. pct .. "%"
+                    local pct  = t[1] * rank
+                    local disp = name:sub(1,1):upper() .. name:sub(2)
+                    if t[2] then
+                        melee = melee + pct
+                        meleeSrc[#meleeSrc+1] = { name=disp, pct=pct }
+                    end
+                    if t[3] then
+                        ranged = ranged + pct
+                        rangedSrc[#rangedSrc+1] = { name=disp, pct=pct }
+                    end
+                    local schools = t[4]
+                    if schools then
+                        if schools == "all" then schools = ALL_SPELL_SCHOOLS end
+                        for _, sid in ipairs(schools) do
+                            spellBySchool[sid] = (spellBySchool[sid] or 0) + pct
+                        end
+                    end
                 end
             end
         end
     end
-    return melee, ranged, spell, sources
+    return melee, ranged, spellBySchool, meleeSrc, rangedSrc
 end
 
 
@@ -165,16 +181,12 @@ function ECS_GetStats()
     local apTotal = (apBase or 0) + (apPos or 0) - (apNeg or 0)
     table.insert(stats, { section="OFFENSE", label="Attack Power",   value=fmt(apTotal) })
 
-    -- Scan all talents once for hit contributions across all types.
-    -- Used for melee, ranged and spell hit below.
-    local scanMeleeHit, scanRangedHit, scanSpellHit, scanSources = ScanTalentHit()
+    -- Scan all talents once for hit contributions across all three damage types.
+    local scanMeleeHit, scanRangedHit, spellBySchool, meleeSrc, rangedSrc = ScanTalentHit()
 
     -- Heroic Presence: Draenei racial aura (+1% all hit types).
-    -- GetHitModifier / GetSpellHitModifier are SUPPOSED to include this, but on
-    -- TBC Anniversary the spell-hit API omits it.  We compute it manually and fold
-    -- it into the scan total via math.max so it is never double-counted:
-    --   math.max(API, scan + heroic) = API  if API already includes it
-    --   math.max(API, scan + heroic) = scan+heroic  if API is missing it
+    -- GetHitModifier / GetSpellHitModifier should include this but TBC Anniversary
+    -- omits it from the spell API.  math.max(API, scan+heroic) prevents double-count.
     local heroicBonus = 0
     local _, playerRace = UnitRace("player")
     if playerRace == "Draenei" then
@@ -187,15 +199,21 @@ function ECS_GetStats()
     end
 
     -- MELEE HIT
-    -- Authoritative formula (matches paper doll): Rating + GetHitModifier().
-    -- GetHitModifier() returns all non-rating melee hit (talents + auras).
-    -- math.max guards against the API omitting Heroic Presence on this client.
+    -- Total = Rating + max(GetHitModifier API, talent scan + Heroic Presence).
+    -- Sub-rows show each contributing talent by name.
     local mHitRating = GetCombatRatingBonus(CR.HIT_MELEE) or 0
-    local mHitTalent = math.max(safe(GetHitModifier) or 0, scanMeleeHit + heroicBonus)
-    addStat(stats, "Melee Hit", mHitRating + mHitTalent, {
-        { label="Rating", val=mHitRating },
-        { label="Talent", val=mHitTalent },
-    })
+    local mHitAPI    = safe(GetHitModifier) or 0
+    local mHitTalent = math.max(mHitAPI, scanMeleeHit + heroicBonus)
+    table.insert(stats, { label="Melee Hit", value=string.format("%.2f%%", mHitRating + mHitTalent) })
+    if mHitRating > 0.005 then
+        table.insert(stats, { label="  Rating", value=string.format("%.2f%%", mHitRating) })
+    end
+    for _, s in ipairs(meleeSrc) do
+        table.insert(stats, { label="  "..s.name, value=string.format("+%d%%", s.pct) })
+    end
+    if heroicBonus > 0 then
+        table.insert(stats, { label="  Heroic Presence", value="+1%" })
+    end
 
     -- MELEE CRIT sources:
     --   Rating      = GetCombatRatingBonus(CR.CRIT_MELEE)  — gear crit rating
@@ -227,13 +245,20 @@ function ECS_GetStats()
     table.insert(stats, { section="RANGED", label="Ranged AP",     value=fmt(rapTotal) })
 
     -- RANGED HIT
-    -- Authoritative formula: Rating + GetRangedHitModifier().
+    -- Total = Rating + max(GetRangedHitModifier API, talent scan + Heroic Presence).
     local rHitRating = GetCombatRatingBonus(CR.HIT_RANGED) or 0
-    local rHitTalent = math.max(safe(GetRangedHitModifier) or 0, scanRangedHit + heroicBonus)
-    addStat(stats, "Ranged Hit", rHitRating + rHitTalent, {
-        { label="Rating", val=rHitRating },
-        { label="Talent", val=rHitTalent },
-    })
+    local rHitAPI    = safe(GetRangedHitModifier) or 0
+    local rHitTalent = math.max(rHitAPI, scanRangedHit + heroicBonus)
+    table.insert(stats, { label="Ranged Hit", value=string.format("%.2f%%", rHitRating + rHitTalent) })
+    if rHitRating > 0.005 then
+        table.insert(stats, { label="  Rating", value=string.format("%.2f%%", rHitRating) })
+    end
+    for _, s in ipairs(rangedSrc) do
+        table.insert(stats, { label="  "..s.name, value=string.format("+%d%%", s.pct) })
+    end
+    if heroicBonus > 0 then
+        table.insert(stats, { label="  Heroic Presence", value="+1%" })
+    end
 
     -- RANGED CRIT sources:
     --   Rating      = GetCombatRatingBonus(CR.CRIT_RANGED)
@@ -265,29 +290,50 @@ function ECS_GetStats()
     local healPower = safe(GetSpellBonusHealing) or spellPowerBase
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
-    -- SPELL HIT
-    -- Authoritative formula (matches paper doll): Rating + GetSpellHitModifier().
-    -- GetSpellHitModifier() returns all non-rating spell hit (talents + auras).
-    -- On TBC Anniversary this API omits Heroic Presence; math.max with
-    -- (scan + heroicBonus) ensures HP is always counted without double-counting.
-    local sHitRating  = GetCombatRatingBonus(CR.HIT_SPELL) or 0
-    local sHitFlatAPI = safe(GetSpellHitModifier)
-    local sHitTalent  = math.max(sHitFlatAPI or 0, scanSpellHit + heroicBonus)
-    addStat(stats, "Spell Hit", sHitRating + sHitTalent, {
-        { label="Rating",      val=sHitRating  },
-        { label="Talent/Aura", val=sHitTalent  },
-    })
-    -- Diagnostic rows: raw API + scan breakdown so discrepancies are visible
-    local apiStr = sHitFlatAPI == nil
-        and "|cffff6600nil (API unavailable)|r"
-        or  string.format("%.2f%%", sHitFlatAPI)
-    table.insert(stats, { label="  [SpellHitMod API]", value=apiStr })
-    if heroicBonus > 0 then
-        table.insert(stats, { label="  [Heroic Presence]", value="+1% (Draenei)" })
+    -- SPELL HIT per school
+    -- GetSpellHitModifier() returns the global non-rating total the game engine
+    -- knows about (globally-applying talents + most auras).  We use it as a floor.
+    -- School-specific talents (Arcane Focus, Elem. Precision, Shadow Focus) may or
+    -- may not be folded into that value; to avoid double-counting we only show the
+    -- school-specific EXTRA above the API baseline as an additional per-school row.
+    --
+    --   sHitBase          = rating + max(API, heroic)    <- applies to all schools
+    --   schoolExtra[s]    = max(0, spellBySchool[s] - API)  <- above-API school bonus
+    --   schoolTotal[s]    = sHitBase + schoolExtra[s]
+    local sHitRating = GetCombatRatingBonus(CR.HIT_SPELL) or 0
+    local sHitAPI    = safe(GetSpellHitModifier) or 0
+    local sHitBase   = sHitRating + math.max(sHitAPI, heroicBonus)
+
+    -- Find the best school total for the header value
+    local bestSpellHit = sHitBase
+    for _, sid in ipairs(ALL_SPELL_SCHOOLS) do
+        local extra = math.max(0, (spellBySchool[sid] or 0) - sHitAPI)
+        local tot   = sHitBase + extra
+        if tot > bestSpellHit then bestSpellHit = tot end
     end
-    if #scanSources > 0 then
-        table.insert(stats, { label="  [Talent scan]",
-            value=table.concat(scanSources, ", ") })
+
+    table.insert(stats, { label="Spell Hit", value=string.format("%.2f%%", bestSpellHit) })
+    -- Base sub-rows (apply to all schools equally)
+    if sHitRating > 0.005 then
+        table.insert(stats, { label="  Rating",      value=string.format("%.2f%%", sHitRating) })
+    end
+    if sHitAPI > 0.005 then
+        table.insert(stats, { label="  Talent/Aura", value=string.format("%.2f%%", sHitAPI) })
+    end
+    if heroicBonus > 0 then
+        table.insert(stats, { label="  Heroic Presence", value="+1%" })
+    end
+    -- Per-school rows: only emit schools that exceed the base (school-specific bonus)
+    for _, sid in ipairs(ALL_SPELL_SCHOOLS) do
+        local scanPct = spellBySchool[sid] or 0
+        local extra   = math.max(0, scanPct - sHitAPI)
+        if extra > 0.005 then
+            local schoolTotal = sHitBase + extra
+            table.insert(stats, {
+                label = "  " .. SCHOOL_NAMES[sid],
+                value = string.format("%.2f%% (+%d%% talent)", schoolTotal, extra)
+            })
+        end
     end
 
     -- SPELL CRIT sources:
