@@ -135,7 +135,8 @@ local _secureSlots  = {}
 -- One shared OnUpdate monitor that enables/disables the overlays.
 local _targetMonitor = CreateFrame("Frame")
 do
-    local _wasTargeting = false
+    local _wasTargeting   = false
+    local _autoShownSlyChar = false   -- true when we auto-opened the frame for targeting
     _targetMonitor:SetScript("OnUpdate", function()
         -- Activate secure overlays whenever a spell is targeting (armor kit,
         -- oil, stone, poison) OR any cursor type is set (enchant scroll, item
@@ -157,6 +158,35 @@ do
                 else
                     w.frame:RegisterForDrag("LeftButton") -- restore
                 end
+            end
+        end
+
+        if t then
+            -- Auto-show SlyChar when ANYTHING puts an item-use on the cursor
+            -- (Baginator, default bags, SlyBag, or any other source).
+            -- This means the player can always click an equipped slot to apply
+            -- the effect without having to manually open SlyChar first.
+            if not (SlyCharMainFrame and SlyCharMainFrame:IsShown()) then
+                if SC_ShowMain and not InCombatLockdown() then
+                    SC_ShowMain()
+                    _autoShownSlyChar = true
+                end
+            else
+                _autoShownSlyChar = false  -- was already open; don't auto-close it
+            end
+        else
+            -- Targeting ended (item applied or right-click cancelled).
+            -- Only auto-close if we were the ones who opened it.
+            if _autoShownSlyChar then
+                _autoShownSlyChar = false
+                -- Small delay so the player sees the result update on the slot.
+                C_Timer.After(1.5, function()
+                    if SlyCharMainFrame and SlyCharMainFrame:IsShown()
+                        and not (GetCursorInfo() ~= nil)
+                        and not SpellIsTargeting() then
+                        SlyCharMainFrame:Hide()
+                    end
+                end)
             end
         end
     end)
