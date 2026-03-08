@@ -174,7 +174,16 @@ local function BuildUI()
     end)
     SR.frame = f
 
-    -- Background
+    -- Themed background – repainted automatically when user cycles SlyChar theme.
+    local function _repaintSR()
+        local th = SlyStyle and SlyStyle.GetTheme() or nil
+        local fr = th and th.frameBg or {0.08,0.08,0.10,0.97}
+        local br = th and th.border  or {0.30,0.30,0.40,1}
+        if f.SetBackdrop then
+            f:SetBackdropColor(fr[1],fr[2],fr[3], fr[4] or 0.97)
+            f:SetBackdropBorderColor(br[1],br[2],br[3],1)
+        end
+    end
     if f.SetBackdrop then
         f:SetBackdrop({
             bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -182,6 +191,8 @@ local function BuildUI()
             tile = true, tileSize = 32, edgeSize = 16,
             insets = { left=4, right=4, top=4, bottom=4 },
         })
+        _repaintSR()
+        if SlyStyle then SlyStyle.OnThemeChange(_repaintSR) end
     end
 
     -- Title

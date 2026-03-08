@@ -11,7 +11,16 @@ local Templates = Whelp.UI.Templates
 
 -- Create a standard backdrop for frames
 function Templates:CreateBackdrop(frame, bgColor, borderColor)
-    bgColor = bgColor or Whelp.Colors.BACKGROUND
+    -- When SlyStyle is loaded and no explicit colour override is given, use the
+    -- active theme palette so all Whelp panels match the SlyChar theme.
+    local useSlyStyle = (SlyStyle ~= nil) and (bgColor == nil) and (borderColor == nil)
+    if useSlyStyle then
+        local fr = SlyStyle.Get("frameBg")
+        local br = SlyStyle.Get("border")
+        bgColor    = { r=fr[1], g=fr[2], b=fr[3], a=fr[4] or 0.9 }
+        borderColor = { r=br[1], g=br[2], b=br[3] }
+    end
+    bgColor     = bgColor     or Whelp.Colors.BACKGROUND
     borderColor = borderColor or Whelp.Colors.BORDER
 
     -- TBC Anniversary (20505): CreateFrame'd frames don't have SetBackdrop by
@@ -33,6 +42,18 @@ function Templates:CreateBackdrop(frame, bgColor, borderColor)
 
     frame:SetBackdropColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a or 0.9)
     frame:SetBackdropBorderColor(borderColor.r, borderColor.g, borderColor.b, 1)
+
+    -- Register for automatic repainting when the theme cycles in SlyChar.
+    if useSlyStyle then
+        SlyStyle.OnThemeChange(function()
+            local fr2 = SlyStyle.Get("frameBg")
+            local br2 = SlyStyle.Get("border")
+            if frame.SetBackdropColor then
+                frame:SetBackdropColor(fr2[1],fr2[2],fr2[3],fr2[4] or 0.9)
+                frame:SetBackdropBorderColor(br2[1],br2[2],br2[3],1)
+            end
+        end)
+    end
 end
 
 -- Create a standard button
@@ -77,6 +98,17 @@ function Templates:CreateTitleBar(parent, title, movable)
     titleBar:SetHeight(28)
 
     self:CreateBackdrop(titleBar, Whelp.Colors.SECONDARY, Whelp.Colors.BORDER)
+    -- Repaint title bar with headerBg if SlyStyle is loaded
+    if titleBar.SetBackdropColor and SlyStyle then
+        local function _repaintTitleBar()
+            local hb = SlyStyle.Get("headerBg")
+            local br = SlyStyle.Get("border")
+            titleBar:SetBackdropColor(hb[1],hb[2],hb[3],hb[4] or 1)
+            titleBar:SetBackdropBorderColor(br[1],br[2],br[3],1)
+        end
+        _repaintTitleBar()
+        SlyStyle.OnThemeChange(_repaintTitleBar)
+    end
 
     local titleText = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     titleText:SetPoint("LEFT", titleBar, "LEFT", 10, 0)

@@ -222,12 +222,21 @@ local function NewSlotButton(parent, idx)
             C_Timer.After(0.05, SlyBag_Refresh)
         elseif btn == "RightButton" then
             _UseItem(self.bag, self.slot)
-            local ctype = GetCursorInfo()
-            if not ctype then
-                C_Timer.After(0.05, SlyBag_Refresh)
-            else
-                C_Timer.After(0.5, SlyBag_Refresh)
-            end
+            -- Check a frame later whether UseContainerItem placed the item on
+            -- the cursor (armor kit, enchant scroll, stone, poison, etc.).
+            -- If so, open SlyChar automatically so the player can click the
+            -- equipped slot to apply the effect — the secure /use overlays in
+            -- SlyChar handle all cursor-item interactions.
+            C_Timer.After(0.025, function()
+                local ctype = GetCursorInfo()
+                if ctype then
+                    -- Targeting mode: show the character sheet for slot clicking
+                    if SC_ShowMain then SC_ShowMain() end
+                    C_Timer.After(0.5, SlyBag_Refresh)
+                else
+                    C_Timer.After(0.03, SlyBag_Refresh)
+                end
+            end)
         end
     end)
     b:Hide()
@@ -468,16 +477,32 @@ function SlyBag_BuildUI()
         local p,_,_,x,y = self:GetPoint()
         SlyBag.db.position = { point=p, x=x, y=y }
     end)
+    -- Themed background — repainted automatically when user cycles theme in SlyChar.
+    local function _repaintBagBg()
+        local th = SlyStyle and SlyStyle.GetTheme() or nil
+        local fr = th and th.frameBg or {0.07,0.07,0.10,0.96}
+        local br = th and th.border  or {0.30,0.30,0.40,1}
+        if f.SetBackdrop then
+            f:SetBackdropColor(fr[1],fr[2],fr[3], fr[4] or 0.96)
+            f:SetBackdropBorderColor(br[1],br[2],br[3],1)
+        end
+    end
     if f.SetBackdrop then
         f:SetBackdrop({ bgFile="Interface\\DialogFrame\\UI-DialogBox-Background",
             edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",
             tile=true, tileSize=16, edgeSize=12,
             insets={left=3,right=3,top=3,bottom=3} })
-        f:SetBackdropColor(0.07,0.07,0.10,0.96)
-        f:SetBackdropBorderColor(0.30,0.30,0.40,1)
+        _repaintBagBg()
+        if SlyStyle then SlyStyle.OnThemeChange(_repaintBagBg) end
     else
-        local bg = f:CreateTexture(nil,"BACKGROUND")
-        bg:SetAllPoints() ; bg:SetColorTexture(0.07,0.07,0.10,0.96)
+        local _bgTex = f:CreateTexture(nil,"BACKGROUND")
+        _bgTex:SetAllPoints()
+        if SlyStyle then
+            SlyStyle.Paint(_bgTex, "frameBg")
+            SlyStyle.OnThemeChange(function() SlyStyle.Paint(_bgTex, "frameBg") end)
+        else
+            _bgTex:SetColorTexture(0.07,0.07,0.10,0.96)
+        end
     end
 
     -- Header
@@ -492,7 +517,13 @@ function SlyBag_BuildUI()
     local sbarBg = f:CreateTexture(nil,"ARTWORK")
     sbarBg:SetPoint("TOPLEFT",  f,"TOPLEFT",  SIDE_PAD,  -(HEADER_H+4))
     sbarBg:SetPoint("TOPRIGHT", f,"TOPRIGHT", -SIDE_PAD, -(HEADER_H+4))
-    sbarBg:SetHeight(SEARCH_H-4) ; sbarBg:SetColorTexture(0.13,0.13,0.17,1)
+    sbarBg:SetHeight(SEARCH_H-4)
+    if SlyStyle then
+        SlyStyle.Paint(sbarBg, "headerBg")
+        SlyStyle.OnThemeChange(function() SlyStyle.Paint(sbarBg, "headerBg") end)
+    else
+        sbarBg:SetColorTexture(0.13,0.13,0.17,1)
+    end
     local sbox = CreateFrame("EditBox","SlyBagSearch",f)
     sbox:SetPoint("TOPLEFT",  f,"TOPLEFT",  SIDE_PAD+6,      -(HEADER_H+6))
     sbox:SetPoint("TOPRIGHT", f,"TOPRIGHT", -(SIDE_PAD+22),  -(HEADER_H+6))
@@ -530,7 +561,13 @@ function SlyBag_BuildUI()
     local footLine = f:CreateTexture(nil,"ARTWORK")
     footLine:SetPoint("BOTTOMLEFT",  f,"BOTTOMLEFT",  SIDE_PAD,  FOOTER_H+4)
     footLine:SetPoint("BOTTOMRIGHT", f,"BOTTOMRIGHT", -SIDE_PAD, FOOTER_H+4)
-    footLine:SetHeight(1) ; footLine:SetColorTexture(0.3,0.3,0.4,0.5)
+    footLine:SetHeight(1)
+    if SlyStyle then
+        SlyStyle.Paint(footLine, "div")
+        SlyStyle.OnThemeChange(function() SlyStyle.Paint(footLine, "div") end)
+    else
+        footLine:SetColorTexture(0.3,0.3,0.4,0.5)
+    end
     local goldTx = f:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
     goldTx:SetPoint("BOTTOMLEFT", f,"BOTTOMLEFT", SIDE_PAD+2, 6)
     f.goldTx = goldTx

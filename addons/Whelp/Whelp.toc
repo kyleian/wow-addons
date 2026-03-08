@@ -9,6 +9,7 @@
 ## X-License: MIT
 ## X-Website: https://github.com/kyle-ian/whelp-tbc-lua
 ## X-Curse-Project-ID: whelp
+## OptionalDeps: SlySuite_Style
 
 # Libraries
 Libs\LibStub\LibStub.lua

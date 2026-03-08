@@ -35,6 +35,14 @@
                        "curseProjectId":  ""
                    },
                    {
+                       "name":  "SlySuite_Style",
+                       "enabled":  true,
+                       "description":  "Canonical theme/style system for SlySuite. Shared palette, frame helpers, theme-change callbacks used by all Sly addons. /slystyle to manage.",
+                       "sourceDir":  "addons\\SlySuite_Style",
+                       "version":  "1.0.0",
+                       "curseProjectId":  ""
+                   },
+                   {
                        "name":  "SlySuite_WeakAuras",
                        "enabled":  true,
                        "description":  "WeakAura pack manager: import, capture, and manage named WA export string packs (e.g. Yabba/Foji suite).",

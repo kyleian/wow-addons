@@ -415,10 +415,21 @@ local SC_THEMES = {
 local SC_THEME_ORDER = {"shadow","midnight","crimson","emerald","gold","storm","void","frost","obsidian","copper","rose","venom"}
 local themeRefs = {}   -- texture handles populated in SC_BuildMain
 
+-- If SlyStyle (SlySuite_Style addon) is loaded, use its shared theme table so
+-- all addons (SlyBag, SlyRepair, Whelp) see the same palettes and receive
+-- theme-change callbacks when the user cycles via the theme button.
+if SlyStyle then
+    SC_THEMES     = SlyStyle.themes
+    SC_THEME_ORDER = SlyStyle.themeOrder
+end
+
 function SC_ApplyTheme(name)
     local th = SC_THEMES[name]
     if not th then name = "shadow" ; th = SC_THEMES.shadow end
     if SC.db then SC.db.theme = name end
+    -- Notify SlyStyle and all registered theme-change listeners across the suite
+    -- (SlyBag, SlyRepair, Whelp, etc. all repaint via OnThemeChange callbacks).
+    if SlyStyle then SlyStyle._fire(name) end
     local r = themeRefs
     local function sc(t, c) if t then t:SetColorTexture(c[1],c[2],c[3],c[4] or 1) end end
     sc(r.frameBg,    th.frameBg)
@@ -838,6 +849,33 @@ end
 local function FillBg(f, r, g, b, a)
     local t = f:CreateTexture(nil, "BACKGROUND")
     t:SetAllPoints(f) ; t:SetColorTexture(r, g, b, a or 1)
+    return t
+end
+
+-- ThemeFill: like FillBg but reads from the active SlyStyle theme palette and
+-- registers an OnThemeChange listener so the texture repaints automatically.
+-- Falls back to raw r,g,b,a values when SlyStyle is not installed.
+local function ThemeFill(f, key, r, g, b, a)
+    local t = f:CreateTexture(nil, "BACKGROUND")
+    t:SetAllPoints(f)
+    if SlyStyle then
+        SlyStyle.Paint(t, key)
+        SlyStyle.OnThemeChange(function() SlyStyle.Paint(t, key) end)
+    else
+        t:SetColorTexture(r, g, b, a or 1)
+    end
+    return t
+end
+
+-- ThemeTex: like ThemeFill but the caller sets point anchors manually.
+local function ThemeTex(parent, key, layer, r, g, b, a)
+    local t = parent:CreateTexture(nil, layer or "ARTWORK")
+    if SlyStyle then
+        SlyStyle.Paint(t, key)
+        SlyStyle.OnThemeChange(function() SlyStyle.Paint(t, key) end)
+    else
+        t:SetColorTexture(r, g, b, a or 1)
+    end
     return t
 end
 
@@ -3601,19 +3639,18 @@ local function BuildWingFrame(mainFrame)
     f:SetFrameLevel(mainFrame:GetFrameLevel())
     f:Hide()
     wingFrame = f
-    FillBg(f, 0.04, 0.04, 0.07, 1)
+    ThemeFill(f, "sideBg", 0.04, 0.04, 0.07, 1)
 
-    -- Left join border
-    local lbord = f:CreateTexture(nil, "ARTWORK")
+    -- Left join border (uses theme border colour)
+    local lbord = ThemeTex(f, "border", "ARTWORK", 0.25, 0.20, 0.38, 1)
     lbord:SetSize(2, FRAME_H)
     lbord:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    lbord:SetColorTexture(0.25, 0.20, 0.38, 1)
 
     -- Header
     local hdr = CreateFrame("Frame", nil, f)
     hdr:SetSize(WING_W - 2, HDR_H)
     hdr:SetPoint("TOPLEFT", f, "TOPLEFT", 2, 0)
-    FillBg(hdr, 0.07, 0.06, 0.12, 1)
+    ThemeFill(hdr, "headerBg", 0.07, 0.06, 0.12, 1)
 
     local htx = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     htx:SetFont(htx:GetFont(), 12, "OUTLINE")
@@ -3629,16 +3666,15 @@ local function BuildWingFrame(mainFrame)
         f:Hide() ; activeWingKey = nil
     end)
 
-    local hdrSep = f:CreateTexture(nil, "ARTWORK")
+    local hdrSep = ThemeTex(f, "sep", "ARTWORK", 0.25, 0.20, 0.38, 1)
     hdrSep:SetSize(WING_W, 1)
     hdrSep:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -HDR_H)
-    hdrSep:SetColorTexture(0.25, 0.20, 0.38, 1)
 
     -- ---- Talent Pane ----
     local talentPane = CreateFrame("Frame", nil, f)
     talentPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
     talentPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
-    FillBg(talentPane, 0.04, 0.04, 0.07, 1)
+    ThemeFill(talentPane, "sideBg", 0.04, 0.04, 0.07, 1)
     wingPanes["talents"] = talentPane
 
     -- Talent pane is an empty backdrop; the native TalentFrame is reparented
@@ -3649,7 +3685,7 @@ local function BuildWingFrame(mainFrame)
     spellPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
     spellPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
     spellPane:Hide()
-    FillBg(spellPane, 0.04, 0.04, 0.07, 1)
+    ThemeFill(spellPane, "sideBg", 0.04, 0.04, 0.07, 1)
     wingPanes["spells"] = spellPane
 
     local spellScroll = CreateFrame("ScrollFrame", nil, spellPane, "UIPanelScrollFrameTemplate")
@@ -3682,7 +3718,7 @@ local function BuildWingFrame(mainFrame)
     socialPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
     socialPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
     socialPane:Hide()
-    FillBg(socialPane, 0.04, 0.04, 0.07, 1)
+    ThemeFill(socialPane, "sideBg", 0.04, 0.04, 0.07, 1)
     wingPanes["social"] = socialPane
 
     local nitCont = CreateFrame("Frame", nil, socialPane)
@@ -3700,7 +3736,7 @@ local function BuildWingFrame(mainFrame)
     local wingFoot = CreateFrame("Frame", nil, f)
     wingFoot:SetSize(WING_W, FOOT_H)
     wingFoot:SetPoint("BOTTOM", f, "BOTTOM", 0, 0)
-    FillBg(wingFoot, 0.07, 0.07, 0.10, 1)
+    ThemeFill(wingFoot, "footBg", 0.07, 0.07, 0.10, 1)
 end
 
 -- ============================================================
@@ -4236,7 +4272,7 @@ function SC_BuildMain()
     local btnStrip = CreateFrame("Frame", nil, f)
     btnStrip:SetSize(BTN_STRIP_W, FRAME_H - HDR_H - FOOT_H)
     btnStrip:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -HDR_H)
-    FillBg(btnStrip, 0.05, 0.04, 0.08, 1)
+    ThemeFill(btnStrip, "sideBg", 0.05, 0.04, 0.08, 1)
 
     local STRIP_BTNS = {
         { tip="Talents",   desc="Open Talent frame",          lbl="T",   r=0.75, g=0.50, b=1.00,
@@ -4439,7 +4475,7 @@ function SC_BuildMain()
         wpanel:Hide()
 
         -- Background
-        FillBg(wpanel, 0.04, 0.04, 0.08, 0.97)
+        ThemeFill(wpanel, "frameBg", 0.04, 0.04, 0.08, 0.97)
         local wpBord = wpanel:CreateTexture(nil, "OVERLAY")
         wpBord:SetAllPoints(wpanel) ; wpBord:SetColorTexture(0.22, 0.18, 0.32, 1)
         local wpInner = wpanel:CreateTexture(nil, "BACKGROUND")
@@ -4451,7 +4487,7 @@ function SC_BuildMain()
         local wpHdr = CreateFrame("Frame", nil, wpanel)
         wpHdr:SetSize(WP_W, HDR_H)
         wpHdr:SetPoint("TOPLEFT", wpanel, "TOPLEFT", 0, 0)
-        FillBg(wpHdr, 0.07, 0.06, 0.13, 1)
+        ThemeFill(wpHdr, "headerBg", 0.07, 0.06, 0.13, 1)
 
         local wpTitle = wpHdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         wpTitle:SetFont(wpTitle:GetFont(), 12, "OUTLINE")
