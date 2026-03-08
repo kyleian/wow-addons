@@ -142,13 +142,21 @@ do
         -- drag).  Both cases need Blizzard's protected /use path because
         -- PickupInventoryItem is restricted in TBC Anniversary.
         local t = SpellIsTargeting() or (GetCursorInfo() ~= nil)
-        if t ~= _wasTargeting then
-            -- EnableMouse on SecureActionButtonTemplate buttons is a restricted
-            -- operation during combat lockdown.  Defer until out of combat.
-            if InCombatLockdown() then return end
-            _wasTargeting = t
-            for _, sBtn in pairs(_secureSlots) do
-                sBtn:EnableMouse(t)
+        if t == _wasTargeting then return end
+        -- EnableMouse is NOT combat-restricted (only SetAttribute is).
+        _wasTargeting = t
+        for sid, sBtn in pairs(_secureSlots) do
+            sBtn:EnableMouse(t)
+            -- Un-register / re-register LeftButton drag on the parent slot button.
+            -- Without this, RegisterForDrag("LeftButton") on the parent claims
+            -- the LeftButton-down event and the secure child never sees LeftButtonUp.
+            local w = slotWidgets[sid]
+            if w and w.frame then
+                if t then
+                    w.frame:RegisterForDrag()           -- release while targeting
+                else
+                    w.frame:RegisterForDrag("LeftButton") -- restore
+                end
             end
         end
     end)
@@ -929,12 +937,14 @@ local function BuildSlot(parent, slotId, label, x, y)
                 end
                 return
             end
+            -- If targeting/cursor is active and this slot has a secure overlay,
+            -- the overlay already handled the click via /use N.  Bail here so we
+            -- don't also attempt the restricted PickupInventoryItem path.
+            if slotId ~= 0 and _secureSlots[slotId] and
+               (SpellIsTargeting() or GetCursorInfo()) then return end
+
             -- If cursor has an item/enchant on it, equip or apply it.
-            -- NOTE: When any cursor type is active OR SpellIsTargeting(), the
-            -- SecureActionButtonTemplate overlay has EnableMouse(true) and
-            -- intercepts the click via /click CharacterXxxSlot — so this insecure
-            -- path only fires when _secureSlots has no overlay for this slot (e.g.
-            -- ammo slot 0 is excluded from BLIZ_SLOT_NAMES).
+            -- (Fallback for slots without a secure overlay, e.g. ammo slot 0.)
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
                 -- Only block a spell cursor if the slot is empty — can't apply to nothing.
@@ -974,6 +984,9 @@ local function BuildSlot(parent, slotId, label, x, y)
         sBtn:SetAttribute("type", "macro")
         sBtn:SetAttribute("macrotext", "/use " .. slotId)
         sBtn:RegisterForClicks("LeftButtonUp")
+        -- Explicitly raise frame level so sBtn sits above btn and wins the
+        -- mouse-hit test when both are enabled at the same screen position.
+        sBtn:SetFrameLevel(btn:GetFrameLevel() + 20)
         sBtn:EnableMouse(false)
         _secureSlots[slotId] = sBtn
     end
@@ -3728,10 +3741,36 @@ function SC_BuildMain()
     end)
     resetBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Open native character screen button
+    local chrBtn = CreateFrame("Button", nil, hdr)
+    chrBtn:SetSize(32, 18)
+    chrBtn:SetPoint("RIGHT", resetBtn, "LEFT", -4, 0)
+    chrBtn:EnableMouse(true)
+    chrBtn:RegisterForClicks("LeftButtonUp")
+    local chrBtnBg = chrBtn:CreateTexture(nil, "BACKGROUND")
+    chrBtnBg:SetAllPoints(chrBtn) ; chrBtnBg:SetColorTexture(0.08, 0.14, 0.08, 0.90)
+    local chrBtnHl = chrBtn:CreateTexture(nil, "HIGHLIGHT")
+    chrBtnHl:SetAllPoints(chrBtn) ; chrBtnHl:SetColorTexture(1, 1, 1, 0.12)
+    local chrBtnTx = chrBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    chrBtnTx:SetFont(chrBtnTx:GetFont(), 9, "OUTLINE")
+    chrBtnTx:SetAllPoints(chrBtn) ; chrBtnTx:SetJustifyH("CENTER")
+    chrBtnTx:SetText("|cff88ff88Chr|r")
+    chrBtn:SetScript("OnClick", function()
+        ToggleCharacter("PaperDollFrame")
+    end)
+    chrBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText("Open character screen", 1, 1, 1)
+        GameTooltip:AddLine("Shows the default WoW paper-doll frame", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("Required for enchant scroll targeting", 0.5, 0.5, 0.5)
+        GameTooltip:Show()
+    end)
+    chrBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     -- Theme cycle button
     local themeBtn = CreateFrame("Button", nil, hdr)
     themeBtn:SetSize(56, 18)
-    themeBtn:SetPoint("RIGHT", resetBtn, "LEFT", -4, 0)
+    themeBtn:SetPoint("RIGHT", chrBtn, "LEFT", -4, 0)
     themeBtn:EnableMouse(true)
     themeBtn:RegisterForClicks("LeftButtonUp")
     local themeBtnBg = themeBtn:CreateTexture(nil, "BACKGROUND")

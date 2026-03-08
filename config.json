@@ -27,6 +27,14 @@
                        "curseProjectId":  ""
                    },
                    {
+                       "name":  "SlySuite_Error",
+                       "enabled":  true,
+                       "description":  "Shared error capture, storage and diagnostics for the SlySuite addon family. /slyerror",
+                       "sourceDir":  "addons\\SlySuite_Error",
+                       "version":  "1.0.0",
+                       "curseProjectId":  ""
+                   },
+                   {
                        "name":  "SlySuite_WeakAuras",
                        "enabled":  true,
                        "description":  "WeakAura pack manager: import, capture, and manage named WA export string packs (e.g. Yabba/Foji suite).",

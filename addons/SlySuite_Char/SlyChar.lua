@@ -174,6 +174,21 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             ApplyDefaults(SlyCharDB, DB_DEFAULTS)
             SC.db = SlyCharDB
 
+            -- Wrap key refresh functions with error guard so failures are
+            -- logged to SlyErrorDB (visible via /slyerror) rather than silently
+            -- breaking the UI.
+            if SlyError and SlyError.guard then
+                SC_RefreshStats  = SlyError.guard(SC_RefreshStats,  "SlyChar:RefreshStats")
+                SC_RefreshSlots  = SlyError.guard(SC_RefreshSlots,  "SlyChar:RefreshSlots")
+                SC_RefreshSets   = SlyError.guard(SC_RefreshSets,   "SlyChar:RefreshSets")
+                if SC_RefreshMisc then
+                    SC_RefreshMisc = SlyError.guard(SC_RefreshMisc, "SlyChar:RefreshMisc")
+                end
+                if SC_RefreshAll then
+                    SC_RefreshAll  = SlyError.guard(SC_RefreshAll,  "SlyChar:RefreshAll")
+                end
+            end
+
             HookCharacterFrame()
 
             SLASH_SLYCHAR1 = "/slychar"
