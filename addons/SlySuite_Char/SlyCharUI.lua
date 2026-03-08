@@ -2628,8 +2628,8 @@ end
 -- ============================================================
 -- NIT (NovaInstanceTracker) tab  — per-alt lockout view
 -- ============================================================
-local function BuildNitRows(parent)
-    local W = SIDE_W - PAD*2
+local function BuildNitRows(parent, width)
+    local W = width or (SIDE_W - PAD*2)
 
     -- ── Sub-tab strip: Lockouts | Guild | Friends | Layer ────────────────────
     local stQtr = math.floor(W / 4)
@@ -3291,7 +3291,11 @@ function SC_SwitchTab(name)
     -- remap removed top-level keys to their new parents
     if name == "bars" then name = "sets" end
     if name == "rep" or name == "skills" then name = "misc" end
-    if name == "nit" then name = "social" end
+    -- social is no longer a tab — open the wing panel instead and redirect
+    if name == "nit" or name == "social" then
+        SC_ToggleWing("social")
+        name = "stats"
+    end
     -- if still unknown, fall back to stats
     if not tabFrames[name] then name = "stats" end
     SC.db.lastTab = name
@@ -3398,8 +3402,11 @@ function SC_RefreshAll()
     if     tab == "stats"  then SC_RefreshStats()
     elseif tab == "sets"   then SC_RefreshSetsSub()
     elseif tab == "misc"   then SC_RefreshMisc()
-    elseif tab == "social" then SC_RefreshNIT()
     elseif tab == "suite"  then SC_RefreshSuite()
+    end
+    -- Refresh social wing if it is currently open
+    if wingFrame and wingFrame:IsShown() and activeWingKey == "social" then
+        SC_RefreshNIT()
     end
 end
 
@@ -3530,8 +3537,8 @@ local function SC_OpenPanel(addonName, frameGlobal, fallbackFn)
     end
 end
 
--- Wing Panel — kept alive so BuildWingFrame's spellbook pane compiles cleanly;
--- no strip button currently opens it.
+-- Wing Panel — slides out to the right of the main frame.
+-- Keys: "social" (NIT), "spells", "talents"
 -- ============================================================
 function SC_ToggleWing(key)
     if not wingFrame then return end
@@ -3542,9 +3549,11 @@ function SC_ToggleWing(key)
     for k, p in pairs(wingPanes) do
         if k == key then p:Show() else p:Hide() end
     end
-    if wingTitleTx then wingTitleTx:SetText(key) end
+    local WING_TITLES = { social="NIT / Social", spells="Spellbook", talents="Talents" }
+    if wingTitleTx then wingTitleTx:SetText(WING_TITLES[key] or key) end
     wingFrame:Show()
-    if key == "spells" then SC_RefreshSpells() end
+    if key == "spells"  then SC_RefreshSpells() end
+    if key == "social"  then SC_RefreshNIT()    end
 end
 
 
@@ -3667,6 +3676,25 @@ local function BuildWingFrame(mainFrame)
         rank:SetPoint("RIGHT", row, "RIGHT", -2, 0) ; rank:SetJustifyH("RIGHT")
         spellRows[i] = {frame=row, lbl=lbl, rank=rank, spellIdx=nil}
     end
+
+    -- ---- Social (NIT) Pane ----
+    local socialPane = CreateFrame("Frame", nil, f)
+    socialPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    socialPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    socialPane:Hide()
+    FillBg(socialPane, 0.04, 0.04, 0.07, 1)
+    wingPanes["social"] = socialPane
+
+    local nitCont = CreateFrame("Frame", nil, socialPane)
+    nitCont:SetPoint("TOPLEFT", socialPane, "TOPLEFT", PAD, -4)
+    nitCont:SetSize(WING_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)
+    BuildNitRows(nitCont, WING_W - PAD*2)
+
+    socialPane:EnableMouseWheel(true)
+    socialPane:SetScript("OnMouseWheel", function(self, delta)
+        nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
+        SC_RefreshNIT()
+    end)
 
     -- Wing footer stripe
     local wingFoot = CreateFrame("Frame", nil, f)
@@ -3879,7 +3907,6 @@ function SC_BuildMain()
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="misc",   label="Misc"},
-        {key="social", label="Social"},
     }
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
@@ -4185,23 +4212,7 @@ function SC_BuildMain()
         miscUI.subTab = "skills" ; SC_RefreshMisc()
     end)
 
-    -- NIT tab
-    local nitTab = CreateFrame("Frame", nil, side)
-    nitTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    nitTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    nitTab:SetHeight(tcH) ; nitTab:Hide()
-    tabFrames["social"] = nitTab
-
-    local nitCont = CreateFrame("Frame", nil, nitTab)
-    nitCont:SetPoint("TOPLEFT", nitTab, "TOPLEFT", PAD, -4)
-    nitCont:SetSize(SIDE_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)   -- 17px: subtabs(16)+sep(1)
-    BuildNitRows(nitCont)
-
-    nitTab:EnableMouseWheel(true)
-    nitTab:SetScript("OnMouseWheel", function(self, delta)
-        nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
-        SC_RefreshNIT()
-    end)
+    -- NIT tab is now a wing flyout; no side-panel tab for social.
 
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")
@@ -4277,6 +4288,10 @@ function SC_BuildMain()
                   if wp:IsShown() then wp:Hide()
                   else wp:Show() end
               end
+          end },
+        { tip="Social / NIT", desc="Instance lockouts, Guild, Friends, Layer", lbl="NIT", r=0.30, g=0.80, b=1.00,
+          fn=function()
+              SC_ToggleWing("social")
           end },
     }
 
@@ -4604,7 +4619,7 @@ function SC_BuildMain()
     ftxt:SetFont(ftxt:GetFont(), 8, "")
     ftxt:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     ftxt:SetTextColor(0.3, 0.3, 0.38)
-    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·PvP·G·SR·×")
+    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·B·SR·Wh·NIT·×")
 
     f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
     f:HookScript("OnHide", function(self)
