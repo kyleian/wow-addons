@@ -9,6 +9,10 @@ SC  = SC  or {}
 SC.version = "1.0.0"
 local ADDON_NAME = "SlySuite_Char"
 
+-- Flags shared with SlyCharUI.lua (same global table, different file)
+SC._skipHook       = false   -- true while Chr button is showing CharacterFrame directly
+SC._pendingHideChar = false  -- true when CharacterFrame was left open in combat
+
 -- --------------------------------------------------------
 -- SavedVariables defaults
 -- --------------------------------------------------------
@@ -76,12 +80,18 @@ end
 local function HookCharacterFrame()
     if not CharacterFrame then return end
     CharacterFrame:HookScript("OnShow", function(self)
+        -- Chr button opened it on purpose — don't intercept.
+        if SC._skipHook then return end
+
         if InCombatLockdown() then
-            -- CharacterFrame:Hide() is restricted in combat; let both frames coexist.
-            -- SlyChar will open alongside the default frame if already built.
+            -- CharacterFrame:Hide() is restricted in combat; show SlyChar alongside it
+            -- and queue hiding CharacterFrame once combat ends.
             if SlyCharMainFrame then
                 SlyCharMainFrame:Show()
                 SC_RefreshAll()
+                SC._pendingHideChar = true
+            else
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Open the character sheet once out of combat first.")
             end
             return
         end
@@ -155,6 +165,7 @@ end
 local evFrame = CreateFrame("Frame", "SlyCharEventFrame", UIParent)
 evFrame:RegisterEvent("ADDON_LOADED")
 evFrame:RegisterEvent("PLAYER_LOGOUT")
+evFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 evFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 evFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 evFrame:RegisterEvent("CHARACTER_POINTS_CHANGED")
@@ -261,6 +272,15 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
         if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
             if SC_RefreshAll then SC_RefreshAll() end
+        end
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Combat ended: hide the native CharacterFrame we couldn't supress earlier.
+        if SC._pendingHideChar then
+            SC._pendingHideChar = false
+            if CharacterFrame and CharacterFrame:IsShown() then
+                CharacterFrame:Hide()
+            end
         end
     end
 end)

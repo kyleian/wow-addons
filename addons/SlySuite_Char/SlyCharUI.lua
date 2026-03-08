@@ -3784,12 +3784,25 @@ function SC_BuildMain()
     chrBtnTx:SetAllPoints(chrBtn) ; chrBtnTx:SetJustifyH("CENTER")
     chrBtnTx:SetText("|cff88ff88Chr|r")
     chrBtn:SetScript("OnClick", function()
-        ToggleCharacter("PaperDollFrame")
+        -- Use _skipHook so the CharacterFrame OnShow interceptor ignores this click.
+        SC._skipHook = true
+        if CharacterFrame:IsShown() then
+            CharacterFrame:Hide()
+        else
+            -- Show directly (not via ShowUIPanel/ToggleCharacter) to avoid the
+            -- UISpecialFrames auto-hide that would close SlyChar.
+            CharacterFrame:Show()
+            -- Re-show SlyChar in case WoW triggered any hide side-effect.
+            if SlyCharMainFrame and not SlyCharMainFrame:IsShown() then
+                SlyCharMainFrame:Show()
+            end
+        end
+        SC._skipHook = false
     end)
     chrBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:SetText("Open character screen", 1, 1, 1)
-        GameTooltip:AddLine("Shows the default WoW paper-doll frame", 0.7, 0.7, 0.7)
+        GameTooltip:SetText("Toggle paper-doll frame", 1, 1, 1)
+        GameTooltip:AddLine("Opens the default WoW character frame alongside SlyChar", 0.7, 0.7, 0.7)
         GameTooltip:AddLine("Required for enchant scroll targeting", 0.5, 0.5, 0.5)
         GameTooltip:Show()
     end)
@@ -3902,12 +3915,12 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 4)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="misc",   label="Misc"},
     }
+    local tbW = math.floor(SIDE_W / #tabDefs)
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
         btn:SetSize(tbW, 24)
