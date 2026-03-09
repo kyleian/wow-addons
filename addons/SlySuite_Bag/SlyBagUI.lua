@@ -202,7 +202,7 @@ local function NewSlotButton(parent, idx)
     qRight:SetPoint("TOPRIGHT",    b, "TOPRIGHT",    0, 0)
     qRight:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
     qRight:SetWidth(2); qRight:Hide(); b.qRight = qRight
-    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:RegisterForClicks("LeftButtonUp")
     b:SetScript("OnEnter", function(self)
         if self.bag ~= nil then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -214,31 +214,22 @@ local function NewSlotButton(parent, idx)
     b:SetScript("OnClick", function(self, btn)
         if self.bag == nil then return end
         if btn == "LeftButton" then
-            if MerchantFrame and MerchantFrame:IsShown() then
-                _UseItem(self.bag, self.slot)    -- sell at vendor
-            else
-                _PickupItem(self.bag, self.slot)
-            end
+            _PickupItem(self.bag, self.slot)
             C_Timer.After(0.05, SlyBag_Refresh)
-        elseif btn == "RightButton" then
-            _UseItem(self.bag, self.slot)
-            -- Check a frame later whether UseContainerItem placed the item on
-            -- the cursor (armor kit, enchant scroll, stone, poison, etc.).
-            -- If so, open SlyChar automatically so the player can click the
-            -- equipped slot to apply the effect — the secure /use overlays in
-            -- SlyChar handle all cursor-item interactions.
-            C_Timer.After(0.025, function()
-                local ctype = GetCursorInfo()
-                if ctype then
-                    -- Targeting mode: show the character sheet for slot clicking
-                    if SC_ShowMain then SC_ShowMain() end
-                    C_Timer.After(0.5, SlyBag_Refresh)
-                else
-                    C_Timer.After(0.03, SlyBag_Refresh)
-                end
-            end)
         end
     end)
+    -- SecureActionButtonTemplate for right-click: fires UseContainerItem via
+    -- the protected "/use bag N slot M" path, which is the only legal way to
+    -- call UseContainerItem in TBC Anniversary.  Handles enchant scrolls
+    -- (cursor type "enchant"), weapon stones/oils (SpellIsTargeting mode),
+    -- and vendor right-click sell — all without touching restricted APIs.
+    -- SetAttribute is only safe outside combat; guarded below.
+    local sUse = CreateFrame("Button", nil, b, "SecureActionButtonTemplate")
+    sUse:SetAllPoints(b)
+    sUse:SetFrameLevel(b:GetFrameLevel() + 5)
+    sUse:SetAttribute("type", "item")
+    sUse:RegisterForClicks("RightButtonUp")
+    b.sUse = sUse
     b:Hide()
     return b
 end
@@ -428,6 +419,13 @@ function SlyBag_Refresh()
                 b:SetPoint("TOPLEFT", SlyBagContent, "TOPLEFT",
                     SIDE_PAD + (colPos-1)*CELL, curY)
                 b.bag=it.bag ; b.slot=it.slot
+                -- Update the secure right-click button's target item.
+                -- SetAttribute is forbidden in combat; SlyBag only opens
+                -- outside combat so this is safe under normal use.
+                if not InCombatLockdown() then
+                    b.sUse:SetAttribute("item",
+                        string.format("bag %d slot %d", it.bag, it.slot))
+                end
                 b.icon:SetTexture(it.texture) ; b.icon:SetAlpha(1)
                 b.count:SetText(it.count > 1 and it.count or "")
                 local qc = QUAL_COLORS[it.quality]

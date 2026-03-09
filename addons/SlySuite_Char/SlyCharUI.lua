@@ -121,6 +121,8 @@ local EQUIP_SLOT_IDS = {
     [11]=true, [12]=true, [13]=true, [14]=true, [15]=true,
     [16]=true, [17]=true, [18]=true, [19]=true,
 }
+-- SpellIsTargetingUnit was added after TBC; guard against it not existing.
+local _hasSpellIsTargetingUnit = type(SpellIsTargetingUnit) == "function"
 
 -- ---- Widget refs (module-level) ----
 local slotWidgets   = {}
@@ -166,9 +168,10 @@ do
         -- scroll, etc.) OR when SpellIsTargeting for an item-use effect (weapon
         -- stone, oil, armor kit, poison).  SpellIsTargetingUnit() is true for
         -- targeted SPELL abilities (Polymorph, Sap, Trap) which should NOT open
-        -- SlyChar — they pick a unit, not a gear slot.
+        -- SlyChar.  Guard: the function may not exist in TBC Anniversary.
         local cursorActive  = (GetCursorInfo() ~= nil)
-        local itemTargeting = SpellIsTargeting() and not SpellIsTargetingUnit()
+        local itemTargeting = SpellIsTargeting() and
+            (not _hasSpellIsTargetingUnit or not SpellIsTargetingUnit())
         if t then
             if cursorActive or itemTargeting then
                 if not (SlyCharMainFrame and SlyCharMainFrame:IsShown()) then
