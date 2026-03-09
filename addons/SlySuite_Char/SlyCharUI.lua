@@ -161,18 +161,22 @@ do
             end
         end
 
+        -- Auto-show SlyChar only when GetCursorInfo() is non-nil (cursor is
+        -- carrying an item, enchant, or merchant item from any bag addon).
+        -- We deliberately do NOT auto-show for SpellIsTargeting() alone, because
+        -- that also fires for normal targeted abilities (Polymorph, Sap, etc.)
+        -- and would pop SlyChar on every such keypress.
+        local cursorActive = (GetCursorInfo() ~= nil)
         if t then
-            -- Auto-show SlyChar when ANYTHING puts an item-use on the cursor
-            -- (Baginator, default bags, SlyBag, or any other source).
-            -- This means the player can always click an equipped slot to apply
-            -- the effect without having to manually open SlyChar first.
-            if not (SlyCharMainFrame and SlyCharMainFrame:IsShown()) then
-                if SC_ShowMain and not InCombatLockdown() then
-                    SC_ShowMain()
-                    _autoShownSlyChar = true
+            if cursorActive then
+                if not (SlyCharMainFrame and SlyCharMainFrame:IsShown()) then
+                    if SC_ShowMain and not InCombatLockdown() then
+                        SC_ShowMain()
+                        _autoShownSlyChar = true
+                    end
+                else
+                    _autoShownSlyChar = false  -- was already open; don't auto-close it
                 end
-            else
-                _autoShownSlyChar = false  -- was already open; don't auto-close it
             end
         else
             -- Targeting ended (item applied or right-click cancelled).
