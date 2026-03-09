@@ -138,19 +138,20 @@ do
     local _wasTargeting   = false
     local _autoShownSlyChar = false   -- true when we auto-opened the frame for targeting
     _targetMonitor:SetScript("OnUpdate", function()
-        -- Activate secure overlays whenever a spell is targeting (armor kit,
-        -- oil, stone, poison) OR any cursor type is set (enchant scroll, item
-        -- drag).  Both cases need Blizzard's protected /use path because
-        -- PickupInventoryItem is restricted in TBC Anniversary.
+        -- When a spell is targeting (armor kit, oil, stone, poison, enchant)
+        -- OR any cursor type is set (item drag), we un-register LeftButton drag
+        -- on the slot button so that RegisterForDrag("LeftButton") doesn't eat
+        -- the click before btn:OnClick / btn:OnReceiveDrag can fire.
+        -- NOTE: we deliberately do NOT enable the sBtn secure overlay here.
+        -- In TBC Classic, PickupInventoryItem called directly from a hardware
+        -- OnClick event properly resolves SpellIsTargeting enchant/stone/kit
+        -- application, which is handled in btn:OnClick below.
         local t = SpellIsTargeting() or (GetCursorInfo() ~= nil)
         if t == _wasTargeting then return end
-        -- EnableMouse is NOT combat-restricted (only SetAttribute is).
         _wasTargeting = t
-        for sid, sBtn in pairs(_secureSlots) do
-            sBtn:EnableMouse(t)
-            -- Un-register / re-register LeftButton drag on the parent slot button.
-            -- Without this, RegisterForDrag("LeftButton") on the parent claims
-            -- the LeftButton-down event and the secure child never sees LeftButtonUp.
+        for sid, _ in pairs(_secureSlots) do
+            -- Un-register / re-register LeftButton drag on the parent slot button
+            -- so the click reaches OnClick / OnReceiveDrag instead of OnDragStart.
             local w = slotWidgets[sid]
             if w and w.frame then
                 if t then
@@ -1009,14 +1010,19 @@ local function BuildSlot(parent, slotId, label, x, y)
                 end
                 return
             end
-            -- If targeting/cursor is active and this slot has a secure overlay,
-            -- the overlay already handled the click via /use N.  Bail here so we
-            -- don't also attempt the restricted PickupInventoryItem path.
-            if slotId ~= 0 and _secureSlots[slotId] and
-               (SpellIsTargeting() or GetCursorInfo()) then return end
+            -- Apply weapon stone / armor kit / enchant when the spell is
+            -- targeting (SpellIsTargeting).  In TBC Classic, calling
+            -- PickupInventoryItem from a direct hardware OnClick event is NOT
+            -- combat-restricted and properly resolves the pending spell onto
+            -- the item in that slot (confirmed design intent per COPILOT_CONTEXT).
+            if SpellIsTargeting() and slotId ~= 0 then
+                SC_HidePicker()
+                local ok = pcall(PickupInventoryItem, slotId)
+                if ok then UpdateSlot(slotWidgets[slotId], slotId) end
+                return
+            end
 
             -- If cursor has an item/enchant on it, equip or apply it.
-            -- (Fallback for slots without a secure overlay, e.g. ammo slot 0.)
             local ctype = GetCursorInfo()
             if ctype and slotId ~= 0 then
                 -- Only block a spell cursor if the slot is empty — can't apply to nothing.
@@ -1041,15 +1047,10 @@ local function BuildSlot(parent, slotId, label, x, y)
         end
     end)
 
-    -- Secure overlay for enchant/cursor/SpellIsTargeting application.
-    -- "/use N" where N is the equipment slot ID is the WoW-native way to
-    -- resolve ALL pending cursor/spell interactions onto gear slots:
-    --   SpellIsTargeting() = true  → resolves the pending targeting onto slot N
-    --   GetCursorInfo() = "item"   → equips cursor item to slot N
-    --   GetCursorInfo() = "enchant"→ applies enchant to item in slot N
-    -- This does NOT require CharacterFrame to be open or visible.
-    -- The overlay sits on top of btn with EnableMouse(false) normally;
-    -- _targetMonitor enables it whenever cursor/spell is pending.
+    -- Secure overlay (kept but intentionally never enabled).
+    -- Enchant/stone/kit application is handled directly in btn:OnClick above via
+    -- pcall(PickupInventoryItem, slotId), which works in TBC Classic hardware events.
+    -- sBtn is retained here as a no-op placeholder in case a future secure path is needed.
     if EQUIP_SLOT_IDS[slotId] then
         local sBtn = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
         sBtn:SetAllPoints(btn)
