@@ -84,14 +84,17 @@ local function HookCharacterFrame()
         if SC._skipHook then return end
 
         if InCombatLockdown() then
-            -- CharacterFrame:Hide() is restricted in combat; show SlyChar alongside it
-            -- and queue hiding CharacterFrame once combat ends.
+            -- CharacterFrame:Hide() is restricted in combat.
+            -- SlyCharMainFrame is always pre-built on PLAYER_ENTERING_WORLD so
+            -- this branch now always has a frame to show.
             if SlyCharMainFrame then
+                -- Raise above CharacterFrame so ours is visually on top.
+                SlyCharMainFrame:SetFrameLevel(
+                    math.max(SlyCharMainFrame:GetFrameLevel(),
+                             (CharacterFrame:GetFrameLevel() or 0) + 5))
                 SlyCharMainFrame:Show()
                 SC_RefreshAll()
                 SC._pendingHideChar = true
-            else
-                DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Open the character sheet once out of combat first.")
             end
             return
         end
@@ -166,6 +169,7 @@ local evFrame = CreateFrame("Frame", "SlyCharEventFrame", UIParent)
 evFrame:RegisterEvent("ADDON_LOADED")
 evFrame:RegisterEvent("PLAYER_LOGOUT")
 evFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+evFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 evFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 evFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 evFrame:RegisterEvent("CHARACTER_POINTS_CHANGED")
@@ -272,6 +276,16 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
         if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
             if SC_RefreshAll then SC_RefreshAll() end
+        end
+
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Pre-build the main frame now, while we are guaranteed to be outside
+        -- combat lockdown. This ensures SlyCharMainFrame always exists by the
+        -- time the player presses C, even if they never opened it manually.
+        if not SlyCharMainFrame and SC.db then
+            SC_BuildMain()
+            -- Build it but keep it hidden — just ensure the secure buttons exist.
+            if SlyCharMainFrame then SlyCharMainFrame:Hide() end
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
