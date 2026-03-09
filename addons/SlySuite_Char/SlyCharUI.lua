@@ -170,10 +170,12 @@ do
         -- scroll, etc.) OR when SpellIsTargeting for an item-use effect (weapon
         -- stone, oil, armor kit, poison).  SpellIsTargetingUnit() is true for
         -- targeted SPELL abilities (Polymorph, Sap, Trap) which should NOT open
-        -- SlyChar.  Guard: the function may not exist in TBC Anniversary.
+        -- SlyChar.  Guard: SpellIsTargetingUnit may not exist in TBC Anniversary;
+        -- in that case we cannot distinguish safely so we skip the spell-targeting
+        -- auto-open entirely (cursor-drag auto-open still works).
         local cursorActive  = (GetCursorInfo() ~= nil)
-        local itemTargeting = SpellIsTargeting() and
-            (not _hasSpellIsTargetingUnit or not SpellIsTargetingUnit())
+        local itemTargeting = _hasSpellIsTargetingUnit and
+            SpellIsTargeting() and not SpellIsTargetingUnit()
         if t then
             if cursorActive or itemTargeting then
                 if not (SlyCharMainFrame and SlyCharMainFrame:IsShown()) then
