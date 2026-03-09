@@ -2709,7 +2709,8 @@ local function BuildNitRows(parent, width)
     local W = width or (SIDE_W - PAD*2)
 
     -- ── Sub-tab strip: Lockouts | Guild | Friends | Layer ────────────────────
-    local stQtr = math.floor(W / 4)
+    -- NIT pane has 2 sub-tabs: Lockouts | Layer
+    local stHalf = math.floor(W / 2)
 
     local subBarBg = parent:CreateTexture(nil, "BACKGROUND")
     subBarBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, 0)
@@ -2719,7 +2720,7 @@ local function BuildNitRows(parent, width)
 
     local function MakeSubTab(label, xOff, key)
         local btn = CreateFrame("Button", nil, parent)
-        btn:SetSize(stQtr, 16)
+        btn:SetSize(stHalf, 16)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, 0)
         local bg = btn:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(btn) ; bg:SetColorTexture(0.06, 0.06, 0.10, 1)
@@ -2730,22 +2731,13 @@ local function BuildNitRows(parent, width)
         btn.bg = bg ; btn.tx = tx
         btn:SetScript("OnClick", function()
             nitSubTab = key
-            if key == "guild" then
-                if C_GuildInfo then C_GuildInfo.GuildRoster()
-                elseif GuildRoster then GuildRoster() end
-            elseif key == "friends" then
-                if C_FriendList and C_FriendList.ShowFriends then C_FriendList.ShowFriends()
-                elseif ShowFriends then ShowFriends() end
-            end
             SC_RefreshNIT()
         end)
         return btn
     end
 
-    nitSubLockBtn    = MakeSubTab("Locks",   0,          "locks")
-    nitSubGuildBtn   = MakeSubTab("Guild",   stQtr,      "guild")
-    nitSubFriendsBtn = MakeSubTab("Friends", stQtr * 2,  "friends")
-    nitSubLayerBtn   = MakeSubTab("Layer",   stQtr * 3,  "layer")
+    nitSubLockBtn  = MakeSubTab("Lockouts", 0,       "locks")
+    nitSubLayerBtn = MakeSubTab("Layer",    stHalf,  "layer")
 
     -- thin separator below sub-tab strip
     local subSep = parent:CreateTexture(nil, "ARTWORK")
@@ -2770,6 +2762,27 @@ local function BuildNitRows(parent, width)
     si:SetPoint("TOPRIGHT", lockContent, "TOPRIGHT", 0, 0)
     si:SetJustifyH("RIGHT") ; si:SetTextColor(0.45, 0.45, 0.50)
     nitScrollInfoLabel = si
+
+    -- Broadcast all alts' lockouts to party/raid/say
+    local bcBtn = CreateFrame("Button", nil, lockContent)
+    bcBtn:SetSize(70, 14)
+    bcBtn:SetPoint("TOPRIGHT", lockContent, "TOPRIGHT", 0, -18)
+    local bcBg = bcBtn:CreateTexture(nil, "BACKGROUND")
+    bcBg:SetAllPoints() ; bcBg:SetColorTexture(0.08, 0.22, 0.38, 0.90)
+    local bcHl = bcBtn:CreateTexture(nil, "HIGHLIGHT")
+    bcHl:SetAllPoints() ; bcHl:SetColorTexture(0.20, 0.50, 0.80, 0.35)
+    local bcTx = bcBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    bcTx:SetFont(bcTx:GetFont(), 8, "OUTLINE")
+    bcTx:SetAllPoints() ; bcTx:SetJustifyH("CENTER")
+    bcTx:SetText("|cff88ccff>> Broadcast|r")
+    bcBtn:SetScript("OnClick", function() SC_BroadcastLockouts() end)
+    bcBtn:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(bcBtn, "ANCHOR_LEFT")
+        GameTooltip:SetText("Broadcast Lockouts", 1, 1, 1)
+        GameTooltip:AddLine("Post all alts' lockouts to party, raid, or /say.", 0.7, 0.7, 0.7, true)
+        GameTooltip:Show()
+    end)
+    bcBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     for i = 1, MAX_NIT_LOCK_ROWS do
         local yOff = -(18 + (i-1)*18)
@@ -2803,172 +2816,9 @@ local function BuildNitRows(parent, width)
         nitLockRows[i] = row
     end
 
-    -- ── Guild content (shown when nitSubTab == "guild") ───────────────────────
-    local guildContent = CreateFrame("Frame", nil, parent)
-    guildContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
-    guildContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
-    guildContent:Hide()
-    nitGuildContent = guildContent
-
-    local gh = guildContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    gh:SetFont(gh:GetFont(), 10, "OUTLINE")
-    gh:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, 0)
-    gh:SetText("|cffffff99Online Guildies|r")
-    nitGuildHeaderFs = gh
-
-    for i = 1, MAX_NIT_LOCK_ROWS do
-        local yOff = -(18 + (i-1)*18)
-        local row = CreateFrame("Button", nil, guildContent)
-        row:SetSize(W, 17)
-        row:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, yOff)
-        row:RegisterForClicks("LeftButtonUp")
-
-        local bg = row:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints(row)
-        bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
-        row.bg = bg
-
-        local hl = row:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(row)
-        hl:SetColorTexture(1, 1, 1, 0.07)
-
-        -- layer number (compact left column)
-        local ly = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ly:SetFont(ly:GetFont(), 9, "OUTLINE")
-        ly:SetPoint("LEFT", row, "LEFT", 2, 0)
-        ly:SetJustifyH("CENTER") ; ly:SetWidth(22)
-        row.ly = ly
-
-        -- character name
-        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        nm:SetFont(nm:GetFont(), 9, "")
-        nm:SetPoint("LEFT", row, "LEFT", 26, 0)
-        nm:SetJustifyH("LEFT") ; nm:SetWidth(155)
-        row.nm = nm
-
-        -- zone (right-aligned, truncated)
-        local zn = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        zn:SetFont(zn:GetFont(), 8, "")
-        zn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-        zn:SetJustifyH("RIGHT") ; zn:SetWidth(W - 26 - 155 - 4)
-        row.zn = zn
-
-        row:SetScript("OnEnter", function(self)
-            if self._name then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText(self._name, 1, 1, 1)
-                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5)
-                GameTooltip:Show()
-            end
-        end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        row:Hide()
-        nitGuildRows[i] = row
-    end
-
-    -- ── Friends content (shown when nitSubTab == "friends") ──────────────────
-    local friendsContent = CreateFrame("Frame", nil, parent)
-    friendsContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
-    friendsContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
-    friendsContent:Hide()
-    nitFriendsContent = friendsContent
-
-    local fh = friendsContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    fh:SetFont(fh:GetFont(), 10, "OUTLINE")
-    fh:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, 0)
-    fh:SetText("|cffffff99Friends|r")
-    nitFriendsHeaderFs = fh
-
-    -- Small manual refresh button next to the header
-    local frRefreshBtn = CreateFrame("Button", nil, friendsContent)
-    frRefreshBtn:SetSize(36, 14)
-    frRefreshBtn:SetPoint("TOPRIGHT", friendsContent, "TOPRIGHT", 0, 0)
-    local frRBg = frRefreshBtn:CreateTexture(nil, "BACKGROUND")
-    frRBg:SetAllPoints() ; frRBg:SetColorTexture(0.10, 0.20, 0.35, 0.85)
-    local frRHl = frRefreshBtn:CreateTexture(nil, "HIGHLIGHT")
-    frRHl:SetAllPoints() ; frRHl:SetColorTexture(0.25, 0.50, 0.80, 0.40)
-    local frRTx = frRefreshBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    frRTx:SetFont(frRTx:GetFont(), 8, "OUTLINE")
-    frRTx:SetAllPoints() ; frRTx:SetJustifyH("CENTER") ; frRTx:SetText("|cffaaddffRefresh|r")
-    frRefreshBtn:SetScript("OnClick", function()
-        -- Request a fresh friends list from server
-        if C_FriendList and C_FriendList.ShowFriends then
-            C_FriendList.ShowFriends()
-        elseif ShowFriends then
-            ShowFriends()
-        end
-        -- Print raw API values + available functions to chat for debugging
-        local n = (C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetNumFriends())
-               or (GetNumFriends and GetNumFriends()) or 0
-        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Friends count=" .. tostring(n)
-            .. "  C_FriendList=" .. tostring(C_FriendList ~= nil))
-        if C_FriendList then
-            local fns = {}
-            for k in pairs(C_FriendList) do fns[#fns+1] = k end
-            table.sort(fns)
-            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r C_FriendList keys: " .. table.concat(fns, ", "))
-        end
-        -- Refresh will happen when FRIENDLIST_UPDATE fires; also try immediately
-        SC_RefreshNITFriends()
-    end)
-
-    for i = 1, MAX_NIT_LOCK_ROWS do
-        local yOff = -(18 + (i-1)*18)
-        local row = CreateFrame("Button", nil, friendsContent)
-        row:SetSize(W, 17)
-        row:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, yOff)
-        row:RegisterForClicks("LeftButtonUp")
-
-        local bg = row:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints(row)
-        bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
-        row.bg = bg
-
-        local hl = row:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
-
-        -- online dot
-        local dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        dot:SetFont(dot:GetFont(), 10, "OUTLINE")
-        dot:SetPoint("LEFT", row, "LEFT", 2, 0)
-        dot:SetWidth(10) ; dot:SetJustifyH("CENTER")
-        row.dot = dot
-
-        -- name
-        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        nm:SetFont(nm:GetFont(), 9, "")
-        nm:SetPoint("LEFT", row, "LEFT", 14, 0)
-        nm:SetJustifyH("LEFT") ; nm:SetWidth(130)
-        row.nm = nm
-
-        -- level
-        local lv = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lv:SetFont(lv:GetFont(), 8, "")
-        lv:SetPoint("LEFT", row, "LEFT", 146, 0)
-        lv:SetJustifyH("LEFT") ; lv:SetWidth(28)
-        row.lv = lv
-
-        -- area
-        local ar = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ar:SetFont(ar:GetFont(), 8, "")
-        ar:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-        ar:SetJustifyH("RIGHT") ; ar:SetWidth(W - 14 - 130 - 28 - 6)
-        row.ar = ar
-
-        row:SetScript("OnEnter", function(self)
-            if self._name then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText(self._name, 1, 1, 1)
-                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5)
-                GameTooltip:Show()
-            end
-        end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        row:Hide()
-        nitFriendsRows[i] = row
-    end
+    -- ── Friends content (moved to BuildSocialRows — see below) ───────────────
+    -- ── Friends Section placeholder: kept here for nitFriendsContent ref ─────
+    -- (Guild and Friends UIs are built in BuildSocialRows, called in BuildWingFrame)
 
     -- ── Layer content (shown when nitSubTab == "layer") ──────────────────────
     local layerContent = CreateFrame("Frame", nil, parent)
@@ -3002,6 +2852,239 @@ local function BuildNitRows(parent, width)
     layerHintFs:SetJustifyH("CENTER")
     layerHintFs:SetTextColor(0.28, 0.28, 0.36)
     layerHintFs:SetText("Target any NPC in a capital city\nto detect your layer")
+end
+
+-- ============================================================
+-- BuildSocialRows: Friends & Guild pane (separate wing from NIT)
+-- ============================================================
+local function BuildSocialRows(parent, width)
+    local W = width or (SIDE_W - PAD*2)
+    local stHalf = math.floor(W / 2)
+
+    local subBarBg = parent:CreateTexture(nil, "BACKGROUND")
+    subBarBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, 0)
+    subBarBg:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
+    subBarBg:SetHeight(16) ; subBarBg:SetColorTexture(0.05, 0.05, 0.09, 1)
+
+    local function MakeSocialTab(label, xOff, key)
+        local btn = CreateFrame("Button", nil, parent)
+        btn:SetSize(stHalf, 16)
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, 0)
+        local bg = btn:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(btn) ; bg:SetColorTexture(0.06, 0.06, 0.10, 1)
+        local tx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tx:SetFont(tx:GetFont(), 8, "OUTLINE")
+        tx:SetAllPoints() ; tx:SetJustifyH("CENTER")
+        tx:SetText(label) ; tx:SetTextColor(0.45, 0.45, 0.55)
+        btn.bg = bg ; btn.tx = tx
+        btn:SetScript("OnClick", function()
+            socialSubTab = key
+            if key == "guild" then
+                if C_GuildInfo then C_GuildInfo.GuildRoster()
+                elseif GuildRoster then GuildRoster() end
+            elseif key == "friends" then
+                if C_FriendList and C_FriendList.ShowFriends then C_FriendList.ShowFriends()
+                elseif ShowFriends then ShowFriends() end
+            end
+            SC_RefreshSocial()
+        end)
+        return btn
+    end
+
+    nitSubGuildBtn   = MakeSocialTab("Guild",   0,       "guild")
+    nitSubFriendsBtn = MakeSocialTab("Friends", stHalf,  "friends")
+
+    local subSep = parent:CreateTexture(nil, "ARTWORK")
+    subSep:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -16)
+    subSep:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -16)
+    subSep:SetHeight(1) ; subSep:SetColorTexture(0.18, 0.18, 0.26, 1)
+
+    -- ── Guild content ─────────────────────────────────────────────────────────
+    local guildContent = CreateFrame("Frame", nil, parent)
+    guildContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
+    guildContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
+    guildContent:Hide()
+    nitGuildContent = guildContent
+
+    local gh = guildContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    gh:SetFont(gh:GetFont(), 10, "OUTLINE")
+    gh:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, 0)
+    gh:SetText("|cffffff99Online Guildies|r")
+    nitGuildHeaderFs = gh
+
+    for i = 1, MAX_NIT_LOCK_ROWS do
+        local yOff = -(18 + (i-1)*18)
+        local row = CreateFrame("Button", nil, guildContent)
+        row:SetSize(W, 17)
+        row:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, yOff)
+        row:RegisterForClicks("LeftButtonUp")
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row) ; bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
+        row.bg = bg
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
+        local ly = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ly:SetFont(ly:GetFont(), 9, "OUTLINE")
+        ly:SetPoint("LEFT", row, "LEFT", 2, 0) ; ly:SetJustifyH("CENTER") ; ly:SetWidth(22)
+        row.ly = ly
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 26, 0) ; nm:SetJustifyH("LEFT") ; nm:SetWidth(155)
+        row.nm = nm
+        local zn = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        zn:SetFont(zn:GetFont(), 8, "")
+        zn:SetPoint("RIGHT", row, "RIGHT", -2, 0) ; zn:SetJustifyH("RIGHT") ; zn:SetWidth(W - 26 - 155 - 4)
+        row.zn = zn
+        row:SetScript("OnEnter", function(self)
+            if self._name then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT") ; GameTooltip:SetText(self._name, 1, 1, 1)
+                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5) ; GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:Hide() ; nitGuildRows[i] = row
+    end
+
+    -- ── Friends content ───────────────────────────────────────────────────────
+    local friendsContent = CreateFrame("Frame", nil, parent)
+    friendsContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
+    friendsContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
+    friendsContent:Hide()
+    nitFriendsContent = friendsContent
+
+    local fh = friendsContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fh:SetFont(fh:GetFont(), 10, "OUTLINE")
+    fh:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, 0)
+    fh:SetText("|cffffff99Friends|r") ; nitFriendsHeaderFs = fh
+
+    local frRefreshBtn = CreateFrame("Button", nil, friendsContent)
+    frRefreshBtn:SetSize(36, 14) ; frRefreshBtn:SetPoint("TOPRIGHT", friendsContent, "TOPRIGHT", 0, 0)
+    local frRBg = frRefreshBtn:CreateTexture(nil, "BACKGROUND")
+    frRBg:SetAllPoints() ; frRBg:SetColorTexture(0.10, 0.20, 0.35, 0.85)
+    local frRHl = frRefreshBtn:CreateTexture(nil, "HIGHLIGHT")
+    frRHl:SetAllPoints() ; frRHl:SetColorTexture(0.25, 0.50, 0.80, 0.40)
+    local frRTx = frRefreshBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    frRTx:SetFont(frRTx:GetFont(), 8, "OUTLINE")
+    frRTx:SetAllPoints() ; frRTx:SetJustifyH("CENTER") ; frRTx:SetText("|cffaaddffRefresh|r")
+    frRefreshBtn:SetScript("OnClick", function()
+        if C_FriendList and C_FriendList.ShowFriends then C_FriendList.ShowFriends()
+        elseif ShowFriends then ShowFriends() end
+        SC_RefreshNITFriends()
+    end)
+
+    for i = 1, MAX_NIT_LOCK_ROWS do
+        local yOff = -(18 + (i-1)*18)
+        local row = CreateFrame("Button", nil, friendsContent)
+        row:SetSize(W, 17)
+        row:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, yOff)
+        row:RegisterForClicks("LeftButtonUp")
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row) ; bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
+        row.bg = bg
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
+        local dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        dot:SetFont(dot:GetFont(), 10, "OUTLINE")
+        dot:SetPoint("LEFT", row, "LEFT", 2, 0) ; dot:SetWidth(10) ; dot:SetJustifyH("CENTER")
+        row.dot = dot
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 14, 0) ; nm:SetJustifyH("LEFT") ; nm:SetWidth(130)
+        row.nm = nm
+        local lv = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lv:SetFont(lv:GetFont(), 8, "")
+        lv:SetPoint("LEFT", row, "LEFT", 146, 0) ; lv:SetJustifyH("LEFT") ; lv:SetWidth(28)
+        row.lv = lv
+        local ar = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ar:SetFont(ar:GetFont(), 8, "")
+        ar:SetPoint("RIGHT", row, "RIGHT", -2, 0) ; ar:SetJustifyH("RIGHT") ; ar:SetWidth(W - 14 - 130 - 28 - 6)
+        row.ar = ar
+        row:SetScript("OnEnter", function(self)
+            if self._name then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT") ; GameTooltip:SetText(self._name, 1, 1, 1)
+                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5) ; GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:Hide() ; nitFriendsRows[i] = row
+    end
+end
+
+-- ============================================================
+-- SC_BroadcastLockouts: send all alts' lockouts to chat
+-- ============================================================
+function SC_BroadcastLockouts()
+    local now = time()
+    local chars = {}  -- [{name, locks=[{name,diff,reset}]}]
+
+    local hasNIT = NIT and NIT.db and NIT.db.global
+    if hasNIT then
+        local realm = GetRealmName and GetRealmName() or ""
+        local myChars = NIT.db.global[realm] and NIT.db.global[realm].myChars
+        if myChars then
+            local me = UnitName("player") or ""
+            local names = {}
+            for cn in pairs(myChars) do names[#names+1] = cn end
+            table.sort(names, function(a,b)
+                if a == me then return true end
+                if b == me then return false end
+                return a < b
+            end)
+            for _, cn in ipairs(names) do
+                local saved = myChars[cn] and myChars[cn].savedInstances
+                if saved and next(saved) then
+                    local locks = {}
+                    for _, inst in pairs(saved) do locks[#locks+1] = inst end
+                    table.sort(locks, function(a,b) return (a.resetTime or 0) < (b.resetTime or 0) end)
+                    chars[#chars+1] = {name=cn, locks=locks}
+                end
+            end
+        end
+    end
+
+    if #chars == 0 then
+        local numSaved = GetNumSavedInstances and GetNumSavedInstances() or 0
+        if numSaved > 0 then
+            local me = UnitName("player") or "?"
+            local locks = {}
+            for i = 1, numSaved do
+                local n, _, reset, _, _, _, _, _, _, diffName = GetSavedInstanceInfo(i)
+                if n then locks[#locks+1] = {name=n, difficultyName=diffName, resetTime=reset} end
+            end
+            chars[#chars+1] = {name=me, locks=locks}
+        end
+    end
+
+    if #chars == 0 then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyChar]|r No lockouts to broadcast.")
+        return
+    end
+
+    local channel = "SAY"
+    if IsInRaid and IsInRaid() then channel = "RAID"
+    elseif IsInGroup and IsInGroup() then channel = "PARTY" end
+
+    local function FmtTime(secs)
+        if secs <= 0 then return "exp" end
+        local d = math.floor(secs / 86400)
+        local h = math.floor((secs % 86400) / 3600)
+        local m = math.floor((secs % 3600) / 60)
+        if d > 0 then return d.."d"..h.."h" end
+        if h > 0 then return h.."h"..m.."m" end
+        return m.."m"
+    end
+
+    for _, e in ipairs(chars) do
+        local parts = {}
+        for _, inst in ipairs(e.locks) do
+            local diff = inst.difficultyName or ""
+            local tr   = FmtTime((inst.resetTime or 0) - now)
+            parts[#parts+1] = inst.name .. (diff ~= "" and " ["..diff.."]" or "") .. " "..tr
+        end
+        local msg = "["..e.name.."] " .. table.concat(parts, " | ")
+        if #msg > 250 then msg = msg:sub(1, 247) .. "..." end
+        SendChatMessage(msg, channel)
+    end
 end
 
 local function FormatNITTime(secs)
@@ -3229,24 +3312,14 @@ function SC_RefreshNIT()
             btn.tx:SetTextColor(0.40, 0.40, 0.50)
         end
     end
-    StyleSub(nitSubLockBtn,    nitSubTab == "locks")
-    StyleSub(nitSubGuildBtn,   nitSubTab == "guild")
-    StyleSub(nitSubFriendsBtn, nitSubTab == "friends")
-    StyleSub(nitSubLayerBtn,   nitSubTab == "layer")
+    StyleSub(nitSubLockBtn,  nitSubTab == "locks")
+    StyleSub(nitSubLayerBtn, nitSubTab == "layer")
 
     -- Show / hide content panels
-    if nitLockContent    then nitLockContent:SetShown(nitSubTab == "locks") end
-    if nitGuildContent   then nitGuildContent:SetShown(nitSubTab == "guild") end
-    if nitFriendsContent then nitFriendsContent:SetShown(nitSubTab == "friends") end
-    if nitLayerContent   then nitLayerContent:SetShown(nitSubTab == "layer") end
+    if nitLockContent  then nitLockContent:SetShown(nitSubTab == "locks") end
+    if nitLayerContent then nitLayerContent:SetShown(nitSubTab == "layer") end
 
-    if nitSubTab == "guild" then
-        SC_RefreshNITGuild()
-        return
-    elseif nitSubTab == "friends" then
-        SC_RefreshNITFriends()
-        return
-    elseif nitSubTab == "layer" then
+    if nitSubTab == "layer" then
         SC_UpdateNITLayer("target")
         return
     end
@@ -3362,14 +3435,39 @@ function SC_RefreshNIT()
 end
 
 -- ============================================================
+-- Social wing refresh (Friends + Guild)
+-- ============================================================
+function SC_RefreshSocial()
+    local function StyleSub(btn, active)
+        if not btn then return end
+        if active then
+            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1)
+            btn.tx:SetTextColor(0.75, 0.88, 1.00)
+        else
+            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1)
+            btn.tx:SetTextColor(0.40, 0.40, 0.50)
+        end
+    end
+    StyleSub(nitSubGuildBtn,   socialSubTab == "guild")
+    StyleSub(nitSubFriendsBtn, socialSubTab == "friends")
+    if nitGuildContent   then nitGuildContent:SetShown(socialSubTab == "guild")   end
+    if nitFriendsContent then nitFriendsContent:SetShown(socialSubTab == "friends") end
+    if socialSubTab == "guild"   then SC_RefreshNITGuild()   end
+    if socialSubTab == "friends" then SC_RefreshNITFriends() end
+end
+
+-- ============================================================
 -- Tab switching + master refresh
 -- ============================================================
 function SC_SwitchTab(name)
     -- remap removed top-level keys to their new parents
     if name == "bars" then name = "sets" end
     if name == "rep" or name == "skills" then name = "misc" end
-    -- social is no longer a tab — open the wing panel instead and redirect
-    if name == "nit" or name == "social" then
+    -- social/nit are wings, not tabs — open the wing panel and redirect
+    if name == "nit" then
+        SC_ToggleWing("nit")
+        name = "stats"
+    elseif name == "social" then
         SC_ToggleWing("social")
         name = "stats"
     end
@@ -3481,9 +3579,10 @@ function SC_RefreshAll()
     elseif tab == "misc"   then SC_RefreshMisc()
     elseif tab == "suite"  then SC_RefreshSuite()
     end
-    -- Refresh social wing if it is currently open
-    if wingFrame and wingFrame:IsShown() and activeWingKey == "social" then
-        SC_RefreshNIT()
+    -- Refresh whichever wing is currently open
+    if wingFrame and wingFrame:IsShown() then
+        if activeWingKey == "nit"    then SC_RefreshNIT()    end
+        if activeWingKey == "social" then SC_RefreshSocial() end
     end
 end
 
@@ -3626,11 +3725,12 @@ function SC_ToggleWing(key)
     for k, p in pairs(wingPanes) do
         if k == key then p:Show() else p:Hide() end
     end
-    local WING_TITLES = { social="NIT / Social", spells="Spellbook", talents="Talents" }
+    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents" }
     if wingTitleTx then wingTitleTx:SetText(WING_TITLES[key] or key) end
     wingFrame:Show()
-    if key == "spells"  then SC_RefreshSpells() end
-    if key == "social"  then SC_RefreshNIT()    end
+    if key == "spells"  then SC_RefreshSpells()  end
+    if key == "social"  then SC_RefreshSocial()  end
+    if key == "nit"     then SC_RefreshNIT()     end
 end
 
 
@@ -3752,7 +3852,26 @@ local function BuildWingFrame(mainFrame)
         spellRows[i] = {frame=row, lbl=lbl, rank=rank, spellIdx=nil}
     end
 
-    -- ---- Social (NIT) Pane ----
+    -- ---- NIT Pane (Lockouts + Layer) ----
+    local nitPane = CreateFrame("Frame", nil, f)
+    nitPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    nitPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    nitPane:Hide()
+    ThemeFill(nitPane, "sideBg", 0.04, 0.04, 0.07, 1)
+    wingPanes["nit"] = nitPane
+
+    local nitCont = CreateFrame("Frame", nil, nitPane)
+    nitCont:SetPoint("TOPLEFT", nitPane, "TOPLEFT", PAD, -4)
+    nitCont:SetSize(WING_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)
+    BuildNitRows(nitCont, WING_W - PAD*2)
+
+    nitPane:EnableMouseWheel(true)
+    nitPane:SetScript("OnMouseWheel", function(self, delta)
+        nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
+        SC_RefreshNIT()
+    end)
+
+    -- ---- Social Pane (Friends + Guild) ----
     local socialPane = CreateFrame("Frame", nil, f)
     socialPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
     socialPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
@@ -3760,16 +3879,10 @@ local function BuildWingFrame(mainFrame)
     ThemeFill(socialPane, "sideBg", 0.04, 0.04, 0.07, 1)
     wingPanes["social"] = socialPane
 
-    local nitCont = CreateFrame("Frame", nil, socialPane)
-    nitCont:SetPoint("TOPLEFT", socialPane, "TOPLEFT", PAD, -4)
-    nitCont:SetSize(WING_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)
-    BuildNitRows(nitCont, WING_W - PAD*2)
-
-    socialPane:EnableMouseWheel(true)
-    socialPane:SetScript("OnMouseWheel", function(self, delta)
-        nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
-        SC_RefreshNIT()
-    end)
+    local socialCont = CreateFrame("Frame", nil, socialPane)
+    socialCont:SetPoint("TOPLEFT", socialPane, "TOPLEFT", PAD, -4)
+    socialCont:SetSize(WING_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)
+    BuildSocialRows(socialCont, WING_W - PAD*2)
 
     -- Wing footer stripe
     local wingFoot = CreateFrame("Frame", nil, f)
@@ -4377,9 +4490,13 @@ function SC_BuildMain()
                   else wp:Show() end
               end
           end },
-        { tip="Social / NIT", desc="Instance lockouts, Guild, Friends, Layer", lbl="NIT", r=0.30, g=0.80, b=1.00,
+        { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.40, g=0.90, b=0.60,
           fn=function()
               SC_ToggleWing("social")
+          end },
+        { tip="Lockouts & Layer", desc="Alt instance lockouts, layer detection", lbl="NIT", r=0.30, g=0.80, b=1.00,
+          fn=function()
+              SC_ToggleWing("nit")
           end },
     }
 
