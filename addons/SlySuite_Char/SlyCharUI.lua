@@ -4447,10 +4447,6 @@ function SC_BuildMain()
           fn=function()
               SC_OpenPanel("Blizzard_MapCanvas", "WorldMapFrame", ToggleWorldMap)
           end },
-        { tip="Friends",   desc="Open Friends / Social",      lbl="Fr",  r=0.25, g=0.70, b=1.00,
-          fn=function()
-              SC_OpenPanel("Blizzard_SocialUI", "FriendsFrame", ToggleFriendsFrame)
-          end },
         { tip="Bag",       desc="Open bag window",               lbl="B",   r=0.85, g=0.65, b=0.20,
           fn=function()
               if SlyBagFrame then
