@@ -123,6 +123,8 @@ local EQUIP_SLOT_IDS = {
 }
 -- SpellIsTargetingUnit was added after TBC; guard against it not existing.
 local _hasSpellIsTargetingUnit = type(SpellIsTargetingUnit) == "function"
+-- Only Hunters use the ammo slot; hide it for all other classes.
+local _classUsesAmmo = (select(2, UnitClass("player"))) == "HUNTER"
 
 -- ---- Widget refs (module-level) ----
 local slotWidgets   = {}
@@ -4058,8 +4060,10 @@ function SC_BuildMain()
             COL_R, SLOT_TOP - (i-1)*(SLOT_S+SLOT_GAP))
     end
     for i, s in ipairs(WEAPON_SLOTS) do
-        BuildSlot(charBody, s.id, s.label,
-            WPN_START + (i-1)*(SLOT_S+WPN_GAP), WPN_Y)
+        if s.id ~= 0 or _classUsesAmmo then
+            BuildSlot(charBody, s.id, s.label,
+                WPN_START + (i-1)*(SLOT_S+WPN_GAP), WPN_Y)
+        end
     end
 
     -- Player model
