@@ -218,7 +218,8 @@ local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, bisContent=nil, subGearBtn=nil, subBarsBtn=nil, subBisBtn=nil }
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
-local miscUI = { subTab="rep", repContent=nil, skillContent=nil, subRepBtn=nil, subSkillBtn=nil }
+local miscUI = { subTab="rep", repContent=nil, skillContent=nil, honorContent=nil,
+                 subRepBtn=nil, subSkillBtn=nil, subHonorBtn=nil }
 local MAX_BAR_ROWS        = 14   -- visible action bar profile rows
 local barRowWidgets       = {}
 local barsScrollOffset    = 0
@@ -2688,6 +2689,80 @@ function SC_RefreshSkills()
     end
 end
 
+function SC_RefreshHonor()
+    if not miscUI.honorContent then return end
+    if not miscUI.honorContent:IsShown() then return end
+    local rows = miscUI._honorRows
+    if not rows then return end
+
+    local rank = 0
+    if UnitPVPRank then rank = UnitPVPRank("player") or 0 end
+    local rankName = "Unranked"
+    if rank > 0 and GetPVPRankInfo then
+        local rn = GetPVPRankInfo(rank)
+        if rn then rankName = rn .. " (" .. rank .. ")" end
+    end
+
+    local honorCurr, honorMax = 0, 75000
+    if GetHonorCurrency then
+        local c, m = GetHonorCurrency()
+        honorCurr = c or 0 ; honorMax = m or 75000
+    end
+    local arenaPts = 0
+    if GetArenaCurrency then arenaPts = GetArenaCurrency() or 0 end
+
+    local twHK, twContrib = 0, 0
+    if GetPVPThisWeekStats then
+        local a, b = GetPVPThisWeekStats()
+        twHK = a or 0 ; twContrib = b or 0
+    end
+    local yHK, yContrib = 0, 0
+    if GetPVPYesterdayStats then
+        local a, b = GetPVPYesterdayStats()
+        yHK = a or 0 ; yContrib = b or 0
+    end
+    local lfHK, lfDK = 0, 0
+    if GetPVPLifetimeStats then
+        local a, b = GetPVPLifetimeStats()
+        lfHK = a or 0 ; lfDK = b or 0
+    end
+
+    local data = {
+        { lbl="Rank",              val=rankName },
+        { lbl="Honor",             val=honorCurr.." / "..honorMax },
+        { lbl="Arena Points",      val=tostring(arenaPts) },
+        { sep=true },
+        { lbl="Week HKs",          val=tostring(twHK) },
+        { lbl="Week Contribution", val=tostring(twContrib) },
+        { lbl="Yesterday HKs",     val=tostring(yHK) },
+        { lbl="Yesterday Contrib", val=tostring(yContrib) },
+        { sep=true },
+        { lbl="Lifetime HKs",      val=tostring(lfHK) },
+        { lbl="Lifetime DKs",      val=tostring(lfDK) },
+    }
+
+    for i = 1, #rows do
+        local row = rows[i]
+        local d   = data[i]
+        if d then
+            if d.sep then
+                row.lbl:SetText("")
+                row.val:SetText("")
+                row.bg:SetColorTexture(0.12, 0.12, 0.20, 0.8)
+                row:SetHeight(4)
+            else
+                row:SetHeight(14)
+                row.lbl:SetText("|cff8899bb" .. d.lbl .. "|r")
+                row.val:SetText("|cffdddddd" .. d.val .. "|r")
+                row.bg:SetColorTexture(0, 0, 0, (i % 2 == 0) and 0.10 or 0)
+            end
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+end
+
 function SC_SetMiscSubTab(key)
     miscUI.subTab = key
 end
@@ -2705,12 +2780,16 @@ function SC_RefreshMisc()
     end
     StyleMiscSub(miscUI.subRepBtn,   miscUI.subTab == "rep")
     StyleMiscSub(miscUI.subSkillBtn, miscUI.subTab == "skills")
-    if miscUI.repContent   then miscUI.repContent:SetShown(miscUI.subTab == "rep") end
+    StyleMiscSub(miscUI.subHonorBtn, miscUI.subTab == "honor")
+    if miscUI.repContent   then miscUI.repContent:SetShown(  miscUI.subTab == "rep")    end
     if miscUI.skillContent then miscUI.skillContent:SetShown(miscUI.subTab == "skills") end
+    if miscUI.honorContent then miscUI.honorContent:SetShown(miscUI.subTab == "honor")  end
     if miscUI.subTab == "rep" then
         SC_RefreshReputation()
     elseif miscUI.subTab == "skills" then
         SC_RefreshSkills()
+    elseif miscUI.subTab == "honor" then
+        SC_RefreshHonor()
     end
 end
 
@@ -4546,7 +4625,7 @@ function SC_BuildMain()
 
     -- Sub-tab strip (Rep | Skills) — identical pattern to NIT
     local mW = SIDE_W
-    local mBW = math.floor(mW / 2)
+    local mBW = math.floor(mW / 3)
 
     local function MakeMiscSubBtn(label, x)
         local btn = CreateFrame("Button", nil, miscTab)
@@ -4564,6 +4643,7 @@ function SC_BuildMain()
     end
     miscUI.subRepBtn   = MakeMiscSubBtn("Reputation", 0)
     miscUI.subSkillBtn = MakeMiscSubBtn("Skills",     mBW)
+    miscUI.subHonorBtn = MakeMiscSubBtn("Honor",      mBW * 2)
 
     local miscSep = miscTab:CreateTexture(nil, "ARTWORK")
     miscSep:SetSize(mW, 1)
@@ -4600,11 +4680,48 @@ function SC_BuildMain()
     skillScroll:SetScrollChild(skillCont)
     BuildSkillRows(skillCont)
 
+    -- Honor content
+    local honorContent = CreateFrame("Frame", nil, miscTab)
+    honorContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
+    honorContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
+    honorContent:SetHeight(tcH - 17)
+    honorContent:Hide()  -- start hidden; shown only when honor sub-tab is active
+    miscUI.honorContent = honorContent
+
+    local honorRows = {}
+    for i = 1, 11 do
+        local row = CreateFrame("Frame", nil, honorContent)
+        row:SetPoint("TOPLEFT",  honorContent, "TOPLEFT",  PAD,  -((i-1)*14 + 4))
+        row:SetPoint("TOPRIGHT", honorContent, "TOPRIGHT", -PAD, -((i-1)*14 + 4))
+        row:SetHeight(14)
+        row:Hide()
+        local rbg = row:CreateTexture(nil, "BACKGROUND")
+        rbg:SetAllPoints() ; rbg:SetColorTexture(0, 0, 0, 0)
+        row.bg = rbg
+        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetFont(lbl:GetFont(), 9, "")
+        lbl:SetPoint("LEFT", row, "LEFT", 0, 0)
+        lbl:SetWidth((SIDE_W - PAD*2) * 0.52)
+        lbl:SetJustifyH("LEFT")
+        row.lbl = lbl
+        local val = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        val:SetFont(val:GetFont(), 9, "")
+        val:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        val:SetWidth((SIDE_W - PAD*2) * 0.46)
+        val:SetJustifyH("RIGHT")
+        row.val = val
+        honorRows[i] = row
+    end
+    miscUI._honorRows = honorRows
+
     miscUI.subRepBtn:SetScript("OnClick", function()
         miscUI.subTab = "rep" ; SC_RefreshMisc()
     end)
     miscUI.subSkillBtn:SetScript("OnClick", function()
         miscUI.subTab = "skills" ; SC_RefreshMisc()
+    end)
+    miscUI.subHonorBtn:SetScript("OnClick", function()
+        miscUI.subTab = "honor" ; SC_RefreshMisc()
     end)
 
     -- NIT tab is now a wing flyout; no side-panel tab for social.
