@@ -10,4 +10,5 @@
 
 
 SlyChar.lua
+SlyCharMacros.lua
 SlyCharUI.lua

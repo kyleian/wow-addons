@@ -258,6 +258,14 @@ local socialUI = {               -- Friends / Guild social tab
     scrollOffset    = 0,
 }
 
+-- Macro wing state
+local macroRows       = {}
+local macroScrollOff  = 0
+local macroSpecFilter = "All"
+local MAX_MACRO_ROWS  = 17
+local macroSpecBtns   = {}
+local macroScrollLabel = nil
+
 -- ============================================================
 -- Themes
 -- ============================================================
@@ -3091,6 +3099,165 @@ function SC_BroadcastLockouts()
     end
 end
 
+-- ============================================================
+-- Macro wing — build and refresh
+-- ============================================================
+local function TryCreateMacro(m)
+    local idx = GetMacroIndexByName(m.name)
+    if idx and idx > 0 then
+        EditMacro(idx, m.name, m.icon, m.body)
+        print("|cff00ccff[SlyChar]|r Updated macro: |cffaadd88" .. m.name .. "|r")
+    else
+        local ok, err = pcall(CreateMacro, m.name, m.icon, m.body)
+        if ok then
+            print("|cff00ccff[SlyChar]|r Created macro: |cffaadd88" .. m.name .. "|r")
+        else
+            print("|cff00ccff[SlyChar]|r Macro slots full or error — |cffff8844" .. tostring(err) .. "|r")
+        end
+    end
+end
+
+local function BuildMacroWing(parent, W)
+    local SPECS = { "All", "Arms", "Fury", "Tank", "PvP" }
+    local tabW  = math.floor(W / #SPECS)
+
+    -- Spec filter strip
+    local specStrip = CreateFrame("Frame", nil, parent)
+    specStrip:SetSize(W, 18)
+    specStrip:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+    FillBg(specStrip, 0.05, 0.05, 0.09, 1)
+
+    for i, spec in ipairs(SPECS) do
+        local btn = CreateFrame("Button", nil, specStrip)
+        btn:SetSize(tabW, 18)
+        btn:SetPoint("TOPLEFT", specStrip, "TOPLEFT", (i-1)*tabW, 0)
+        local bg = btn:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(btn) ; bg:SetColorTexture(0.05, 0.05, 0.09, 1)
+        btn.bg = bg
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(btn) ; hl:SetColorTexture(1, 1, 1, 0.07)
+        local tx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tx:SetFont(tx:GetFont(), 9, "OUTLINE") ; tx:SetAllPoints(btn)
+        tx:SetJustifyH("CENTER") ; tx:SetText(spec) ; tx:SetTextColor(0.50, 0.50, 0.60)
+        btn.tx = tx
+        btn:SetScript("OnClick", function()
+            macroSpecFilter = spec ; macroScrollOff = 0 ; SC_RefreshMacros()
+        end)
+        macroSpecBtns[spec] = btn
+    end
+
+    -- Macro rows
+    local ROW_H     = 17
+    local CREATE_W  = 46
+    local rowsFrame = CreateFrame("Frame", nil, parent)
+    rowsFrame:SetSize(W, MAX_MACRO_ROWS * (ROW_H + 1))
+    rowsFrame:SetPoint("TOPLEFT", specStrip, "BOTTOMLEFT", 0, -2)
+
+    for i = 1, MAX_MACRO_ROWS do
+        local row = CreateFrame("Button", nil, rowsFrame)
+        row:SetSize(W, ROW_H)
+        row:SetPoint("TOPLEFT", rowsFrame, "TOPLEFT", 0, -(i-1)*(ROW_H+1))
+        row:RegisterForClicks("LeftButtonUp")
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row) ; bg:SetColorTexture(0, 0, 0, i%2==0 and 0.12 or 0)
+        row.bg = bg
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
+        -- Spec badge
+        local sp = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        sp:SetFont(sp:GetFont(), 7, "OUTLINE")
+        sp:SetPoint("LEFT", row, "LEFT", 2, 0) ; sp:SetWidth(28) ; sp:SetJustifyH("LEFT")
+        row.spec = sp
+        -- Name
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 32, 0)
+        nm:SetWidth(W - 32 - CREATE_W - 6) ; nm:SetJustifyH("LEFT")
+        row.nm = nm
+        -- Create button
+        local cb = CreateFrame("Button", nil, row)
+        cb:SetSize(CREATE_W, ROW_H - 2) ; cb:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        cb:EnableMouse(true)
+        local cbbg = cb:CreateTexture(nil, "BACKGROUND")
+        cbbg:SetAllPoints(cb) ; cbbg:SetColorTexture(0.08, 0.22, 0.08, 0.90)
+        local cbhl = cb:CreateTexture(nil, "HIGHLIGHT")
+        cbhl:SetAllPoints(cb) ; cbhl:SetColorTexture(0.25, 0.60, 0.25, 0.40)
+        local cbtx = cb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        cbtx:SetFont(cbtx:GetFont(), 8, "OUTLINE") ; cbtx:SetAllPoints(cb)
+        cbtx:SetJustifyH("CENTER") ; cbtx:SetText("|cff88ff88Create|r")
+        row.createBtn = cb
+        row:Hide()
+        macroRows[i] = row
+    end
+
+    -- Scroll info
+    local siTx = rowsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    siTx:SetFont(siTx:GetFont(), 8, "")
+    siTx:SetPoint("TOPLEFT", rowsFrame, "BOTTOMLEFT", 0, -2)
+    siTx:SetWidth(W) ; siTx:SetJustifyH("CENTER") ; siTx:SetTextColor(0.45, 0.45, 0.55)
+    macroScrollLabel = siTx
+end
+
+function SC_RefreshMacros()
+    local SPEC_COLORS = {
+        Arms="|cffffaa44", Fury="|cffff6644", Tank="|cff4488ff", PvP="|cffdd44ff",
+    }
+    -- Style spec filter tabs
+    for spec, btn in pairs(macroSpecBtns) do
+        local active = (macroSpecFilter == spec)
+        if active then
+            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1) ; btn.tx:SetTextColor(0.75, 0.88, 1.00)
+        else
+            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1) ; btn.tx:SetTextColor(0.40, 0.40, 0.50)
+        end
+    end
+    -- Filter macro list
+    local filtered = {}
+    for _, m in ipairs(SLYCHAR_WARRIOR_MACROS or {}) do
+        if macroSpecFilter == "All" or m.spec == macroSpecFilter then
+            filtered[#filtered+1] = m
+        end
+    end
+    local total = #filtered
+    macroScrollOff = math.max(0, math.min(macroScrollOff, math.max(0, total - MAX_MACRO_ROWS)))
+    -- Populate rows
+    for i = 1, MAX_MACRO_ROWS do
+        local row = macroRows[i]
+        if not row then break end
+        local m = filtered[macroScrollOff + i]
+        if not m then row:Hide() else
+            row:Show()
+            local scol = SPEC_COLORS[m.spec] or "|cffaaaaaa"
+            row.spec:SetText(scol .. m.spec:sub(1, 4) .. "|r")
+            row.nm:SetText("|cffdddddd" .. m.name .. "|r")
+            local macro = m
+            row.createBtn:SetScript("OnClick", function() TryCreateMacro(macro) end)
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(macro.name, 1, 0.85, 0.30)
+                GameTooltip:AddLine(macro.tip, 0.80, 0.80, 0.80, true)
+                GameTooltip:AddLine(" ", 1, 1, 1)
+                for line in (macro.body or ""):gmatch("[^\n]+") do
+                    GameTooltip:AddLine("  " .. line, 0.55, 0.90, 0.55)
+                end
+                GameTooltip:AddLine(" ", 1, 1, 1)
+                GameTooltip:AddLine("|cff888888[Create] adds it to your macro book|r", 0.5, 0.5, 0.5)
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            row.bg:SetColorTexture(0, 0, 0, i%2==0 and 0.12 or 0)
+        end
+    end
+    if macroScrollLabel then
+        if total > MAX_MACRO_ROWS then
+            macroScrollLabel:SetText(string.format("%d\xe2\x80\x93%d / %d  \xe2\x87\x95",
+                macroScrollOff+1, math.min(macroScrollOff+MAX_MACRO_ROWS, total), total))
+        else
+            macroScrollLabel:SetText(total .. " macros")
+        end
+    end
+end
+
 local function FormatNITTime(secs)
     if secs <= 0 then return "|cffff4444Expired|r" end
     local d = math.floor(secs / 86400)
@@ -3587,6 +3754,7 @@ function SC_RefreshAll()
     if wingFrame and wingFrame:IsShown() then
         if activeWingKey == "nit"    then SC_RefreshNIT()    end
         if activeWingKey == "social" then SC_RefreshSocial() end
+        if activeWingKey == "macros" then SC_RefreshMacros() end
     end
 end
 
@@ -3729,12 +3897,13 @@ function SC_ToggleWing(key)
     for k, p in pairs(wingPanes) do
         if k == key then p:Show() else p:Hide() end
     end
-    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents" }
+    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents", macros="Warrior Macros" }
     if wingTitleTx then wingTitleTx:SetText(WING_TITLES[key] or key) end
     wingFrame:Show()
     if key == "spells"  then SC_RefreshSpells()  end
     if key == "social"  then SC_RefreshSocial()  end
     if key == "nit"     then SC_RefreshNIT()     end
+    if key == "macros"  then SC_RefreshMacros()  end
 end
 
 
@@ -3887,6 +4056,25 @@ local function BuildWingFrame(mainFrame)
     socialCont:SetPoint("TOPLEFT", socialPane, "TOPLEFT", PAD, -4)
     socialCont:SetSize(WING_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)
     BuildSocialRows(socialCont, WING_W - PAD*2)
+
+    -- ---- Macros Pane (Warrior macro library) ----
+    local macroPaneF = CreateFrame("Frame", nil, f)
+    macroPaneF:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    macroPaneF:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    macroPaneF:Hide()
+    ThemeFill(macroPaneF, "sideBg", 0.04, 0.04, 0.07, 1)
+    wingPanes["macros"] = macroPaneF
+
+    local macroCont = CreateFrame("Frame", nil, macroPaneF)
+    macroCont:SetPoint("TOPLEFT", macroPaneF, "TOPLEFT", PAD, -4)
+    macroCont:SetSize(WING_W - PAD*2, 18 + MAX_MACRO_ROWS * 18 + 14)
+    BuildMacroWing(macroCont, WING_W - PAD*2)
+
+    macroPaneF:EnableMouseWheel(true)
+    macroPaneF:SetScript("OnMouseWheel", function(self, delta)
+        macroScrollOff = math.max(0, macroScrollOff - delta)
+        SC_RefreshMacros()
+    end)
 
     -- Wing footer stripe
     local wingFoot = CreateFrame("Frame", nil, f)
@@ -4491,6 +4679,10 @@ function SC_BuildMain()
                   if wp:IsShown() then wp:Hide()
                   else wp:Show() end
               end
+          end },
+        { tip="Warrior Macros", desc="TBC Warrior macro library (Arms/Fury/Tank/PvP)", lbl="Mc", r=0.95, g=0.70, b=0.20,
+          fn=function()
+              SC_ToggleWing("macros")
           end },
         { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.40, g=0.90, b=0.60,
           fn=function()
