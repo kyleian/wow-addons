@@ -135,6 +135,13 @@ function SI:ScanLink(itemLink)
         if right and right:GetText() then texts[#texts+1] = right:GetText() end
 
         for _, text in ipairs(texts) do
+            -- Strip WoW color/texture/hyperlink escapes so patterns match plain text.
+            -- |cXXXXXXXX = open color (8 hex digits), |r = close color,
+            -- |T...|t = inline texture, |H...|h...|h = hyperlink.
+            text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+                       :gsub("|r", "")
+                       :gsub("|T[^|]*|t", "")
+                       :gsub("|H[^|]*|h([^|]*)|h", "%1")
             for _, pat in ipairs(PATTERNS) do
                 local key, regex = pat[1], pat[2]
                 local val = text:match(regex)
@@ -150,7 +157,10 @@ function SI:ScanLink(itemLink)
     local iLvlLine = _G["SlyItemizerScanTipTextLeft2"]
     if iLvlLine then
         local il = iLvlLine:GetText()
-        if il then stats.ilevel = tonumber(il:match("Item Level (%d+)")) end
+        if il then
+            il = il:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            stats.ilevel = tonumber(il:match("Item Level (%d+)"))
+        end
     end
 
     _scanCache[itemLink] = stats
