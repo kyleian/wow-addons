@@ -218,7 +218,11 @@ local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, bisContent=nil, subGearBtn=nil, subBarsBtn=nil, subBisBtn=nil }
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
-local miscUI = { subTab="rep", repContent=nil, skillContent=nil, subRepBtn=nil, subSkillBtn=nil }
+local miscUI = { subTab="rep", repContent=nil, skillContent=nil, honorContent=nil,
+                 subRepBtn=nil, subSkillBtn=nil, subHonorBtn=nil }
+local stripPage     = 1          -- 1 = core buttons, 2 = addon/wing buttons
+local stripBtnRefs  = {}         -- [i] = button frame, populated during UI build
+local stripPageBtn  = nil        -- the page-toggle button
 local MAX_BAR_ROWS        = 14   -- visible action bar profile rows
 local barRowWidgets       = {}
 local barsScrollOffset    = 0
@@ -2688,6 +2692,70 @@ function SC_RefreshSkills()
     end
 end
 
+-- ============================================================
+-- Honor / PvP sub-tab refresh
+-- ============================================================
+function SC_RefreshHonor()
+    if not (miscUI.honorContent and miscUI.honorContent:IsShown()) then return end
+    local rows = miscUI._honorRows
+    if not rows then return end
+
+    -- PvP rank
+    local rank     = (UnitPVPRank and UnitPVPRank("player")) or 0
+    local rankName = "Unranked"
+    if rank and rank > 0 then
+        local rn = GetPVPRankInfo and GetPVPRankInfo(rank)
+        rankName = (rn or ("Rank "..rank)).." ("..rank..")" 
+    end
+
+    -- Currency
+    local honorCurr, honorMax = 0, 75000
+    if GetHonorCurrency then honorCurr, honorMax = GetHonorCurrency() end
+    local arenaPts = (GetArenaCurrency and GetArenaCurrency()) or 0
+
+    -- Weekly / yesterday / lifetime stats
+    local twHK, twContrib = 0, 0
+    if GetPVPThisWeekStats  then twHK, twContrib = GetPVPThisWeekStats()  end
+    local yHK,  yContrib   = 0, 0
+    if GetPVPYesterdayStats then yHK,  yContrib  = GetPVPYesterdayStats() end
+    local lfHK, lfDK       = 0, 0
+    if GetPVPLifetimeStats  then lfHK, lfDK      = GetPVPLifetimeStats()  end
+
+    local data = {
+        { lbl = "Rank",              val = rankName },
+        { lbl = "Honor",             val = string.format("%d / %d", honorCurr, honorMax) },
+        { lbl = "Arena Points",      val = tostring(arenaPts) },
+        { sep = true },
+        { lbl = "Week HKs",          val = tostring(twHK) },
+        { lbl = "Week Contribution", val = tostring(twContrib) },
+        { lbl = "Yesterday HKs",     val = tostring(yHK) },
+        { lbl = "Yesterday Contrib", val = tostring(yContrib) },
+        { sep = true },
+        { lbl = "Lifetime HKs",      val = tostring(lfHK) },
+        { lbl = "Lifetime DKs",      val = tostring(lfDK) },
+    }
+
+    for i, row in ipairs(rows) do
+        local d = data[i]
+        if d then
+            if d.sep then
+                row.lbl:SetText("")
+                row.val:SetText("")
+                row.bg:SetColorTexture(0.12, 0.12, 0.20, 0.8)
+                row:SetHeight(4)
+            else
+                row:SetHeight(14)
+                row.lbl:SetText("|cff8899bb" .. d.lbl .. "|r")
+                row.val:SetText("|cffdddddd" .. (d.val or "") .. "|r")
+                row.bg:SetColorTexture(0, 0, 0, (i % 2 == 0) and 0.10 or 0)
+            end
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+end
+
 function SC_SetMiscSubTab(key)
     miscUI.subTab = key
 end
@@ -2705,12 +2773,16 @@ function SC_RefreshMisc()
     end
     StyleMiscSub(miscUI.subRepBtn,   miscUI.subTab == "rep")
     StyleMiscSub(miscUI.subSkillBtn, miscUI.subTab == "skills")
-    if miscUI.repContent   then miscUI.repContent:SetShown(miscUI.subTab == "rep") end
+    StyleMiscSub(miscUI.subHonorBtn, miscUI.subTab == "honor")
+    if miscUI.repContent   then miscUI.repContent:SetShown(miscUI.subTab == "rep")    end
     if miscUI.skillContent then miscUI.skillContent:SetShown(miscUI.subTab == "skills") end
+    if miscUI.honorContent then miscUI.honorContent:SetShown(miscUI.subTab == "honor") end
     if miscUI.subTab == "rep" then
         SC_RefreshReputation()
     elseif miscUI.subTab == "skills" then
         SC_RefreshSkills()
+    elseif miscUI.subTab == "honor" then
+        SC_RefreshHonor()
     end
 end
 
@@ -4537,16 +4609,16 @@ function SC_BuildMain()
         setsUI.subTab = "bis" ; SC_RefreshSetsSub()
     end)
 
-    -- Misc tab (Rep + Skills as sub-tabs)
+    -- Misc tab (Rep | Skills | Honor as sub-tabs)
     local miscTab = CreateFrame("Frame", nil, side)
     miscTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
     miscTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
     miscTab:SetHeight(tcH) ; miscTab:Hide()
     tabFrames["misc"] = miscTab
 
-    -- Sub-tab strip (Rep | Skills) — identical pattern to NIT
-    local mW = SIDE_W
-    local mBW = math.floor(mW / 2)
+    -- Sub-tab strip (Rep | Skills | Honor)
+    local mW  = SIDE_W
+    local mBW = math.floor(mW / 3)
 
     local function MakeMiscSubBtn(label, x)
         local btn = CreateFrame("Button", nil, miscTab)
@@ -4564,6 +4636,7 @@ function SC_BuildMain()
     end
     miscUI.subRepBtn   = MakeMiscSubBtn("Reputation", 0)
     miscUI.subSkillBtn = MakeMiscSubBtn("Skills",     mBW)
+    miscUI.subHonorBtn = MakeMiscSubBtn("Honor",      mBW * 2)
 
     local miscSep = miscTab:CreateTexture(nil, "ARTWORK")
     miscSep:SetSize(mW, 1)
@@ -4600,11 +4673,56 @@ function SC_BuildMain()
     skillScroll:SetScrollChild(skillCont)
     BuildSkillRows(skillCont)
 
+    -- Honor content (hidden at creation — miscTab starts on "rep")
+    do
+        local honorContent = CreateFrame("Frame", nil, miscTab)
+        honorContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
+        honorContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
+        honorContent:SetHeight(tcH - 17)
+        honorContent:Hide()  -- IMPORTANT: hide immediately so it doesn't block rep/skills
+        miscUI.honorContent = honorContent
+
+        local honorRows = {}
+        local rowH   = 14
+        local rowPad = PAD
+        for i = 1, 11 do
+            local row = CreateFrame("Frame", nil, honorContent)
+            row:SetPoint("TOPLEFT",  honorContent, "TOPLEFT",   rowPad,  -((i-1)*rowH + 4))
+            row:SetPoint("TOPRIGHT", honorContent, "TOPRIGHT", -rowPad,  -((i-1)*rowH + 4))
+            row:SetHeight(rowH)
+            row:Hide()
+
+            local rbg = row:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints() ; rbg:SetColorTexture(0, 0, 0, 0)
+            row.bg = rbg
+
+            local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            lbl:SetFont(lbl:GetFont(), 9, "")
+            lbl:SetPoint("LEFT",  row, "LEFT",  0, 0)
+            lbl:SetWidth((SIDE_W - rowPad*2) * 0.52)
+            lbl:SetJustifyH("LEFT")
+            row.lbl = lbl
+
+            local val = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            val:SetFont(val:GetFont(), 9, "")
+            val:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+            val:SetWidth((SIDE_W - rowPad*2) * 0.46)
+            val:SetJustifyH("RIGHT")
+            row.val = val
+
+            honorRows[i] = row
+        end
+        miscUI._honorRows = honorRows
+    end
+
     miscUI.subRepBtn:SetScript("OnClick", function()
         miscUI.subTab = "rep" ; SC_RefreshMisc()
     end)
     miscUI.subSkillBtn:SetScript("OnClick", function()
         miscUI.subTab = "skills" ; SC_RefreshMisc()
+    end)
+    miscUI.subHonorBtn:SetScript("OnClick", function()
+        miscUI.subTab = "honor" ; SC_RefreshMisc()
     end)
 
     -- NIT tab is now a wing flyout; no side-panel tab for social.
@@ -4695,11 +4813,32 @@ function SC_BuildMain()
     }
 
     local bSz = BTN_STRIP_W - 6  -- 26px buttons with 3px margin each side
+    local PAGE_SIZE = 5           -- buttons per page
+
+    -- helper: show/hide the correct page of buttons and update toggle btn label
+    local function UpdateStripPage()
+        for i, b in ipairs(stripBtnRefs) do
+            local onPage = math.ceil(i / PAGE_SIZE)
+            b:SetShown(onPage == stripPage)
+        end
+        if stripPageBtn then
+            if stripPage == 1 then
+                stripPageBtn.tx:SetText("pg2")
+                stripPageBtn.tx:SetTextColor(0.80, 0.65, 0.20)
+            else
+                stripPageBtn.tx:SetText("pg1")
+                stripPageBtn.tx:SetTextColor(0.40, 0.80, 1.00)
+            end
+        end
+    end
+
     for i, bd in ipairs(STRIP_BTNS) do
+        local slot = (i - 1) % PAGE_SIZE   -- visual slot within current page
         local b = CreateFrame("Button", nil, btnStrip)
         b:SetSize(bSz, bSz)
-        b:SetPoint("TOP", btnStrip, "TOP", 0, -4 - (i-1)*(bSz + 3))
+        b:SetPoint("TOP", btnStrip, "TOP", 0, -4 - slot*(bSz + 3))
         b:EnableMouse(true)
+        stripBtnRefs[i] = b
 
         -- border layer (1px colored outline via slightly-larger BACKGROUND texture)
         local bord = b:CreateTexture(nil, "BACKGROUND")
@@ -4731,6 +4870,59 @@ function SC_BuildMain()
         end)
         b:SetScript("OnClick", bd.fn)
     end
+
+    -- Page-toggle button — sits just below the 5 visible slots
+    do
+        local pBtnH = 12
+        local pBtnY = -(4 + PAGE_SIZE * (bSz + 3))
+        local bPg = CreateFrame("Button", nil, btnStrip)
+        bPg:SetSize(bSz, pBtnH)
+        bPg:SetPoint("TOP", btnStrip, "TOP", 0, pBtnY)
+        bPg:EnableMouse(true)
+        stripPageBtn = bPg
+
+        local pgBord = bPg:CreateTexture(nil, "BACKGROUND")
+        pgBord:SetAllPoints(bPg)
+        pgBord:SetColorTexture(0.35, 0.28, 0.08, 0.6)
+
+        local pgBg = bPg:CreateTexture(nil, "ARTWORK")
+        pgBg:SetPoint("TOPLEFT",     bPg, "TOPLEFT",      1, -1)
+        pgBg:SetPoint("BOTTOMRIGHT", bPg, "BOTTOMRIGHT", -1,  1)
+        pgBg:SetColorTexture(0.10, 0.08, 0.02, 1)
+        bPg.bg = pgBg
+
+        local pgTx = bPg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        pgTx:SetFont(pgTx:GetFont(), 8, "OUTLINE")
+        pgTx:SetPoint("CENTER", bPg, "CENTER", 0, 0)
+        pgTx:SetText("pg2")
+        pgTx:SetTextColor(0.80, 0.65, 0.20)
+        bPg.tx = pgTx
+
+        bPg:SetScript("OnEnter", function()
+            pgBg:SetColorTexture(0.25, 0.20, 0.05, 1)
+            GameTooltip:SetOwner(bPg, "ANCHOR_LEFT")
+            if stripPage == 1 then
+                GameTooltip:SetText("Page 2: Addon tools", 1, 1, 1)
+                GameTooltip:AddLine("SR  Wh  Mc  Fr  NIT", 0.7, 0.7, 0.7)
+            else
+                GameTooltip:SetText("Page 1: Core shortcuts", 1, 1, 1)
+                GameTooltip:AddLine("T  Sp  Q  M  B", 0.7, 0.7, 0.7)
+            end
+            GameTooltip:Show()
+        end)
+        bPg:SetScript("OnLeave", function()
+            pgBg:SetColorTexture(0.10, 0.08, 0.02, 1)
+            GameTooltip:Hide()
+        end)
+        bPg:SetScript("OnClick", function()
+            local numPages = math.ceil(#stripBtnRefs / PAGE_SIZE)
+            stripPage = (stripPage % numPages) + 1
+            UpdateStripPage()
+        end)
+    end
+
+    -- Initialise to page 1
+    UpdateStripPage()
 
     -- ── Suite flyout panel (right-hand side panel outside the character sheet) ───
     do
@@ -5018,7 +5210,7 @@ function SC_BuildMain()
     ftxt:SetFont(ftxt:GetFont(), 8, "")
     ftxt:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     ftxt:SetTextColor(0.3, 0.3, 0.38)
-    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·B·SR·Wh·NIT·×")
+    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip p1: T Sp Q M B  | pg2: SR Wh Mc Fr NIT")
 
     f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
     f:HookScript("OnHide", function(self)
