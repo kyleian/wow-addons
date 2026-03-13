@@ -1,10 +1,13 @@
 -- ============================================================
 -- SlyCharMacros.lua
--- Curated TBC Warrior macro library for the SlyChar Macros wing.
+-- Curated TBC class macro library for the SlyChar Macros wing.
+-- Keyed by UnitClassBase token: SLYCHAR_CLASS_MACROS["WARRIOR"], etc.
 -- Each entry: spec, name, icon (texture short-name), body, tip.
+-- Add a new class block below to support additional classes.
 -- ============================================================
 
-SLYCHAR_WARRIOR_MACROS = {
+SLYCHAR_CLASS_MACROS = SLYCHAR_CLASS_MACROS or {}
+SLYCHAR_CLASS_MACROS["WARRIOR"] = {
 
     -- ── Arms ─────────────────────────────────────────────────────────────────
     {

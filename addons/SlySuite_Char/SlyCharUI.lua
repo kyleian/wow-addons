@@ -267,6 +267,20 @@ local MAX_MACRO_ROWS  = 17
 local macroSpecBtns   = {}
 local macroScrollLabel = nil
 
+-- Spec filter tabs per class (keyed by UnitClassBase token)
+local CLASS_SPECS = {
+    WARRIOR     = { "All", "Arms",        "Fury",   "Tank",         "PvP" },
+    PALADIN     = { "All", "Holy",        "Prot",   "Ret",          "PvP" },
+    HUNTER      = { "All", "BM",          "MM",     "Survival",     "PvP" },
+    ROGUE       = { "All", "Assassination","Combat", "Subtlety",    "PvP" },
+    PRIEST      = { "All", "Discipline",  "Holy",   "Shadow",       "PvP" },
+    SHAMAN      = { "All", "Elemental",   "Enhance","Resto",        "PvP" },
+    MAGE        = { "All", "Arcane",      "Fire",   "Frost",        "PvP" },
+    WARLOCK     = { "All", "Affliction",  "Demo",   "Destruction",  "PvP" },
+    DRUID       = { "All", "Balance",     "Feral",  "Resto",        "PvP" },
+    DEATHKNIGHT = { "All", "Blood",       "Frost",  "Unholy",       "PvP" },
+}
+
 -- ============================================================
 -- Themes
 -- ============================================================
@@ -3192,7 +3206,8 @@ local function TryCreateMacro(m)
 end
 
 local function BuildMacroWing(parent, W)
-    local SPECS = { "All", "Arms", "Fury", "Tank", "PvP" }
+    local playerClass = select(2, UnitClass("player")) or "WARRIOR"
+    local SPECS = CLASS_SPECS[playerClass] or { "All" }
     local tabW  = math.floor(W / #SPECS)
 
     -- Spec filter strip
@@ -3286,8 +3301,10 @@ function SC_RefreshMacros()
         end
     end
     -- Filter macro list
+    local playerClass = select(2, UnitClass("player")) or "WARRIOR"
+    local macroList   = (SLYCHAR_CLASS_MACROS and SLYCHAR_CLASS_MACROS[playerClass]) or {}
     local filtered = {}
-    for _, m in ipairs(SLYCHAR_WARRIOR_MACROS or {}) do
+    for _, m in ipairs(macroList) do
         if macroSpecFilter == "All" or m.spec == macroSpecFilter then
             filtered[#filtered+1] = m
         end
@@ -3971,7 +3988,8 @@ function SC_ToggleWing(key)
     for k, p in pairs(wingPanes) do
         if k == key then p:Show() else p:Hide() end
     end
-    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents", macros="Warrior Macros" }
+    local macrosTitle = ((UnitClass and UnitClass("player")) or "Class") .. " Macros"
+    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents", macros=macrosTitle }
     if wingTitleTx then wingTitleTx:SetText(WING_TITLES[key] or key) end
     wingFrame:Show()
     if key == "spells"  then SC_RefreshSpells()  end
@@ -4792,7 +4810,7 @@ function SC_BuildMain()
                   else wp:Show() end
               end
           end },
-        { tip="Warrior Macros", desc="TBC Warrior macro library (Arms/Fury/Tank/PvP)", lbl="Mc", r=0.95, g=0.70, b=0.20,
+        { tip="Class Macros",   desc="Macro library for your class (by spec)",         lbl="Mc", r=0.95, g=0.70, b=0.20,
           fn=function()
               SC_ToggleWing("macros")
           end },
