@@ -4807,42 +4807,127 @@ function SC_BuildMain()
     }
 
     local bSz = BTN_STRIP_W - 6  -- 26px buttons with 3px margin each side
+
+    -- ── Strip flyout menu ──────────────────────────────────────────────────────
+    -- One >> button on the strip opens a popup menu; each row runs its action.
+    local FLYOUT_W   = 152
+    local FLYOUT_RH  = 24
+    local FLYOUT_PAD = 4
+
+    local flyoutMenu = CreateFrame("Frame", "SlyCharStripFlyout", UIParent)
+    flyoutMenu:SetSize(FLYOUT_W, #STRIP_BTNS * FLYOUT_RH + FLYOUT_PAD * 2)
+    flyoutMenu:SetFrameStrata("DIALOG")
+    flyoutMenu:SetFrameLevel(f:GetFrameLevel() + 10)
+    flyoutMenu:Hide()
+
+    local fmBg = flyoutMenu:CreateTexture(nil, "BACKGROUND")
+    fmBg:SetAllPoints() ; fmBg:SetColorTexture(0.04, 0.03, 0.08, 0.97)
+    if flyoutMenu.SetBackdrop then
+        flyoutMenu:SetBackdrop({
+            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile=true, tileSize=16, edgeSize=8,
+            insets={left=2, right=2, top=2, bottom=2},
+        })
+        flyoutMenu:SetBackdropColor(0.04, 0.03, 0.08, 0.97)
+        flyoutMenu:SetBackdropBorderColor(0.25, 0.20, 0.38, 1)
+    end
+
+    flyoutMenu:SetScript("OnShow", function()
+        flyoutMenu:ClearAllPoints()
+        flyoutMenu:SetPoint("TOPLEFT", f, "TOPRIGHT", 2, -HDR_H)
+    end)
+
+    tinsert(UISpecialFrames, "SlyCharStripFlyout")
+
+    local stripFlyoutBtn  -- forward ref
+    flyoutMenu:HookScript("OnHide", function()
+        if stripFlyoutBtn and stripFlyoutBtn._lbl then
+            stripFlyoutBtn._lbl:SetText(">>") end
+    end)
+
     for i, bd in ipairs(STRIP_BTNS) do
-        local b = CreateFrame("Button", nil, btnStrip)
-        b:SetSize(bSz, bSz)
-        b:SetPoint("TOP", btnStrip, "TOP", 0, -4 - (i-1)*(bSz + 3))
-        b:EnableMouse(true)
+        local row = CreateFrame("Button", nil, flyoutMenu)
+        row:SetSize(FLYOUT_W - 4, FLYOUT_RH - 2)
+        row:SetPoint("TOPLEFT", flyoutMenu, "TOPLEFT", 2,
+                     -(FLYOUT_PAD + (i-1)*FLYOUT_RH))
+        row:EnableMouse(true)
 
-        -- border layer (1px colored outline via slightly-larger BACKGROUND texture)
-        local bord = b:CreateTexture(nil, "BACKGROUND")
-        bord:SetAllPoints(b)
-        bord:SetColorTexture(bd.r*0.45, bd.g*0.45, bd.b*0.45, 0.7)
+        local rowBg = row:CreateTexture(nil, "BACKGROUND")
+        rowBg:SetAllPoints(row)
+        rowBg:SetColorTexture(bd.r*0.08, bd.g*0.08, bd.b*0.08, 1)
 
-        -- inner fill (ARTWORK inset 1px to reveal border)
-        local bbg = b:CreateTexture(nil, "ARTWORK")
-        bbg:SetPoint("TOPLEFT",     b, "TOPLEFT",      1, -1)
-        bbg:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -1,  1)
-        bbg:SetColorTexture(bd.r*0.12, bd.g*0.12, bd.b*0.12, 1)
+        local accent = row:CreateTexture(nil, "ARTWORK")
+        accent:SetSize(3, FLYOUT_RH - 2)
+        accent:SetPoint("LEFT", row, "LEFT", 0, 0)
+        accent:SetColorTexture(bd.r, bd.g, bd.b, 0.85)
 
-        local lbl = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lbl:SetFont(lbl:GetFont(), 8, "OUTLINE")
-        lbl:SetPoint("CENTER", b, "CENTER", 0, 0)
-        lbl:SetText(bd.lbl)
-        lbl:SetTextColor(bd.r, bd.g, bd.b)
+        local rlbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        rlbl:SetFont(rlbl:GetFont(), 9, "OUTLINE")
+        rlbl:SetPoint("LEFT", row, "LEFT", 8, 0)
+        rlbl:SetText(bd.tip)
+        rlbl:SetTextColor(
+            math.min(bd.r * 0.80 + 0.20, 1),
+            math.min(bd.g * 0.80 + 0.20, 1),
+            math.min(bd.b * 0.80 + 0.20, 1))
 
-        b:SetScript("OnEnter", function()
-            bbg:SetColorTexture(bd.r*0.30, bd.g*0.30, bd.b*0.30, 1)
-            GameTooltip:SetOwner(b, "ANCHOR_LEFT")
+        row:SetScript("OnEnter", function()
+            rowBg:SetColorTexture(bd.r*0.25, bd.g*0.25, bd.b*0.25, 1)
+            GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
             GameTooltip:SetText(bd.tip, 1, 1, 1)
             GameTooltip:AddLine(bd.desc, 0.7, 0.7, 0.7)
             GameTooltip:Show()
         end)
-        b:SetScript("OnLeave", function()
-            bbg:SetColorTexture(bd.r*0.12, bd.g*0.12, bd.b*0.12, 1)
+        row:SetScript("OnLeave", function()
+            rowBg:SetColorTexture(bd.r*0.08, bd.g*0.08, bd.b*0.08, 1)
             GameTooltip:Hide()
         end)
-        b:SetScript("OnClick", bd.fn)
+        row:SetScript("OnClick", function()
+            flyoutMenu:Hide()
+            bd.fn()
+        end)
     end
+
+    -- >> toggle button
+    stripFlyoutBtn = CreateFrame("Button", nil, btnStrip)
+    stripFlyoutBtn:SetSize(bSz, bSz)
+    stripFlyoutBtn:SetPoint("CENTER", btnStrip, "CENTER", 0, 12)
+    stripFlyoutBtn:EnableMouse(true)
+
+    local sfBord = stripFlyoutBtn:CreateTexture(nil, "BACKGROUND")
+    sfBord:SetAllPoints(stripFlyoutBtn)
+    sfBord:SetColorTexture(0.30*0.45, 0.25*0.45, 0.55*0.45, 0.7)
+
+    local sfBg = stripFlyoutBtn:CreateTexture(nil, "ARTWORK")
+    sfBg:SetPoint("TOPLEFT",     stripFlyoutBtn, "TOPLEFT",      1, -1)
+    sfBg:SetPoint("BOTTOMRIGHT", stripFlyoutBtn, "BOTTOMRIGHT", -1,  1)
+    sfBg:SetColorTexture(0.10, 0.08, 0.20, 1)
+
+    local sfLbl = stripFlyoutBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    sfLbl:SetFont(sfLbl:GetFont(), 9, "OUTLINE")
+    sfLbl:SetPoint("CENTER", stripFlyoutBtn, "CENTER", 0, 0)
+    sfLbl:SetText(">>")
+    sfLbl:SetTextColor(0.70, 0.65, 1.00)
+    stripFlyoutBtn._lbl = sfLbl
+
+    stripFlyoutBtn:SetScript("OnEnter", function()
+        sfBg:SetColorTexture(0.22, 0.18, 0.38, 1)
+        GameTooltip:SetOwner(stripFlyoutBtn, "ANCHOR_LEFT")
+        GameTooltip:SetText("Quick Launch", 1, 1, 1)
+        GameTooltip:AddLine("Open panel menu", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end)
+    stripFlyoutBtn:SetScript("OnLeave", function()
+        sfBg:SetColorTexture(0.10, 0.08, 0.20, 1)
+        GameTooltip:Hide()
+    end)
+    stripFlyoutBtn:SetScript("OnClick", function()
+        if flyoutMenu:IsShown() then
+            flyoutMenu:Hide() ; sfLbl:SetText(">>")
+        else
+            flyoutMenu:Show() ; sfLbl:SetText("<<")
+        end
+    end)
 
     -- ── Suite flyout panel (right-hand side panel outside the character sheet) ───
     do
@@ -5089,7 +5174,6 @@ function SC_BuildMain()
 
     -- Close-side-panel button (×) at bottom of strip
     do
-        local numBtns = #STRIP_BTNS
         local bX = CreateFrame("Button", nil, btnStrip)
         bX:SetSize(bSz, bSz)
         bX:SetPoint("BOTTOM", btnStrip, "BOTTOM", 0, 4)
@@ -5130,7 +5214,7 @@ function SC_BuildMain()
     ftxt:SetFont(ftxt:GetFont(), 8, "")
     ftxt:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     ftxt:SetTextColor(0.3, 0.3, 0.38)
-    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·B·SR·Wh·NIT·×")
+    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  >> = panel menu  |  x = close panel")
 
     f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
     f:HookScript("OnHide", function(self)
@@ -5138,6 +5222,8 @@ function SC_BuildMain()
         SC_HidePicker()
         SC_CloseSidePanel()
         if wingFrame then wingFrame:Hide() ; activeWingKey = nil end
+        local fm = _G["SlyCharStripFlyout"]
+        if fm then fm:Hide() end
     end)
 
     BuildWingFrame(f)
