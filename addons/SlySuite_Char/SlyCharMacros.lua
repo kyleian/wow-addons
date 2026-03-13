@@ -341,3 +341,263 @@ SLYCHAR_CLASS_MACROS["WARRIOR"] = {
         tip="Sub-20% finisher. Rage is converted to massive damage.",
     },
 }
+
+-- ============================================================
+-- Mage
+-- ============================================================
+SLYCHAR_CLASS_MACROS["MAGE"] = {
+
+    -- ── Arcane ───────────────────────────────────────────────────────────────
+    {
+        spec="Arcane", name="Arcane Blast",
+        icon="spell_arcane_arcane03",
+        body="#showtooltip Arcane Blast\n/cast Arcane Blast",
+        tip="Core Arcane nuke. Stacks up to 4 times increasing damage and mana cost.",
+    },
+    {
+        spec="Arcane", name="Arcane Missiles",
+        icon="spell_nature_starfall",
+        body="#showtooltip Arcane Missiles\n/cast Arcane Missiles",
+        tip="Channeled follow-up to high Arcane Blast stacks to dump mana efficiently.",
+    },
+    {
+        spec="Arcane", name="Arcane Power",
+        icon="spell_nature_lightning",
+        body="#showtooltip Arcane Power\n/cast Arcane Power",
+        tip="+30% spell damage and cost for 15s. Activate at max Arcane Blast stacks.",
+    },
+    {
+        spec="Arcane", name="Presence of Mind + AB",
+        icon="spell_nature_enchantarmor",
+        body="#showtooltip Arcane Blast\n/cast Presence of Mind\n/cast Arcane Blast",
+        tip="Instantly cast one Arcane Blast. Pair with Arcane Power for a spike.",
+    },
+    {
+        spec="Arcane", name="Icy Veins",
+        icon="spell_frost_coldhearted",
+        body="#showtooltip Icy Veins\n/cast Icy Veins",
+        tip="20% cast speed increase for 20s. Synergises with any spec on demand.",
+    },
+    {
+        spec="Arcane", name="CD Stack",
+        icon="spell_nature_lightning",
+        body="#showtooltip Arcane Power\n/use 13\n/use 14\n/cast Arcane Power\n/cast Icy Veins",
+        tip="Pop both trinkets + Arcane Power + Icy Veins in one button.",
+    },
+    {
+        spec="Arcane", name="Counterspell",
+        icon="spell_frost_iceshock",
+        body="#showtooltip Counterspell\n/cast Counterspell",
+        tip="Interrupt target's cast and lock that school for 8s.",
+    },
+    {
+        spec="Arcane", name="Spellsteal",
+        icon="spell_arcane_arcane01",
+        body="#showtooltip Spellsteal\n/cast Spellsteal",
+        tip="Steal one beneficial buff from the target. Invaluable in TBC raids and PvP.",
+    },
+    {
+        spec="Arcane", name="Evocation",
+        icon="spell_nature_purge",
+        body="#showtooltip Evocation\n/cast Evocation",
+        tip="Regen 15% mana/sec for 8s. Use when oom — cancel early if interrupted.",
+    },
+
+    -- ── Fire ─────────────────────────────────────────────────────────────────
+    {
+        spec="Fire", name="Fireball",
+        icon="spell_fire_fireball02",
+        body="#showtooltip Fireball\n/cast Fireball",
+        tip="Core Fire nuke. High crit chance procs Ignite for strong DoT.",
+    },
+    {
+        spec="Fire", name="Scorch",
+        icon="spell_fire_soulburn",
+        body="#showtooltip Scorch\n/cast Scorch",
+        tip="Fast cast filler. Imp. Scorch applies a 15% Fire vulnerability stack (5 max).",
+    },
+    {
+        spec="Fire", name="Fire Blast",
+        icon="spell_fire_fireball",
+        body="#showtooltip Fire Blast\n/cast Fire Blast",
+        tip="Instant off-GCD — use to fish for Hot Streak procs alongside Fireball/Scorch.",
+    },
+    {
+        spec="Fire", name="Pyroblast",
+        icon="spell_fire_fireball",
+        body="#showtooltip Pyroblast\n/cast Pyroblast",
+        tip="Opener or Hot Streak instant proc. Highest base damage Fire spell.",
+    },
+    {
+        spec="Fire", name="Combustion",
+        icon="spell_fire_sealoffire",
+        body="#showtooltip Combustion\n/cast Combustion",
+        tip="Next 3 Fire crits guaranteed. Use when about to Fireball spam for burst.",
+    },
+    {
+        spec="Fire", name="CD Stack",
+        icon="spell_fire_sealoffire",
+        body="#showtooltip Combustion\n/use 13\n/use 14\n/cast Combustion\n/cast Icy Veins",
+        tip="Pop both trinkets + Combustion + Icy Veins together on pull.",
+    },
+    {
+        spec="Fire", name="Dragon's Breath",
+        icon="inv_misc_head_dragon_01",
+        body="#showtooltip Dragon's Breath\n/cast Dragon's Breath",
+        tip="AoE cone disorient for 3s. Strong on-demand interrupt/peel in Fire builds.",
+    },
+    {
+        spec="Fire", name="Blast Wave",
+        icon="spell_holy_excorcism_02",
+        body="#showtooltip Blast Wave\n/cast Blast Wave",
+        tip="AoE knockback + slows. Use for AoE pulls or emergencies.",
+    },
+    {
+        spec="Fire", name="Counterspell",
+        icon="spell_frost_iceshock",
+        body="#showtooltip Counterspell\n/cast Counterspell",
+        tip="Interrupt target's cast and lock that school for 8s.",
+    },
+
+    -- ── Frost ─────────────────────────────────────────────────────────────────
+    {
+        spec="Frost", name="Frostbolt",
+        icon="spell_frost_frostbolt02",
+        body="#showtooltip Frostbolt\n/cast Frostbolt",
+        tip="Core Frost nuke. Applies chill/slow. Procs Shatter on Frozen targets.",
+    },
+    {
+        spec="Frost", name="Ice Lance",
+        icon="spell_frost_frostblast",
+        body="#showtooltip Ice Lance\n/cast Ice Lance",
+        tip="Instant, cheap, triple damage vs. Frozen. Follow up after Frost Nova/FoF.",
+    },
+    {
+        spec="Frost", name="Shatter Combo",
+        icon="spell_frost_frostbolt02",
+        body="#showtooltip Frostbolt\n/cast Frost Nova\n/cast Ice Lance",
+        tip="Root with Frost Nova then instantly Ice Lance for guaranteed Shatter crit.",
+    },
+    {
+        spec="Frost", name="Fingers of Frost Ice Lance",
+        icon="spell_frost_frostblast",
+        body="#showtooltip Ice Lance\n/cast Ice Lance",
+        tip="Use on Fingers of Frost proc — counts as frozen target, full Shatter bonus.",
+    },
+    {
+        spec="Frost", name="Deep Freeze",
+        icon="spell_frost_stun",
+        body="#showtooltip Deep Freeze\n/cast Deep Freeze",
+        tip="Hard stun on Frozen/chilled target for 5s. Highest Frost spike setup.",
+    },
+    {
+        spec="Frost", name="Icy Veins",
+        icon="spell_frost_coldhearted",
+        body="#showtooltip Icy Veins\n/cast Icy Veins",
+        tip="20% haste for 20s. Activate on cooldown — core DPS cooldown for Frost.",
+    },
+    {
+        spec="Frost", name="CD Stack",
+        icon="spell_frost_coldhearted",
+        body="#showtooltip Icy Veins\n/use 13\n/use 14\n/cast Icy Veins\n/cast Cold Snap",
+        tip="Pop both trinkets + Icy Veins + Cold Snap together on pull.",
+    },
+    {
+        spec="Frost", name="Frost Nova",
+        icon="spell_frost_frostnova",
+        body="#showtooltip Frost Nova\n/cast Frost Nova",
+        tip="Instantly freezes all nearby enemies. Enables guaranteed Shatter crits.",
+    },
+    {
+        spec="Frost", name="Cone of Cold",
+        icon="spell_frost_glacier",
+        body="#showtooltip Cone of Cold\n/cast Cone of Cold",
+        tip="AoE frontal chill + damage. Use for AoE pulls or Shatter AoE with Nova.",
+    },
+    {
+        spec="Frost", name="Cold Snap",
+        icon="spell_frost_wizardmark",
+        body="#showtooltip Cold Snap\n/cast Cold Snap",
+        tip="Instantly resets all Frost spell cooldowns including Frost Nova and Ice Block.",
+    },
+    {
+        spec="Frost", name="Counterspell",
+        icon="spell_frost_iceshock",
+        body="#showtooltip Counterspell\n/cast Counterspell",
+        tip="Interrupt target's cast and lock that school for 8s.",
+    },
+
+    -- ── PvP ───────────────────────────────────────────────────────────────────
+    {
+        spec="PvP", name="Blink",
+        icon="spell_arcane_blink",
+        body="#showtooltip Blink\n/cast Blink",
+        tip="Teleport 20 yards forward and clear snares/roots. Highest priority escape.",
+    },
+    {
+        spec="PvP", name="Ice Block",
+        icon="spell_frost_frost",
+        body="#showtooltip Ice Block\n/cast Ice Block",
+        tip="Full immunity for 10s. Use to survive burst, reset CDs, or wait for help.",
+    },
+    {
+        spec="PvP", name="Blink Break + Escape",
+        icon="spell_arcane_blink",
+        body="/cast Blink\n/cancelaura Ice Block",
+        tip="Blink out of root/slow then cancel Ice Block if active to resume casting.",
+    },
+    {
+        spec="PvP", name="Frost Nova + Blink",
+        icon="spell_frost_frostnova",
+        body="#showtooltip Frost Nova\n/cast Frost Nova\n/cast Blink",
+        tip="Root melee then instantly Blink to max range.",
+    },
+    {
+        spec="PvP", name="Counterspell",
+        icon="spell_frost_iceshock",
+        body="#showtooltip Counterspell\n/cast Counterspell",
+        tip="Interrupt and school-lock for 8s. Most important PvP button.",
+    },
+    {
+        spec="PvP", name="Polymorph",
+        icon="spell_magic_polymorphchicken",
+        body="#showtooltip Polymorph\n/cast Polymorph",
+        tip="Sheep target for 10s (soft CC). Breaks on damage — don't dot first.",
+    },
+    {
+        spec="PvP", name="Spellsteal",
+        icon="spell_arcane_arcane01",
+        body="#showtooltip Spellsteal\n/cast Spellsteal",
+        tip="Steal a beneficial buff. Mandatory vs. Paladin bubbles, Druid HoTs, etc.",
+    },
+    {
+        spec="PvP", name="Slow",
+        icon="spell_arcane_slow",
+        body="#showtooltip Slow\n/cast Slow",
+        tip="(Arcane) Reduce movement/attack/cast speed by 60%. No cooldown.",
+    },
+    {
+        spec="PvP", name="Dragon's Breath",
+        icon="inv_misc_head_dragon_01",
+        body="#showtooltip Dragon's Breath\n/cast Dragon's Breath",
+        tip="(Fire) AoE cone disorient 3s. Use to interrupt a healer or peel melee.",
+    },
+    {
+        spec="PvP", name="Deep Freeze",
+        icon="spell_frost_stun",
+        body="#showtooltip Deep Freeze\n/cast Deep Freeze",
+        tip="(Frost) Stun a Frozen target for 5s. Follow with Shatter burst.",
+    },
+    {
+        spec="PvP", name="Mana Shield",
+        icon="spell_shadow_detectlesserinvisibility",
+        body="#showtooltip Mana Shield\n/cast Mana Shield",
+        tip="Absorb damage from mana instead of HP. Useful against burst when low HP.",
+    },
+    {
+        spec="PvP", name="Remove Curse",
+        icon="spell_nature_removecurse",
+        body="#showtooltip Remove Curse\n/cast [@player] Remove Curse",
+        tip="Remove a curse from yourself. Cast on focus: replace @player with @focus.",
+    },
+}
