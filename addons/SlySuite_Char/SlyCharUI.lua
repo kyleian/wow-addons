@@ -2711,16 +2711,12 @@ function SC_RefreshHonor()
     local arenaPts = 0
     if GetArenaCurrency then arenaPts = GetArenaCurrency() or 0 end
 
-    local twHK, twContrib = 0, 0
-    if GetPVPThisWeekStats then
-        local a, b = GetPVPThisWeekStats()
-        twHK = a or 0 ; twContrib = b or 0
-    end
-    local yHK, yContrib = 0, 0
-    if GetPVPYesterdayStats then
-        local a, b = GetPVPYesterdayStats()
-        yHK = a or 0 ; yContrib = b or 0
-    end
+    local twHK = 0
+    if GetPVPThisWeekStats  then local a = GetPVPThisWeekStats()  ; twHK = a or 0 end
+    local yHK  = 0
+    if GetPVPYesterdayStats then local a = GetPVPYesterdayStats() ; yHK  = a or 0 end
+    local lwHK = 0
+    if GetPVPLastWeekStats  then local a = GetPVPLastWeekStats()  ; lwHK = a or 0 end
     local lfHK, lfDK = 0, 0
     if GetPVPLifetimeStats then
         local a, b = GetPVPLifetimeStats()
@@ -2732,10 +2728,9 @@ function SC_RefreshHonor()
         { lbl="Honor",             val=honorCurr.." / "..honorMax },
         { lbl="Arena Points",      val=tostring(arenaPts) },
         { sep=true },
-        { lbl="Week HKs",          val=tostring(twHK) },
-        { lbl="Week Contribution", val=tostring(twContrib) },
         { lbl="Yesterday HKs",     val=tostring(yHK) },
-        { lbl="Yesterday Contrib", val=tostring(yContrib) },
+        { lbl="This Week HKs",     val=tostring(twHK) },
+        { lbl="Last Week HKs",     val=tostring(lwHK) },
         { sep=true },
         { lbl="Lifetime HKs",      val=tostring(lfHK) },
         { lbl="Lifetime DKs",      val=tostring(lfDK) },
