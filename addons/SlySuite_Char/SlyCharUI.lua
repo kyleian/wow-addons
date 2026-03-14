@@ -2709,6 +2709,19 @@ function SC_RefreshHonor()
     local rows = miscUI._honorRows
     if not rows then return end
 
+    -- Number formatter with thousands separators: 75000 → "75,000"
+    local function commaNum(n)
+        n = math.floor(n or 0)
+        local s = tostring(n)
+        local result, count = "", 0
+        for i = #s, 1, -1 do
+            if count > 0 and count % 3 == 0 then result = "," .. result end
+            result = s:sub(i, i) .. result
+            count  = count + 1
+        end
+        return result
+    end
+
     local rank = 0
     if UnitPVPRank then rank = UnitPVPRank("player") or 0 end
     local rankName = "Unranked"
@@ -2720,34 +2733,37 @@ function SC_RefreshHonor()
     local honorCurr, honorMax = 0, 75000
     if GetHonorCurrency then
         local c, m = GetHonorCurrency()
-        honorCurr = c or 0 ; honorMax = m or 75000
+        honorCurr = math.floor(c or 0)
+        -- m may be 0 (uncapped / not returned) — Lua treats 0 as truthy so
+        -- "m or 75000" would yield 0.  Explicitly test > 0.
+        honorMax  = (m and m > 0) and math.floor(m) or 75000
     end
     local arenaPts = 0
-    if GetArenaCurrency then arenaPts = GetArenaCurrency() or 0 end
+    if GetArenaCurrency then arenaPts = math.floor(GetArenaCurrency() or 0) end
 
     local twHK = 0
-    if GetPVPThisWeekStats  then local a = GetPVPThisWeekStats()  ; twHK = a or 0 end
+    if GetPVPThisWeekStats  then local a = GetPVPThisWeekStats()  ; twHK = math.floor(a or 0) end
     local yHK  = 0
-    if GetPVPYesterdayStats then local a = GetPVPYesterdayStats() ; yHK  = a or 0 end
+    if GetPVPYesterdayStats then local a = GetPVPYesterdayStats() ; yHK  = math.floor(a or 0) end
     local lwHK = 0
-    if GetPVPLastWeekStats  then local a = GetPVPLastWeekStats()  ; lwHK = a or 0 end
+    if GetPVPLastWeekStats  then local a = GetPVPLastWeekStats()  ; lwHK = math.floor(a or 0) end
     local lfHK, lfDK = 0, 0
     if GetPVPLifetimeStats then
         local a, b = GetPVPLifetimeStats()
-        lfHK = a or 0 ; lfDK = b or 0
+        lfHK = math.floor(a or 0) ; lfDK = math.floor(b or 0)
     end
 
     local data = {
         { lbl="Rank",              val=rankName },
-        { lbl="Honor",             val=honorCurr.." / "..honorMax },
-        { lbl="Arena Points",      val=tostring(arenaPts) },
+        { lbl="Honor",             val=commaNum(honorCurr).." / "..commaNum(honorMax) },
+        { lbl="Arena Points",      val=commaNum(arenaPts) },
         { sep=true },
-        { lbl="Yesterday HKs",     val=tostring(yHK) },
-        { lbl="This Week HKs",     val=tostring(twHK) },
-        { lbl="Last Week HKs",     val=tostring(lwHK) },
+        { lbl="Yesterday HKs",     val=commaNum(yHK) },
+        { lbl="This Week HKs",     val=commaNum(twHK) },
+        { lbl="Last Week HKs",     val=commaNum(lwHK) },
         { sep=true },
-        { lbl="Lifetime HKs",      val=tostring(lfHK) },
-        { lbl="Lifetime DKs",      val=tostring(lfDK) },
+        { lbl="Lifetime HKs",      val=commaNum(lfHK) },
+        { lbl="Lifetime DKs",      val=commaNum(lfDK) },
     }
 
     for i = 1, #rows do

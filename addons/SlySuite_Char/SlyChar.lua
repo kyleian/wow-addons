@@ -157,6 +157,31 @@ local function SC_Slash(msg)
                       " rank="..tostring(cr).."/"..tostring(mr))
             end
         end
+    elseif msg == "honor" then
+        -- Dump every honor-related API raw return value for debugging.
+        local function p(label, ...)
+            local parts = {label}
+            local args = {...}
+            if #args == 0 then
+                parts[#parts+1] = "nil"
+            else
+                for i = 1, #args do parts[#parts+1] = tostring(args[i]) end
+            end
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SC Honor]|r " .. table.concat(parts, "  "))
+        end
+        p("GetHonorCurrency exists:", type(GetHonorCurrency))
+        if GetHonorCurrency then p("GetHonorCurrency():", GetHonorCurrency()) end
+        p("GetArenaCurrency exists:", type(GetArenaCurrency))
+        if GetArenaCurrency then p("GetArenaCurrency():", GetArenaCurrency()) end
+        p("UnitPVPRank(player):", UnitPVPRank and UnitPVPRank("player") or "N/A")
+        p("GetPVPThisWeekStats:", type(GetPVPThisWeekStats))
+        if GetPVPThisWeekStats  then p("  ->", GetPVPThisWeekStats()) end
+        p("GetPVPYesterdayStats:", type(GetPVPYesterdayStats))
+        if GetPVPYesterdayStats then p("  ->", GetPVPYesterdayStats()) end
+        p("GetPVPLastWeekStats:", type(GetPVPLastWeekStats))
+        if GetPVPLastWeekStats  then p("  ->", GetPVPLastWeekStats()) end
+        p("GetPVPLifetimeStats:", type(GetPVPLifetimeStats))
+        if GetPVPLifetimeStats  then p("  ->", GetPVPLifetimeStats()) end
     else
         SC_ToggleMain()
     end
