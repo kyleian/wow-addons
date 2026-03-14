@@ -2730,25 +2730,68 @@ function SC_RefreshHonor()
         if rn then rankName = rn .. " (" .. rank .. ")" end
     end
 
+    -- ── Honor currency (spendable amount) ────────────────────────────────────
+    -- GetHonorCurrency is WotLK+; TBC Anniversary uses C_CurrencyInfo or
+    -- GetCurrencyInfo.  Currency ID 1901 = Honor, 1602 = Arena Points
+    -- in the modernised TBC Anniversary build.
     local honorCurr, honorMax = 0, 75000
-    if GetHonorCurrency then
+    local arenaPts = 0
+    local function getCurrencyAmt(id)
+        if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+            local info = C_CurrencyInfo.GetCurrencyInfo(id)
+            if info then return math.floor(info.quantity or 0), math.floor(info.maxQuantity or 0) end
+        end
+        if GetCurrencyInfo then
+            local _, amt, _, _, _, maxQ = GetCurrencyInfo(id)
+            if amt then return math.floor(amt or 0), math.floor(maxQ or 0) end
+        end
+        return nil, nil
+    end
+    do
+        local hc, hm = getCurrencyAmt(1901)   -- Honor
+        if hc then
+            honorCurr = hc
+            honorMax  = (hm and hm > 0) and hm or 75000
+        end
+        local ap = getCurrencyAmt(1602)        -- Arena Points
+        if ap then arenaPts = ap end
+    end
+    -- Legacy fallbacks (present on some TBC builds)
+    if honorCurr == 0 and GetHonorCurrency then
         local c, m = GetHonorCurrency()
         honorCurr = math.floor(c or 0)
-        -- m may be 0 (uncapped / not returned) — Lua treats 0 as truthy so
-        -- "m or 75000" would yield 0.  Explicitly test > 0.
         honorMax  = (m and m > 0) and math.floor(m) or 75000
     end
-    local arenaPts = 0
-    if GetArenaCurrency then arenaPts = math.floor(GetArenaCurrency() or 0) end
+    if arenaPts == 0 and GetArenaCurrency then
+        arenaPts = math.floor(GetArenaCurrency() or 0)
+    end
 
-    local twHK = 0
-    if GetPVPThisWeekStats  then local a = GetPVPThisWeekStats()  ; twHK = math.floor(a or 0) end
-    local yHK  = 0
-    if GetPVPYesterdayStats then local a = GetPVPYesterdayStats() ; yHK  = math.floor(a or 0) end
-    local lwHK = 0
-    if GetPVPLastWeekStats  then local a = GetPVPLastWeekStats()  ; lwHK = math.floor(a or 0) end
-    local lfHK, lfDK = 0, 0
-    if GetPVPLifetimeStats then
+    -- ── HK / kill stats via GetHonorInfo() ───────────────────────────────────
+    -- GetHonorInfo() -> todayHK, todayHonor, yHK, yHonor, lwHK, lwHonor,
+    --                   twHK, twHonor, lifetimeHK, lifetimeHighestRank
+    local twHK, yHK, lwHK, lfHK, lfDK = 0, 0, 0, 0, 0
+    if GetHonorInfo then
+        local _tdHK, _tdH, _yHK, _yH, _lwHK, _lwH, _twHK, _twH, _lfHK =
+            GetHonorInfo()
+        yHK  = math.floor(_yHK  or 0)
+        lwHK = math.floor(_lwHK or 0)
+        twHK = math.floor(_twHK or 0)
+        lfHK = math.floor(_lfHK or 0)
+        -- Use this-week honor as currency if C_CurrencyInfo gave us nothing
+        if honorCurr == 0 and _twH and _twH > 0 then
+            honorCurr = math.floor(_twH)
+        end
+    else
+        -- Final per-stat fallbacks (WotLK+)
+        if GetPVPThisWeekStats  then local a = GetPVPThisWeekStats()  ; twHK = math.floor(a or 0) end
+        if GetPVPYesterdayStats then local a = GetPVPYesterdayStats() ; yHK  = math.floor(a or 0) end
+        if GetPVPLastWeekStats  then local a = GetPVPLastWeekStats()  ; lwHK = math.floor(a or 0) end
+        if GetPVPLifetimeStats  then
+            local a, b = GetPVPLifetimeStats()
+            lfHK = math.floor(a or 0) ; lfDK = math.floor(b or 0)
+        end
+    end
+    if GetPVPLifetimeStats and lfHK == 0 then
         local a, b = GetPVPLifetimeStats()
         lfHK = math.floor(a or 0) ; lfDK = math.floor(b or 0)
     end

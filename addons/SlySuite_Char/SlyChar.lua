@@ -162,26 +162,44 @@ local function SC_Slash(msg)
         local function p(label, ...)
             local parts = {label}
             local args = {...}
-            if #args == 0 then
-                parts[#parts+1] = "nil"
-            else
-                for i = 1, #args do parts[#parts+1] = tostring(args[i]) end
-            end
+            if #args == 0 then parts[#parts+1] = "nil"
+            else for i = 1, #args do parts[#parts+1] = tostring(args[i]) end end
             DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SC Honor]|r " .. table.concat(parts, "  "))
         end
-        p("GetHonorCurrency exists:", type(GetHonorCurrency))
-        if GetHonorCurrency then p("GetHonorCurrency():", GetHonorCurrency()) end
-        p("GetArenaCurrency exists:", type(GetArenaCurrency))
-        if GetArenaCurrency then p("GetArenaCurrency():", GetArenaCurrency()) end
+        -- Legacy WotLK+ APIs
+        p("GetHonorCurrency:",   type(GetHonorCurrency))
+        if GetHonorCurrency then p("  ->", GetHonorCurrency()) end
+        p("GetArenaCurrency:",   type(GetArenaCurrency))
+        if GetArenaCurrency then p("  ->", GetArenaCurrency()) end
+        -- TBC API
+        p("GetHonorInfo:",       type(GetHonorInfo))
+        if GetHonorInfo then p("  ->", GetHonorInfo()) end
         p("UnitPVPRank(player):", UnitPVPRank and UnitPVPRank("player") or "N/A")
-        p("GetPVPThisWeekStats:", type(GetPVPThisWeekStats))
+        p("GetPVPThisWeekStats:",  type(GetPVPThisWeekStats))
         if GetPVPThisWeekStats  then p("  ->", GetPVPThisWeekStats()) end
         p("GetPVPYesterdayStats:", type(GetPVPYesterdayStats))
         if GetPVPYesterdayStats then p("  ->", GetPVPYesterdayStats()) end
-        p("GetPVPLastWeekStats:", type(GetPVPLastWeekStats))
+        p("GetPVPLastWeekStats:",  type(GetPVPLastWeekStats))
         if GetPVPLastWeekStats  then p("  ->", GetPVPLastWeekStats()) end
-        p("GetPVPLifetimeStats:", type(GetPVPLifetimeStats))
+        p("GetPVPLifetimeStats:",  type(GetPVPLifetimeStats))
         if GetPVPLifetimeStats  then p("  ->", GetPVPLifetimeStats()) end
+        -- Currency system (TBC Anniversary modernised honor)
+        p("C_CurrencyInfo:", type(C_CurrencyInfo))
+        if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+            for _, id in ipairs({1901, 1602, 390, 391, 392, 393, 394}) do
+                local info = C_CurrencyInfo.GetCurrencyInfo(id)
+                if info and (info.quantity or 0) > 0 then
+                    p("  CurrencyID="..id, info.name, "qty="..tostring(info.quantity), "max="..tostring(info.maxQuantity))
+                end
+            end
+        end
+        if GetCurrencyInfo then
+            p("GetCurrencyInfo exists: function")
+            for _, id in ipairs({1901, 1602, 390, 391}) do
+                local name, amt = GetCurrencyInfo(id)
+                if amt and amt > 0 then p("  ID="..id, name, "amt="..tostring(amt)) end
+            end
+        end
     else
         SC_ToggleMain()
     end
