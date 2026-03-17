@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: Sly Style
 ## Notes: Canonical theme/style system for SlySuite. Provides shared colours, painters and frame helpers used by all Sly addons.
-## Version: 1.0.0
+## Version: 1.4.0
 ## X-Curse-Project-ID: 1470424
 ## Author: Sly
 ## SavedVariables: SlyStyleDB

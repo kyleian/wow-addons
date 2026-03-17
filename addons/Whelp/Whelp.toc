@@ -2,7 +2,7 @@
 ## Title: Whelp
 ## Notes: A Yelp-style rating system for player vendors and service providers in WoW TBC
 ## Author: Kyle
-## Version: 1.0.0
+## Version: 1.4.0
 ## SavedVariables: WhelpDB
 ## SavedVariablesPerCharacter: WhelpCharDB
 ## X-Category: Social
