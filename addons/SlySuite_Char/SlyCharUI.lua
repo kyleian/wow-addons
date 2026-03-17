@@ -5063,7 +5063,7 @@ function SC_BuildMain()
     -- >> toggle button
     stripFlyoutBtn = CreateFrame("Button", nil, btnStrip)
     stripFlyoutBtn:SetSize(bSz, bSz)
-    stripFlyoutBtn:SetPoint("TOP", btnStrip, "TOP", 0, -1)
+    stripFlyoutBtn:SetPoint("TOP", btnStrip, "TOP", 0, 0)
     stripFlyoutBtn:EnableMouse(true)
 
     local sfBord = stripFlyoutBtn:CreateTexture(nil, "BACKGROUND")
