@@ -690,12 +690,14 @@ local function SC_BuildPicker()
     picker = f
 end
 
--- Parse enchant name + gem count from a full item hyperlink.
--- Returns: enchantName (string or nil), gemCount (int)
+-- Parse enchant presence + gem count from a full item hyperlink.
+-- Returns: enchanted (bool), gemCount (int)
+-- NOTE: GetSpellInfo(enchantId) often returns crafting-recipe names in TBC Classic
+-- (spell IDs collide), so we only report whether an enchant is present, not its name.
 local function ParseEnchantGems(link)
-    if not link then return nil, 0 end
+    if not link then return false, 0 end
     local itemStr = link:match("|Hitem:([^|]+)|h")
-    if not itemStr then return nil, 0 end
+    if not itemStr then return false, 0 end
     local parts = { strsplit(":", itemStr) }
     -- parts[1]=itemId  parts[2]=enchantId  parts[3..6]=gem slots
     local enchId   = tonumber(parts[2]) or 0
@@ -705,11 +707,7 @@ local function ParseEnchantGems(link)
             gemCount = gemCount + 1
         end
     end
-    local enchName = nil
-    if enchId > 0 then
-        enchName = GetSpellInfo(enchId)
-    end
-    return enchName, gemCount
+    return enchId > 0, gemCount
 end
 
 function SC_ShowGearPicker(slotId)
@@ -822,8 +820,8 @@ function SC_ShowGearPicker(slotId)
                 qc[1]*255, qc[2]*255, qc[3]*255, item.name))
             row.ilvl:SetText(item.ilvl > 0 and ("i"..item.ilvl) or "")
 
-            -- Sub-line: source + enchant name + gem count
-            local enchName, gemCount = ParseEnchantGems(item.link)
+            -- Sub-line: source + enchant indicator + gem count
+            local enchanted, gemCount = ParseEnchantGems(item.link)
             local subParts = {}
             if item.equipped then
                 subParts[#subParts+1] = "|cffddbb22Equipped|r"
@@ -832,8 +830,8 @@ function SC_ShowGearPicker(slotId)
             else
                 subParts[#subParts+1] = "|cff555566Bag|r"
             end
-            if enchName then
-                subParts[#subParts+1] = string.format("|cff55aaff%s|r", enchName:sub(1, 18))
+            if enchanted then
+                subParts[#subParts+1] = "|cff55aaffEnc|r"
             end
             if gemCount > 0 then
                 subParts[#subParts+1] = string.format("|cff88dd88+%d gem%s|r",
@@ -4303,6 +4301,7 @@ function SC_BuildMain()
     local f = CreateFrame("Frame", "SlyCharMainFrame", UIParent)
     f:SetSize(FRAME_W, FRAME_H)
     f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel(100)  -- pre-set above CharacterFrame; avoid level changes in combat
     f:SetMovable(true)
     f:EnableMouse(false)
     f:RegisterForDrag("LeftButton")
@@ -4341,10 +4340,24 @@ function SC_BuildMain()
     headerInfo:SetPoint("CENTER", hdr, "CENTER", 0, 0)
     headerInfo:SetTextColor(0.65, 0.65, 0.65)
 
-    local closeBtn = CreateFrame("Button", nil, hdr, "UIPanelCloseButton")
+    -- Plain (non-secure) close button — works in combat, no UIPanelCloseButton template
+    local closeBtn = CreateFrame("Button", nil, hdr)
     closeBtn:SetSize(24, 24)
     closeBtn:SetPoint("RIGHT", hdr, "RIGHT", -2, 0)
+    closeBtn:EnableMouse(true)
+    closeBtn:RegisterForClicks("LeftButtonUp")
+    local closeBg = closeBtn:CreateTexture(nil, "BACKGROUND")
+    closeBg:SetAllPoints() ; closeBg:SetColorTexture(0, 0, 0, 0)
+    local closeHl = closeBtn:CreateTexture(nil, "HIGHLIGHT")
+    closeHl:SetAllPoints() ; closeHl:SetColorTexture(0.9, 0.2, 0.2, 0.35)
+    local closeTx = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    closeTx:SetFont(closeTx:GetFont(), 16, "OUTLINE")
+    closeTx:SetAllPoints() ; closeTx:SetJustifyH("CENTER") ; closeTx:SetJustifyV("MIDDLE")
+    closeTx:SetText("\195\151")  -- UTF-8 × (U+00D7)
+    closeTx:SetTextColor(0.80, 0.30, 0.30)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
+    closeBtn:SetScript("OnEnter", function() closeBg:SetColorTexture(0.7, 0.15, 0.15, 0.40) end)
+    closeBtn:SetScript("OnLeave", function() closeBg:SetColorTexture(0, 0, 0, 0) end)
 
     local resetBtn = CreateFrame("Button", nil, hdr, "UIPanelButtonTemplate")
     resetBtn:SetSize(18, 18)
@@ -4427,6 +4440,16 @@ function SC_BuildMain()
     end)
     themeBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     themeRefs.themeBtn = themeBtnTx
+
+    -- Header drag: drag the empty chrome area to move the whole frame
+    hdr:EnableMouse(true)
+    hdr:RegisterForDrag("LeftButton")
+    hdr:SetScript("OnDragStart", function() f:StartMoving() end)
+    hdr:SetScript("OnDragStop", function()
+        f:StopMovingOrSizing()
+        local pt, _, _, x, y = f:GetPoint()
+        SC.db.position = { point = pt or "CENTER", x = x or 0, y = y or 0 }
+    end)
 
     local hdrSep = f:CreateTexture(nil, "ARTWORK")
     hdrSep:SetSize(FRAME_W, 1)
@@ -5040,7 +5063,7 @@ function SC_BuildMain()
     -- >> toggle button
     stripFlyoutBtn = CreateFrame("Button", nil, btnStrip)
     stripFlyoutBtn:SetSize(bSz, bSz)
-    stripFlyoutBtn:SetPoint("CENTER", btnStrip, "CENTER", 0, 12)
+    stripFlyoutBtn:SetPoint("TOP", btnStrip, "TOP", 0, -3)
     stripFlyoutBtn:EnableMouse(true)
 
     local sfBord = stripFlyoutBtn:CreateTexture(nil, "BACKGROUND")

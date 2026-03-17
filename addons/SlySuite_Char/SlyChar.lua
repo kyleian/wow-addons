@@ -84,14 +84,11 @@ local function HookCharacterFrame()
         if SC._skipHook then return end
 
         if InCombatLockdown() then
-            -- CharacterFrame:Hide() is restricted in combat.
-            -- SlyCharMainFrame is always pre-built on PLAYER_ENTERING_WORLD so
-            -- this branch now always has a frame to show.
+            -- CharacterFrame:Hide() is restricted in combat.  Instead, suppress
+            -- its mouse/keyboard so it's dead beneath our pre-leveled frame.
+            CharacterFrame:EnableMouse(false)
+            CharacterFrame:EnableKeyboard(false)
             if SlyCharMainFrame then
-                -- Raise above CharacterFrame so ours is visually on top.
-                SlyCharMainFrame:SetFrameLevel(
-                    math.max(SlyCharMainFrame:GetFrameLevel(),
-                             (CharacterFrame:GetFrameLevel() or 0) + 5))
                 SlyCharMainFrame:Show()
                 SC_RefreshAll()
                 SC._pendingHideChar = true
@@ -372,10 +369,12 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        -- Combat ended: hide the native CharacterFrame we couldn't supress earlier.
+        -- Combat ended: hide the native CharacterFrame we couldn't suppress earlier.
         if SC._pendingHideChar then
             SC._pendingHideChar = false
             if CharacterFrame and CharacterFrame:IsShown() then
+                CharacterFrame:EnableMouse(true)
+                CharacterFrame:EnableKeyboard(true)
                 CharacterFrame:Hide()
             end
         end
