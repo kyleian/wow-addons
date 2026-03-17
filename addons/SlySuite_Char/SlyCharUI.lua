@@ -4809,46 +4809,56 @@ function SC_BuildMain()
             { tip="Lockouts",        desc="Alt lockouts & layer detection",   lbl="NIT", r=0.30, g=0.80, b=1.00,
               fn=function() SC_ToggleWing("nit")    end },
         }
-        local ROW_H  = 28
-        local appW   = SIDE_W - PAD * 2
+        -- 2-column grid: ceil(13/2)=7 rows × 44px = 322px + 4px top pad = 326px ≤ tcH(329)
+        local ROW_H   = 44
+        local COL_GAP = 4
+        local appW    = SIDE_W - PAD * 2                          -- 314
+        local colW    = math.floor((appW - COL_GAP) / 2)         -- 155
         for i, item in ipairs(APP_ITEMS) do
-            local row = CreateFrame("Button", nil, miscTab)
-            row:SetSize(appW, ROW_H)
-            row:SetPoint("TOPLEFT", miscTab, "TOPLEFT", PAD, -((i-1) * (ROW_H + 2) + 4))
-            row:EnableMouse(true)
+            local col    = (i - 1) % 2                           -- 0 = left, 1 = right
+            local rowIdx = math.floor((i - 1) / 2)              -- 0-based row
+            local xOff   = PAD + col * (colW + COL_GAP)
+            local yOff   = -(rowIdx * (ROW_H + 2) + 4)
 
-            local rbg = row:CreateTexture(nil, "BACKGROUND")
-            rbg:SetAllPoints(row)
+            local btn = CreateFrame("Button", nil, miscTab)
+            btn:SetSize(colW, ROW_H)
+            btn:SetPoint("TOPLEFT", miscTab, "TOPLEFT", xOff, yOff)
+            btn:EnableMouse(true)
+
+            local rbg = btn:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints(btn)
             rbg:SetColorTexture(item.r*0.07, item.g*0.07, item.b*0.07, 1)
-            row._rbg = rbg
+            btn._rbg = rbg
 
-            local accent = row:CreateTexture(nil, "ARTWORK")
+            local accent = btn:CreateTexture(nil, "ARTWORK")
             accent:SetSize(3, ROW_H)
-            accent:SetPoint("LEFT", row, "LEFT", 0, 0)
+            accent:SetPoint("LEFT", btn, "LEFT", 0, 0)
             accent:SetColorTexture(item.r, item.g, item.b, 0.85)
 
-            local titleLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local titleLbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             titleLbl:SetFont(titleLbl:GetFont(), 10, "OUTLINE")
-            titleLbl:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -4)
+            titleLbl:SetPoint("TOPLEFT", btn, "TOPLEFT", 8, -6)
+            titleLbl:SetWidth(colW - 10) ; titleLbl:SetJustifyH("LEFT")
             titleLbl:SetText(item.tip)
             titleLbl:SetTextColor(
                 math.min(item.r * 0.80 + 0.20, 1),
                 math.min(item.g * 0.80 + 0.20, 1),
                 math.min(item.b * 0.80 + 0.20, 1))
 
-            local descLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local descLbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             descLbl:SetFont(descLbl:GetFont(), 8, "")
-            descLbl:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 10, 4)
+            descLbl:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 8, 5)
+            descLbl:SetWidth(colW - 10) ; descLbl:SetJustifyH("LEFT")
             descLbl:SetText(item.desc)
             descLbl:SetTextColor(0.45, 0.45, 0.55)
 
-            row:SetScript("OnEnter", function()
+            btn:SetScript("OnEnter", function()
                 rbg:SetColorTexture(item.r*0.20, item.g*0.20, item.b*0.20, 1)
             end)
-            row:SetScript("OnLeave", function()
+            btn:SetScript("OnLeave", function()
                 rbg:SetColorTexture(item.r*0.07, item.g*0.07, item.b*0.07, 1)
             end)
-            row:SetScript("OnClick", function() item.fn() end)
+            btn:SetScript("OnClick", function() item.fn() end)
         end
     end)
 
