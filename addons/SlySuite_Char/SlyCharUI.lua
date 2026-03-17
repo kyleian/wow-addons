@@ -218,8 +218,7 @@ local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, bisContent=nil, subGearBtn=nil, subBarsBtn=nil, subBisBtn=nil }
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
-local miscUI = { subTab="rep", repContent=nil, skillContent=nil, honorContent=nil,
-                 subRepBtn=nil, subSkillBtn=nil, subHonorBtn=nil }
+local miscUI = { honorContent=nil }  -- rep/skills/honor live in wing panes now
 local MAX_BAR_ROWS        = 14   -- visible action bar profile rows
 local barRowWidgets       = {}
 local barsScrollOffset    = 0
@@ -2844,35 +2843,9 @@ function SC_RefreshHonor()
     end
 end
 
-function SC_SetMiscSubTab(key)
-    miscUI.subTab = key
-end
+function SC_SetMiscSubTab(key) end  -- no-op; sub-tabs moved to wing flyout
 
-function SC_RefreshMisc()
-    local function StyleMiscSub(btn, active)
-        if not btn then return end
-        if active then
-            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1)
-            btn.tx:SetTextColor(0.75, 0.88, 1.00)
-        else
-            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1)
-            btn.tx:SetTextColor(0.40, 0.40, 0.50)
-        end
-    end
-    StyleMiscSub(miscUI.subRepBtn,   miscUI.subTab == "rep")
-    StyleMiscSub(miscUI.subSkillBtn, miscUI.subTab == "skills")
-    StyleMiscSub(miscUI.subHonorBtn, miscUI.subTab == "honor")
-    if miscUI.repContent   then miscUI.repContent:SetShown(  miscUI.subTab == "rep")    end
-    if miscUI.skillContent then miscUI.skillContent:SetShown(miscUI.subTab == "skills") end
-    if miscUI.honorContent then miscUI.honorContent:SetShown(miscUI.subTab == "honor")  end
-    if miscUI.subTab == "rep" then
-        SC_RefreshReputation()
-    elseif miscUI.subTab == "skills" then
-        SC_RefreshSkills()
-    elseif miscUI.subTab == "honor" then
-        SC_RefreshHonor()
-    end
-end
+function SC_RefreshMisc() end  -- Apps tab is static; no refresh needed
 
 -- ============================================================
 -- NIT (NovaInstanceTracker) tab  — per-alt lockout view
@@ -4061,13 +4034,16 @@ function SC_ToggleWing(key)
         if k == key then p:Show() else p:Hide() end
     end
     local macrosTitle = ((UnitClass and UnitClass("player")) or "Class") .. " Macros"
-    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents", macros=macrosTitle }
+    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents", macros=macrosTitle, rep="Reputation", skills="Skills", honor="Honor" }
     if wingTitleTx then wingTitleTx:SetText(WING_TITLES[key] or key) end
     wingFrame:Show()
-    if key == "spells"  then SC_RefreshSpells()  end
-    if key == "social"  then SC_RefreshSocial()  end
-    if key == "nit"     then SC_RefreshNIT()     end
-    if key == "macros"  then SC_RefreshMacros()  end
+    if key == "spells"  then SC_RefreshSpells()      end
+    if key == "social"  then SC_RefreshSocial()      end
+    if key == "nit"     then SC_RefreshNIT()         end
+    if key == "macros"  then SC_RefreshMacros()      end
+    if key == "rep"     then SC_RefreshReputation()  end
+    if key == "skills"  then SC_RefreshSkills()      end
+    if key == "honor"   then SC_RefreshHonor()       end
 end
 
 
@@ -4239,6 +4215,77 @@ local function BuildWingFrame(mainFrame)
         macroScrollOff = math.max(0, macroScrollOff - delta)
         SC_RefreshMacros()
     end)
+
+    -- ---- Rep Pane ----
+    local repPane = CreateFrame("Frame", nil, f)
+    repPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    repPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    repPane:Hide()
+    wingPanes["rep"] = repPane
+
+    local repPaneScroll = CreateFrame("ScrollFrame", nil, repPane, "UIPanelScrollFrameTemplate")
+    repPaneScroll:SetPoint("TOPLEFT",     repPane, "TOPLEFT",      PAD, -4)
+    repPaneScroll:SetPoint("BOTTOMRIGHT", repPane, "BOTTOMRIGHT", -22,   4)
+    local repPaneCont = CreateFrame("Frame", nil, repPaneScroll)
+    repPaneCont:SetSize(WING_W - PAD*2 - 22, MAX_REP_ROWS * 16)
+    repPaneScroll:SetScrollChild(repPaneCont)
+    BuildRepRows(repPaneCont)
+    repPane:EnableMouseWheel(true)
+    repPane:SetScript("OnMouseWheel", function(self, delta)
+        repPaneScroll:SetVerticalScroll(
+            math.max(0, repPaneScroll:GetVerticalScroll() - delta * 20))
+    end)
+
+    -- ---- Skills Pane ----
+    local skillPane = CreateFrame("Frame", nil, f)
+    skillPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    skillPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    skillPane:Hide()
+    wingPanes["skills"] = skillPane
+
+    local skillPaneScroll = CreateFrame("ScrollFrame", nil, skillPane, "UIPanelScrollFrameTemplate")
+    skillPaneScroll:SetPoint("TOPLEFT",     skillPane, "TOPLEFT",      PAD, -4)
+    skillPaneScroll:SetPoint("BOTTOMRIGHT", skillPane, "BOTTOMRIGHT", -22,   4)
+    local skillPaneCont = CreateFrame("Frame", nil, skillPaneScroll)
+    skillPaneCont:SetSize(WING_W - PAD*2 - 22, MAX_SKILL_ROWS * 14)
+    skillPaneScroll:SetScrollChild(skillPaneCont)
+    BuildSkillRows(skillPaneCont)
+    skillPane:EnableMouseWheel(true)
+    skillPane:SetScript("OnMouseWheel", function(self, delta)
+        skillPaneScroll:SetVerticalScroll(
+            math.max(0, skillPaneScroll:GetVerticalScroll() - delta * 16))
+    end)
+
+    -- ---- Honor Pane ----
+    local honorPane = CreateFrame("Frame", nil, f)
+    honorPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    honorPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    honorPane:Hide()
+    wingPanes["honor"] = honorPane
+    miscUI.honorContent = honorPane   -- SC_RefreshHonor guards on IsShown()
+
+    local honorPaneRows = {}
+    for i = 1, 11 do
+        local row = CreateFrame("Frame", nil, honorPane)
+        row:SetPoint("TOPLEFT",  honorPane, "TOPLEFT",   PAD, -((i-1)*14 + 4))
+        row:SetPoint("TOPRIGHT", honorPane, "TOPRIGHT", -PAD, -((i-1)*14 + 4))
+        row:SetHeight(14) ; row:Hide()
+        local rbg = row:CreateTexture(nil, "BACKGROUND")
+        rbg:SetAllPoints() ; rbg:SetColorTexture(0, 0, 0, 0)
+        row.bg = rbg
+        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetFont(lbl:GetFont(), 9, "")
+        lbl:SetPoint("LEFT", row, "LEFT", 0, 0)
+        lbl:SetWidth((WING_W - PAD*2) * 0.52) ; lbl:SetJustifyH("LEFT")
+        row.lbl = lbl
+        local val = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        val:SetFont(val:GetFont(), 9, "")
+        val:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        val:SetWidth((WING_W - PAD*2) * 0.46) ; val:SetJustifyH("RIGHT")
+        row.val = val
+        honorPaneRows[i] = row
+    end
+    miscUI._honorRows = honorPaneRows
 
     -- Wing footer stripe
     local wingFoot = CreateFrame("Frame", nil, f)
@@ -4464,7 +4511,7 @@ function SC_BuildMain()
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
-        {key="misc",   label="Misc"},
+        {key="misc",   label="Apps"},
     }
     local tbW = math.floor(SIDE_W / #tabDefs)
     for i, td in ipairs(tabDefs) do
@@ -4701,112 +4748,108 @@ function SC_BuildMain()
         setsUI.subTab = "bis" ; SC_RefreshSetsSub()
     end)
 
-    -- Misc tab (Rep + Skills as sub-tabs)
+    -- Apps tab — centralized launcher for all panels & wing flyouts
     local miscTab = CreateFrame("Frame", nil, side)
     miscTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
     miscTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
     miscTab:SetHeight(tcH) ; miscTab:Hide()
     tabFrames["misc"] = miscTab
 
-    -- Sub-tab strip (Rep | Skills) — identical pattern to NIT
-    local mW = SIDE_W
-    local mBW = math.floor(mW / 3)
+    -- Build the apps grid lazily on first show (ensures wingFrame exists)
+    local appsBuilt = false
+    miscTab:SetScript("OnShow", function()
+        if appsBuilt then return end
+        appsBuilt = true
+        local APP_ITEMS = {
+            { tip="Reputation",      desc="Factions & standing",             lbl="Rep", r=0.70, g=0.85, b=1.00,
+              fn=function() SC_ToggleWing("rep")    end },
+            { tip="Skills",          desc="Professions & secondary skills",  lbl="Sk",  r=0.65, g=1.00, b=0.65,
+              fn=function() SC_ToggleWing("skills") end },
+            { tip="Honor",           desc="PvP honor, HKs & arena points",  lbl="Hk",  r=1.00, g=0.45, b=0.45,
+              fn=function() SC_ToggleWing("honor")  end },
+            { tip="Talents",         desc="Talent tree",                     lbl="T",   r=0.75, g=0.50, b=1.00,
+              fn=function() SC_ToggleSidePanel(SC_GetTalentFrame()) end },
+            { tip="Spellbook",       desc="Spells & abilities",              lbl="Sp",  r=0.35, g=0.70, b=1.00,
+              fn=function() SC_OpenPanel("Blizzard_SpellBookUI","SpellBookFrame",ToggleSpellBook) end },
+            { tip="Quest Log",       desc="Active quests",                   lbl="Q",   r=1.00, g=0.78, b=0.15,
+              fn=function() SC_OpenPanel("Blizzard_QuestLog","QuestLogFrame",ToggleQuestLog) end },
+            { tip="World Map",       desc="World map & locations",           lbl="M",   r=0.25, g=0.85, b=0.30,
+              fn=function() SC_OpenPanel("Blizzard_MapCanvas","WorldMapFrame",ToggleWorldMap) end },
+            { tip="Bags",            desc="Bag window",                      lbl="B",   r=0.85, g=0.65, b=0.20,
+              fn=function()
+                  if SlyBagFrame then
+                      if SlyBagFrame:IsShown() then SlyBagFrame:Hide()
+                      else
+                          if SlyBag_Refresh then SlyBag_Refresh() end
+                          SlyBagFrame:ClearAllPoints()
+                          SlyBagFrame:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
+                          SlyBagFrame:Show()
+                      end
+                  end
+              end },
+            { tip="Loot SR",         desc="Soft Res & loot rolls",           lbl="SR",  r=0.20, g=0.90, b=0.50,
+              fn=function()
+                  if SlyLootPanel and SlyLootPanel:IsShown() then SlyLootPanel:Hide() ; return end
+                  if SL_OpenSRTab then SL_OpenSRTab() elseif SL_BuildUI then SL_BuildUI() end
+                  if SlyCharMainFrame and SlyLootPanel and SlyLootPanel:IsShown() then
+                      SlyLootPanel:SetUserPlaced(true)
+                      SlyLootPanel:ClearAllPoints()
+                      SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
+                  end
+              end },
+            { tip="Whelp",           desc="Vendor ratings & reviews",        lbl="Wh",  r=0.20, g=0.78, b=1.00,
+              fn=function()
+                  local wp = _G["SlyWhelpPanelFrame"]
+                  if wp then if wp:IsShown() then wp:Hide() else wp:Show() end end
+              end },
+            { tip="Class Macros",    desc="Macro library for your class",    lbl="Mc",  r=0.95, g=0.70, b=0.20,
+              fn=function() SC_ToggleWing("macros") end },
+            { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.40, g=0.90, b=0.60,
+              fn=function() SC_ToggleWing("social") end },
+            { tip="Lockouts",        desc="Alt lockouts & layer detection",   lbl="NIT", r=0.30, g=0.80, b=1.00,
+              fn=function() SC_ToggleWing("nit")    end },
+        }
+        local ROW_H  = 28
+        local appW   = SIDE_W - PAD * 2
+        for i, item in ipairs(APP_ITEMS) do
+            local row = CreateFrame("Button", nil, miscTab)
+            row:SetSize(appW, ROW_H)
+            row:SetPoint("TOPLEFT", miscTab, "TOPLEFT", PAD, -((i-1) * (ROW_H + 2) + 4))
+            row:EnableMouse(true)
 
-    local function MakeMiscSubBtn(label, x)
-        local btn = CreateFrame("Button", nil, miscTab)
-        btn:SetSize(mBW, 16)
-        btn:SetPoint("TOPLEFT", miscTab, "TOPLEFT", x, 0)
-        local bbg = btn:CreateTexture(nil, "BACKGROUND")
-        bbg:SetAllPoints() ; bbg:SetColorTexture(0.05, 0.05, 0.09, 1)
-        btn.bg = bbg
-        local btx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        btx:SetFont(btx:GetFont(), 9, "") ; btx:SetAllPoints()
-        btx:SetJustifyH("CENTER") ; btx:SetText(label)
-        btx:SetTextColor(0.40, 0.40, 0.50)
-        btn.tx = btx
-        return btn
-    end
-    miscUI.subRepBtn   = MakeMiscSubBtn("Reputation", 0)
-    miscUI.subSkillBtn = MakeMiscSubBtn("Skills",     mBW)
-    miscUI.subHonorBtn = MakeMiscSubBtn("Honor",      mBW * 2)
+            local rbg = row:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints(row)
+            rbg:SetColorTexture(item.r*0.07, item.g*0.07, item.b*0.07, 1)
+            row._rbg = rbg
 
-    local miscSep = miscTab:CreateTexture(nil, "ARTWORK")
-    miscSep:SetSize(mW, 1)
-    miscSep:SetPoint("TOPLEFT", miscTab, "TOPLEFT", 0, -16)
-    miscSep:SetColorTexture(0.18, 0.18, 0.25, 1)
+            local accent = row:CreateTexture(nil, "ARTWORK")
+            accent:SetSize(3, ROW_H)
+            accent:SetPoint("LEFT", row, "LEFT", 0, 0)
+            accent:SetColorTexture(item.r, item.g, item.b, 0.85)
 
-    -- Rep content
-    local repContent = CreateFrame("Frame", nil, miscTab)
-    repContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
-    repContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
-    repContent:SetHeight(tcH - 17)
-    miscUI.repContent = repContent
+            local titleLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            titleLbl:SetFont(titleLbl:GetFont(), 10, "OUTLINE")
+            titleLbl:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -4)
+            titleLbl:SetText(item.tip)
+            titleLbl:SetTextColor(
+                math.min(item.r * 0.80 + 0.20, 1),
+                math.min(item.g * 0.80 + 0.20, 1),
+                math.min(item.b * 0.80 + 0.20, 1))
 
-    local repScroll = CreateFrame("ScrollFrame", nil, repContent, "UIPanelScrollFrameTemplate")
-    repScroll:SetPoint("TOPLEFT",     repContent, "TOPLEFT",      PAD,  -2)
-    repScroll:SetPoint("BOTTOMRIGHT", repContent, "BOTTOMRIGHT", -22,    2)
-    local repCont = CreateFrame("Frame", nil, repScroll)
-    repCont:SetSize(SIDE_W - PAD*2 - 22, MAX_REP_ROWS * 16)
-    repScroll:SetScrollChild(repCont)
-    BuildRepRows(repCont)
+            local descLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            descLbl:SetFont(descLbl:GetFont(), 8, "")
+            descLbl:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 10, 4)
+            descLbl:SetText(item.desc)
+            descLbl:SetTextColor(0.45, 0.45, 0.55)
 
-    -- Skills content
-    local skillContent = CreateFrame("Frame", nil, miscTab)
-    skillContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
-    skillContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
-    skillContent:SetHeight(tcH - 17)
-    miscUI.skillContent = skillContent
-
-    local skillScroll = CreateFrame("ScrollFrame", nil, skillContent, "UIPanelScrollFrameTemplate")
-    skillScroll:SetPoint("TOPLEFT",     skillContent, "TOPLEFT",      PAD,  -2)
-    skillScroll:SetPoint("BOTTOMRIGHT", skillContent, "BOTTOMRIGHT", -22,    2)
-    local skillCont = CreateFrame("Frame", nil, skillScroll)
-    skillCont:SetSize(SIDE_W - PAD*2 - 22, MAX_SKILL_ROWS * 14)
-    skillScroll:SetScrollChild(skillCont)
-    BuildSkillRows(skillCont)
-
-    -- Honor content
-    local honorContent = CreateFrame("Frame", nil, miscTab)
-    honorContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
-    honorContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
-    honorContent:SetHeight(tcH - 17)
-    honorContent:Hide()  -- start hidden; shown only when honor sub-tab is active
-    miscUI.honorContent = honorContent
-
-    local honorRows = {}
-    for i = 1, 11 do
-        local row = CreateFrame("Frame", nil, honorContent)
-        row:SetPoint("TOPLEFT",  honorContent, "TOPLEFT",  PAD,  -((i-1)*14 + 4))
-        row:SetPoint("TOPRIGHT", honorContent, "TOPRIGHT", -PAD, -((i-1)*14 + 4))
-        row:SetHeight(14)
-        row:Hide()
-        local rbg = row:CreateTexture(nil, "BACKGROUND")
-        rbg:SetAllPoints() ; rbg:SetColorTexture(0, 0, 0, 0)
-        row.bg = rbg
-        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lbl:SetFont(lbl:GetFont(), 9, "")
-        lbl:SetPoint("LEFT", row, "LEFT", 0, 0)
-        lbl:SetWidth((SIDE_W - PAD*2) * 0.52)
-        lbl:SetJustifyH("LEFT")
-        row.lbl = lbl
-        local val = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        val:SetFont(val:GetFont(), 9, "")
-        val:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-        val:SetWidth((SIDE_W - PAD*2) * 0.46)
-        val:SetJustifyH("RIGHT")
-        row.val = val
-        honorRows[i] = row
-    end
-    miscUI._honorRows = honorRows
-
-    miscUI.subRepBtn:SetScript("OnClick", function()
-        miscUI.subTab = "rep" ; SC_RefreshMisc()
-    end)
-    miscUI.subSkillBtn:SetScript("OnClick", function()
-        miscUI.subTab = "skills" ; SC_RefreshMisc()
-    end)
-    miscUI.subHonorBtn:SetScript("OnClick", function()
-        miscUI.subTab = "honor" ; SC_RefreshMisc()
+            row:SetScript("OnEnter", function()
+                rbg:SetColorTexture(item.r*0.20, item.g*0.20, item.b*0.20, 1)
+            end)
+            row:SetScript("OnLeave", function()
+                rbg:SetColorTexture(item.r*0.07, item.g*0.07, item.b*0.07, 1)
+            end)
+            row:SetScript("OnClick", function() item.fn() end)
+        end
     end)
 
     -- NIT tab is now a wing flyout; no side-panel tab for social.
@@ -4823,6 +4866,12 @@ function SC_BuildMain()
     ThemeFill(btnStrip, "sideBg", 0.05, 0.04, 0.08, 1)
 
     local STRIP_BTNS = {
+        { tip="Reputation",  desc="Factions & standing",           lbl="Rep", r=0.70, g=0.85, b=1.00,
+          fn=function() SC_ToggleWing("rep")    end },
+        { tip="Skills",      desc="Professions & secondary skills", lbl="Sk",  r=0.65, g=1.00, b=0.65,
+          fn=function() SC_ToggleWing("skills") end },
+        { tip="Honor",       desc="PvP honor, HKs & arena points", lbl="Hk",  r=1.00, g=0.45, b=0.45,
+          fn=function() SC_ToggleWing("honor")  end },
         { tip="Talents",   desc="Open Talent frame",          lbl="T",   r=0.75, g=0.50, b=1.00,
           fn=function()
               SC_ToggleSidePanel(SC_GetTalentFrame())
