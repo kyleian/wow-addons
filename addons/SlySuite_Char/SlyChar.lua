@@ -158,48 +158,88 @@ local function SC_Slash(msg)
             end
         end
     elseif msg == "honor" then
-        -- Dump every honor-related API raw return value for debugging.
-        local function p(label, ...)
+        -- Collect everything into SlyCharDB.honorDebug so the user can read the
+        -- SavedVariables file directly after /reload instead of copying chat output.
+        SlyCharDB = SlyCharDB or {}
+        local dbg = {}
+        SlyCharDB.honorDebug = dbg
+
+        local function rec(label, ...)
             local parts = {label}
             local args = {...}
-            if #args == 0 then parts[#parts+1] = "nil"
+            if #args == 0 then parts[#parts+1] = "(no return)"
             else for i = 1, #args do parts[#parts+1] = tostring(args[i]) end end
-            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SC Honor]|r " .. table.concat(parts, "  "))
+            dbg[#dbg+1] = table.concat(parts, "  ")
         end
-        -- Legacy WotLK+ APIs
-        p("GetHonorCurrency:",   type(GetHonorCurrency))
-        if GetHonorCurrency then p("  ->", GetHonorCurrency()) end
-        p("GetArenaCurrency:",   type(GetArenaCurrency))
-        if GetArenaCurrency then p("  ->", GetArenaCurrency()) end
-        -- TBC API
-        p("GetHonorInfo:",       type(GetHonorInfo))
-        if GetHonorInfo then p("  ->", GetHonorInfo()) end
-        p("UnitPVPRank(player):", UnitPVPRank and UnitPVPRank("player") or "N/A")
-        p("GetPVPThisWeekStats:",  type(GetPVPThisWeekStats))
-        if GetPVPThisWeekStats  then p("  ->", GetPVPThisWeekStats()) end
-        p("GetPVPYesterdayStats:", type(GetPVPYesterdayStats))
-        if GetPVPYesterdayStats then p("  ->", GetPVPYesterdayStats()) end
-        p("GetPVPLastWeekStats:",  type(GetPVPLastWeekStats))
-        if GetPVPLastWeekStats  then p("  ->", GetPVPLastWeekStats()) end
-        p("GetPVPLifetimeStats:",  type(GetPVPLifetimeStats))
-        if GetPVPLifetimeStats  then p("  ->", GetPVPLifetimeStats()) end
-        -- Currency system (TBC Anniversary modernised honor)
-        p("C_CurrencyInfo:", type(C_CurrencyInfo))
-        if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
-            for _, id in ipairs({1901, 1602, 390, 391, 392, 393, 394}) do
-                local info = C_CurrencyInfo.GetCurrencyInfo(id)
-                if info and (info.quantity or 0) > 0 then
-                    p("  CurrencyID="..id, info.name, "qty="..tostring(info.quantity), "max="..tostring(info.maxQuantity))
+
+        -- 1. Broad scan: every global function with honor/pvp/hk/arena in the name
+        local found = {}
+        for k, v in pairs(_G) do
+            if type(v) == "function" then
+                local lk = k:lower()
+                if lk:find("honor") or lk:find("pvp") or lk:find("hk") or lk:find("arena") then
+                    found[#found+1] = k
                 end
             end
         end
-        if GetCurrencyInfo then
-            p("GetCurrencyInfo exists: function")
-            for _, id in ipairs({1901, 1602, 390, 391}) do
-                local name, amt = GetCurrencyInfo(id)
-                if amt and amt > 0 then p("  ID="..id, name, "amt="..tostring(amt)) end
+        table.sort(found)
+        rec("=== Global functions (honor/pvp/hk/arena) ===")
+        for _, k in ipairs(found) do rec("  fn: "..k) end
+
+        -- 2. Known candidates — full multi-value return dump
+        rec("=== Known API returns ===")
+        local candidates = {
+            "GetHonorCurrency","GetHonorInfo","GetArenaCurrency",
+            "GetPVPThisWeekStats","GetPVPYesterdayStats",
+            "GetPVPLastWeekStats","GetPVPLifetimeStats",
+            "GetHonorStat","GetHonorAmount","UnitHonor",
+        }
+        for _, name in ipairs(candidates) do
+            local fn = _G[name]
+            if type(fn) == "function" then
+                -- try with "player" arg first, then no-arg
+                local ok, a,b,c,d,e,f,g,h,i,j = pcall(fn, "player")
+                if ok then rec(name.."(player):", a,b,c,d,e,f,g,h,i,j)
+                else
+                    ok,a,b,c,d,e,f,g,h,i,j = pcall(fn)
+                    if ok then rec(name.."():", a,b,c,d,e,f,g,h,i,j) end
+                end
+            else
+                rec(name..": "..type(fn))
             end
         end
+
+        -- 3. Extra API calls not in the candidates list
+        rec("=== Extra PVP API calls ===")
+        local extras = { "GetPVPSessionStats", "GetPVPRankProgress", "GetPVPRoles",
+                         "GetPVPTimer", "HonorSystemEnabled" }
+        for _, name in ipairs(extras) do
+            local fn = _G[name]
+            if type(fn) == "function" then
+                local ok, a,b,c,d,e,f = pcall(fn)
+                if ok then rec(name.."():", a,b,c,d,e,f) end
+                ok,a,b,c,d,e,f = pcall(fn, "player")
+                if ok then rec(name.."(player):", a,b,c,d,e,f) end
+            end
+        end
+        -- 4. TBC currency list API (index-based, not ID-based)
+        rec("=== TBC Currency list (GetNumCurrencies / GetCurrencyListInfo) ===")
+        rec("GetNumCurrencies type: "..type(GetNumCurrencies))
+        rec("GetCurrencyListInfo type: "..type(GetCurrencyListInfo))
+        if GetNumCurrencies then
+            local n = GetNumCurrencies()
+            rec("  count: "..tostring(n))
+            for i = 1, (n or 0) do
+                local ok, nm, isHeader, isExpanded, isUnused, isWatched, count, icon, maximum =
+                    pcall(GetCurrencyListInfo, i)
+                if ok and nm then
+                    rec("  ["..i.."] "..tostring(nm).." isHeader="..tostring(isHeader)
+                        .." count="..tostring(count).." max="..tostring(maximum))
+                end
+            end
+        end
+
+        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SC]|r Honor debug saved. /reload then open WTF/.../SavedVariables/SlySuite_Char.lua and search for honorDebug")
     else
         SC_ToggleMain()
     end

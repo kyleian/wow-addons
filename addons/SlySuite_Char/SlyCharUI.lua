@@ -2731,32 +2731,45 @@ function SC_RefreshHonor()
     end
 
     -- ── Honor currency (spendable amount) ────────────────────────────────────
-    -- GetHonorCurrency is WotLK+; TBC Anniversary uses C_CurrencyInfo or
-    -- GetCurrencyInfo.  Currency ID 1901 = Honor, 1602 = Arena Points
-    -- in the modernised TBC Anniversary build.
+    -- TBC Classic (including Anniversary) uses an index-based currency list:
+    --   GetCurrencyListSize()  → total rows (headers + entries)
+    --   GetCurrencyListInfo(i) → name, isHeader, isExpanded, _, _, qty, icon, maxQty
+    --   ExpandCurrencyList(i, 1/0) → expand/collapse a header row
     local honorCurr, honorMax = 0, 75000
     local arenaPts = 0
-    local function getCurrencyAmt(id)
-        if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
-            local info = C_CurrencyInfo.GetCurrencyInfo(id)
-            if info then return math.floor(info.quantity or 0), math.floor(info.maxQuantity or 0) end
+    local function scanCurrencyList()
+        if not GetCurrencyListSize then return end
+        local size = GetCurrencyListSize()
+        if (size or 0) == 0 then return end
+        -- Expand every collapsed header so child entries become visible
+        local toCollapse = {}
+        for i = 1, size do
+            local _, isHeader, isExpanded = GetCurrencyListInfo(i)
+            if isHeader and not isExpanded then
+                toCollapse[#toCollapse+1] = i
+                ExpandCurrencyList(i, 1)
+            end
         end
-        if GetCurrencyInfo then
-            local _, amt, _, _, _, maxQ = GetCurrencyInfo(id)
-            if amt then return math.floor(amt or 0), math.floor(maxQ or 0) end
+        size = GetCurrencyListSize()   -- re-query after expansion
+        for i = 1, size do
+            local name, isHeader, _, _, _, qty, _, maxQty = GetCurrencyListInfo(i)
+            if not isHeader and name then
+                local lname = name:lower()
+                if lname:find("honor") then
+                    honorCurr = math.floor(qty or 0)
+                    honorMax  = (maxQty and maxQty > 0) and math.floor(maxQty) or 75000
+                elseif lname:find("arena") then
+                    arenaPts  = math.floor(qty or 0)
+                end
+            end
         end
-        return nil, nil
+        -- Re-collapse headers we opened
+        for i = #toCollapse, 1, -1 do
+            ExpandCurrencyList(toCollapse[i], 0)
+        end
     end
-    do
-        local hc, hm = getCurrencyAmt(1901)   -- Honor
-        if hc then
-            honorCurr = hc
-            honorMax  = (hm and hm > 0) and hm or 75000
-        end
-        local ap = getCurrencyAmt(1602)        -- Arena Points
-        if ap then arenaPts = ap end
-    end
-    -- Legacy fallbacks (present on some TBC builds)
+    scanCurrencyList()
+    -- WotLK+ fallbacks (nil on TBC Anniversary — kept for forward compat)
     if honorCurr == 0 and GetHonorCurrency then
         local c, m = GetHonorCurrency()
         honorCurr = math.floor(c or 0)
