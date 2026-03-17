@@ -2,7 +2,7 @@
 ## Title: Sly Error
 ## Notes: Shared error capture, storage and diagnostics for the SlySuite addon family. /slyerror
 ## Version: 1.0.0
-## X-Curse-Project-ID: 0
+## X-Curse-Project-ID: 1470424
 ## Author: Sly
 ## SavedVariables: SlyErrorDB
 

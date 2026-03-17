@@ -24,7 +24,7 @@
                        "description":  "Top-level addon manager and error sandbox for the Sly addon family.",
                        "sourceDir":  "addons\\SlySuite",
                        "version":  "1.3.0",
-                       "curseProjectId":  ""
+                       "curseProjectId":  "1470424"
                    },
                    {
                        "name":  "SlySuite_Error",
