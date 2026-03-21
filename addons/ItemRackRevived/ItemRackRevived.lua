@@ -58,9 +58,10 @@ IRR.QUALITY_COLORS = {
 -- Default SavedVariables structure
 -- -------------------------------------------------------
 local DB_DEFAULTS = {
-    sets      = {},                             -- { [setName] = { [slotId] = itemId, ... } }
-    specLinks = {},                             -- { [setName] = 1 or 2 }  dual-spec link
-    setIcons  = {},                             -- { [setName] = texture path }
+    sets      = {},                             -- legacy flat sets (migrated on first login)
+    specLinks = {},
+    setIcons  = {},
+    chars     = {},                             -- { ["Realm-Char"] = { sets, specLinks, setIcons } }
     position  = { point="CENTER", x=0, y=0 },
     options  = {
         showTooltips  = true,
@@ -86,6 +87,7 @@ end
 -- -------------------------------------------------------
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_LOGOUT")
 eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -100,6 +102,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             IRR.db = ItemRackRevivedDB
             IRR_Init()
         end
+
+    elseif event == "PLAYER_LOGIN" then
+        IRR_ResolveCharDB()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Refresh slots after loading screen
@@ -121,6 +126,76 @@ end)
 -- -------------------------------------------------------
 -- Init
 -- -------------------------------------------------------
+function IRR_ResolveCharDB()
+    local realm   = GetRealmName() or "Unknown"
+    local char    = UnitName("player") or "Unknown"
+    local charKey = realm .. "-" .. char
+
+    -- Ensure this character's subtable exists
+    IRR.db.chars = IRR.db.chars or {}
+    if not IRR.db.chars[charKey] then
+        IRR.db.chars[charKey] = { sets={}, specLinks={}, setIcons={} }
+    end
+    local cdb = IRR.db.chars[charKey]
+
+    -- One-time migration: copy old account-wide sets to the first char that logs in
+    if IRR.db._migrated ~= true then
+        IRR.db._migrated = true
+        local count = 0
+        for sn, sd in pairs(IRR.db.sets or {}) do
+            if not cdb.sets[sn] then
+                cdb.sets[sn] = sd ; count = count + 1
+            end
+        end
+        for sn, sv in pairs(IRR.db.specLinks or {}) do
+            if not cdb.specLinks[sn] then cdb.specLinks[sn] = sv end
+        end
+        for sn, sv in pairs(IRR.db.setIcons or {}) do
+            if not cdb.setIcons[sn] then cdb.setIcons[sn] = sv end
+        end
+        -- Wipe root-level keys so they don't persist as legacy data
+        IRR.db.sets      = nil
+        IRR.db.specLinks = nil
+        IRR.db.setIcons  = nil
+        if count > 0 then
+            print("|cff00ccff[ItemRack Revived]|r Migrated |cffffcc00" .. count
+                .. "|r set(s) to |cffffcc00" .. char .. "|r.")
+        end
+    end
+
+    -- Migration from old per-char SavedVariables (ItemRackRevivedCharDB from prior implementation)
+    if ItemRackRevivedCharDB and next(ItemRackRevivedCharDB.sets or {}) then
+        local count = 0
+        for sn, sd in pairs(ItemRackRevivedCharDB.sets) do
+            if not cdb.sets[sn] then cdb.sets[sn] = sd ; count = count + 1 end
+        end
+        for sn, sv in pairs(ItemRackRevivedCharDB.specLinks or {}) do
+            if not cdb.specLinks[sn] then cdb.specLinks[sn] = sv end
+        end
+        for sn, sv in pairs(ItemRackRevivedCharDB.setIcons or {}) do
+            if not cdb.setIcons[sn] then cdb.setIcons[sn] = sv end
+        end
+        -- Wipe so it doesn't persist into the old variable on next save
+        ItemRackRevivedCharDB.sets      = {}
+        ItemRackRevivedCharDB.specLinks = {}
+        ItemRackRevivedCharDB.setIcons  = {}
+        if count > 0 then
+            print("|cff00ccff[ItemRack Revived]|r Recovered |cffffcc00" .. count
+                .. "|r set(s) from legacy storage.")
+        end
+    end
+
+    -- Redirect IRR.db.sets/specLinks/setIcons to this character's tables.
+    -- position and options remain at root level — unchanged everywhere.
+    IRR.db.sets      = cdb.sets
+    IRR.db.specLinks = cdb.specLinks
+    IRR.db.setIcons  = cdb.setIcons
+
+    -- Refresh UI if already built
+    if IRR_UpdateSetsList then IRR_UpdateSetsList() end
+    if SC_RefreshSets then SC_RefreshSets() end
+end
+
 function IRR_Init()
     local ok, err = pcall(IRR_BuildUI)
     if not ok then

@@ -175,16 +175,18 @@ function SlySuite_Register(name, version, initFn, options)
     end
 
     local entry = {
-        name        = name,
-        version     = version or "?",
-        initFn      = initFn,
-        description = options.description or "",
-        slash       = options.slash or "",
-        icon        = options.icon or "Interface\\Icons\\INV_Misc_QuestionMark",
-        status      = dbRecord.enabled and SS.STATUS.LOADING or SS.STATUS.DISABLED,
-        lastError   = dbRecord.lastError,
+        name          = name,
+        version       = version or "?",
+        initFn        = initFn,
+        description   = options.description or "",
+        slash         = options.slash or "",
+        icon          = options.icon or "Interface\\Icons\\INV_Misc_QuestionMark",
+        contentFn     = options.contentFn,   -- function(frame, w, h) — builds into sidebar page
+        launchFn      = options.launchFn,    -- function() — opens something externally
+        status        = dbRecord.enabled and SS.STATUS.LOADING or SS.STATUS.DISABLED,
+        lastError     = dbRecord.lastError,
         lastErrorTime = dbRecord.lastErrorTime,
-        dbRecord    = dbRecord,
+        dbRecord      = dbRecord,
     }
 
     -- Remove old entry from ordered list if re-registering
@@ -296,8 +298,14 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
             SS.ready = true
 
-            -- Build the UI panel
-            SS_BuildUI()
+            -- Lazy-build the sidebar on first use; just hook the J keybind now.
+            -- SS_BuildUI() is called by SS_ToggleUI() on first press.
+            local _jBtn = CreateFrame("Button", "SlySuiteKeyBindButton", UIParent)
+            _jBtn:Hide()
+            _jBtn:RegisterForClicks("AnyUp")
+            _jBtn:SetScript("OnClick", function() SS_ToggleUI() end)
+            -- SetOverrideBindingClick takes priority over all default bindings (inc. guild J)
+            SetOverrideBindingClick(_jBtn, true, "J", "SlySuiteKeyBindButton")
 
             -- Init any mods that registered before ADDON_LOADED fired (edge case)
             for _, entry in ipairs(SS.registry) do
@@ -308,7 +316,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 end
             end
 
-            SS_UIRefreshAll()
+            if SS_UIRefreshAll then SS_UIRefreshAll() end
 
             -- Backfill in-memory log from persisted log
             SS.errorLogMem = SS.errorLogMem or {}
@@ -349,7 +357,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
             if SS.db.options.showOnLoad then
-                SlyFrame:Show()
+                SS_ToggleUI()
             end
         end
 
@@ -372,10 +380,7 @@ SlashCmdList["SLYSUITE"] = function(msg)
     msg = strtrim(msg):lower()
 
     if msg == "" or msg == "toggle" then
-        if SlyFrame then
-            if SlyFrame:IsShown() then SlyFrame:Hide()
-            else SS_UIRefreshAll(); SlyFrame:Show() end
-        end
+        SS_ToggleUI()
 
     elseif msg == "status" then
         print("|cff00ccff[Sly Suite]|r Sub-mod status:")

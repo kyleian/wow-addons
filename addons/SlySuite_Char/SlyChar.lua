@@ -114,20 +114,23 @@ local function SC_Slash(msg)
         DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Position reset.")
     elseif msg == "stats" then
         SC_ShowMain()
-        SC_SwitchTab("stats")
+        if SC_ToggleFlyout then SC_ToggleFlyout("stats")
+        else SC_SwitchTab("stats") end
     elseif msg == "sets" then
         SC_ShowMain()
         if SC_SetSetsSubTab then SC_SetSetsSubTab("gear") end
-        SC_SwitchTab("sets")
+        if SC_ToggleFlyout then SC_ToggleFlyout("sets")
+        else SC_SwitchTab("sets") end
         if SC_RefreshSetsSub then SC_RefreshSetsSub() end
     elseif msg == "bars" then
         SC_ShowMain()
         if SC_SetSetsSubTab then SC_SetSetsSubTab("bars") end
-        SC_SwitchTab("sets")
+        if SC_ToggleFlyout then SC_ToggleFlyout("sets")
+        else SC_SwitchTab("sets") end
         if SC_RefreshSetsSub then SC_RefreshSetsSub() end
     elseif msg == "rep" then
         SC_ShowMain()
-        if SC_SetMiscSubTab then SC_SetMiscSubTab("rep") end
+        if SC_ToggleWing then SC_ToggleWing("rep") end
         SC_SwitchTab("misc")
         if SC_RefreshMisc then SC_RefreshMisc() end
     elseif msg == "skills" then
@@ -276,9 +279,6 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
                 SC_RefreshStats  = SlyError.guard(SC_RefreshStats,  "SlyChar:RefreshStats")
                 SC_RefreshSlots  = SlyError.guard(SC_RefreshSlots,  "SlyChar:RefreshSlots")
                 SC_RefreshSets   = SlyError.guard(SC_RefreshSets,   "SlyChar:RefreshSets")
-                if SC_RefreshMisc then
-                    SC_RefreshMisc = SlyError.guard(SC_RefreshMisc, "SlyChar:RefreshMisc")
-                end
                 if SC_RefreshAll then
                     SC_RefreshAll  = SlyError.guard(SC_RefreshAll,  "SlyChar:RefreshAll")
                 end
@@ -290,11 +290,56 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             SlashCmdList["SLYCHAR"] = SC_Slash
 
             if SlySuiteDataFrame and SlySuiteDataFrame.Register then
+                -- Main character panel registration
                 SlySuiteDataFrame.Register(ADDON_NAME, SC.version, function() end, {
                     description = "Movable character sheet: gear, model, stats, sets, reputation, skills. Press C.",
                     slash       = "/slychar",
                     icon        = "Interface\\Icons\\INV_Misc_PocketWatch_01",
                 })
+
+                -- Wing items registered as SlySuite sidebar modules (launchFn)
+                local function WingMod(name, ver, icon, tip, key)
+                    SlySuiteDataFrame.Register(name, ver, function() end, {
+                        description = tip,
+                        icon        = icon,
+                        launchFn    = function()
+                            if SC_BuildMain and not SlyCharMainFrame then SC_BuildMain() end
+                            SC_ToggleWing(key)
+                        end,
+                    })
+                end
+                WingMod("Reputation",    SC.version, "Interface\\Icons\\Achievement_Reputation_01",    "Faction standings & rep progress",         "rep")
+                WingMod("Skills",        SC.version, "Interface\\Icons\\INV_Misc_Book_09",              "Professions and secondary skills",          "skills")
+                WingMod("Honor",         SC.version, "Interface\\Icons\\PVPCurrency-Honor-Alliance",    "PvP honor, HKs and arena points",           "honor")
+                WingMod("Talents",       SC.version, "Interface\\Icons\\Ability_Rogue_Preparation",     "Talent tree",                               "talents")
+                WingMod("Spellbook",     SC.version, "Interface\\Icons\\INV_Misc_Book_01",              "All spells and abilities",                  "spells")
+                WingMod("Macros",        SC.version, "Interface\\Icons\\INV_Misc_Note_01",              "Class macro library (by spec)",             "macros")
+                WingMod("Friends",       SC.version, "Interface\\Icons\\INV_Misc_GroupNeedMore",        "Online friends and guild members",          "social")
+                WingMod("Lockouts",      SC.version, "Interface\\Icons\\INV_Misc_PocketWatch_02",       "Alt instance lockouts and layer detection", "nit")
+
+                -- Native WoW panels as launch modules
+                local function NativeMod(name, ver, icon, tip, fn)
+                    SlySuiteDataFrame.Register(name, ver, function() end, {
+                        description = tip,
+                        icon        = icon,
+                        launchFn    = fn,
+                    })
+                end
+                NativeMod("Quest Log",  SC.version, "Interface\\Icons\\Achievement_Quests_Completed_Wow", "Active quests and objectives",
+                    function() if SC_OpenPanel then SC_OpenPanel("Blizzard_QuestLog", "QuestLogFrame", ToggleQuestLog) end end)
+                NativeMod("World Map",  SC.version, "Interface\\Icons\\INV_Misc_Map_01",                   "World map and zone locations",
+                    function() if SC_OpenPanel then SC_OpenPanel("Blizzard_MapCanvas", "WorldMapFrame", ToggleWorldMap) end end)
+                NativeMod("Bags",       SC.version, "Interface\\Icons\\INV_Misc_Bag_10",                   "Bag window",
+                    function()
+                        if SlyBagFrame then
+                            if SlyBagFrame:IsShown() then SlyBagFrame:Hide()
+                            else if SlyBag_Refresh then SlyBag_Refresh() end ; SlyBagFrame:Show() end
+                        end
+                    end)
+                NativeMod("Loot / SR",  SC.version, "Interface\\Icons\\Achievement_General_15",           "Soft-res and loot roll tracker",
+                    function() if SL_OpenSRTab then SL_OpenSRTab() elseif SL_BuildUI then SL_BuildUI() end end)
+                NativeMod("Whelp",      SC.version, "Interface\\Icons\\INV_Misc_Orb_02",                   "Vendor ratings and reviews",
+                    function() local wp = _G["SlyWhelpPanelFrame"] ; if wp then if wp:IsShown() then wp:Hide() else wp:Show() end end end)
             end
         end
 
@@ -316,15 +361,13 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "UPDATE_FACTION" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "misc" then
-            if SC_RefreshMisc then SC_RefreshMisc() end
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+            if SC_RefreshReputation then SC_RefreshReputation() end
         end
 
     elseif event == "SKILL_LINES_CHANGED" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "misc" then
-            if SC_RefreshMisc then SC_RefreshMisc() end
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+            if SC_RefreshSkills then SC_RefreshSkills() end
         end
 
     elseif event == "PLAYER_TARGET_CHANGED" then

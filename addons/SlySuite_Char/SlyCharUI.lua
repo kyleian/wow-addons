@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyCharUI.lua
 -- Movable character sheet: gear slots, player model,
 -- Stats tab (base + ECS), Gear Sets tab (IRR)
@@ -29,13 +29,15 @@ end
 SlyCharMainFrame = nil   -- global ref, set at end of SC_BuildMain
 
 -- ---- Layout ----
-local FRAME_W      = 732
+local CHAR_W          = 370
+local FLYOUT_TOGGLE_W = 24     -- thin toggle-button strip on right edge of char
+local FLYOUT_PANEL_W  = 330    -- flyout content panel (Stats / Sets)
+local FRAME_W         = CHAR_W + FLYOUT_TOGGLE_W  -- 394 (default, collapsed)
 local FRAME_H      = 404
 local HDR_H        = 30
 local FOOT_H       = 20
-local CHAR_W       = 370
-local BTN_STRIP_W  = 32
-local SIDE_W       = FRAME_W - CHAR_W - BTN_STRIP_W  -- 330
+local BTN_STRIP_W  = FLYOUT_TOGGLE_W  -- compat alias
+local SIDE_W       = FLYOUT_PANEL_W   -- compat alias (used in content-row sizing)
 local WING_W       = 360  -- expandable right-side wing panel
 local PAD      = 8
 local SLOT_S   = 38
@@ -212,7 +214,7 @@ local headerInfo    = nil
 local headerGS      = nil
 
 local MAX_STAT_ROWS  = 60
-local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
+local MAX_SET_ROWS        = 11   -- visible rows (11 * 28px = 308px panel height)
 local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, bisContent=nil, subGearBtn=nil, subBarsBtn=nil, subBisBtn=nil }
@@ -2080,8 +2082,8 @@ end
 local function BuildSetRows(parent)
     for i = 1, MAX_SET_ROWS do
         local row = CreateFrame("Frame", nil, parent)
-        row:SetSize(SIDE_W - PAD*2 - 16, 22)
-        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((i-1)*22))
+        row:SetSize(SIDE_W - PAD*2 - 16, 28)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((i-1)*28))
 
         local bg = row:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(row)
@@ -2336,6 +2338,19 @@ function SC_RefreshBars()
     end
 end
 
+StaticPopupDialogs["SC_OVERWRITE_SET"] = {
+    text = "Overwrite set \"%s\" with your currently equipped gear?",
+    button1 = "Overwrite",
+    button2 = "Cancel",
+    OnAccept = function(_, data)
+        if IRR_SaveCurrentSet then IRR_SaveCurrentSet(data.setName) end
+        SC_RefreshSets()
+        DEFAULT_CHAT_FRAME:AddMessage(
+            "|cff88bbff[SlyChar]|r Overwrote: |cffffd700"..data.setName.."|r")
+    end,
+    timeout = 0, whileDead = true, hideOnEscape = true,
+}
+
 function SC_SetSetsSubTab(key)
     setsUI.subTab = key
 end
@@ -2476,10 +2491,7 @@ function SC_RefreshSets()
 
         w.saveBtn:EnableMouse(true)
         w.saveBtn:SetScript("OnClick", function()
-            if IRR_SaveCurrentSet then
-                IRR_SaveCurrentSet(name)
-                SC_RefreshSets()
-            end
+            StaticPopup_Show("SC_OVERWRITE_SET", name, nil, {setName=name})
         end)
 
         w.delBtn:EnableMouse(true)
@@ -4007,7 +4019,7 @@ end
 
 -- Resolve a UI panel frame, loading its LoD addon if needed.
 -- If the frame still doesn't exist, call fallbackFn() instead.
-local function SC_OpenPanel(addonName, frameGlobal, fallbackFn)
+function SC_OpenPanel(addonName, frameGlobal, fallbackFn)
     if not _G[frameGlobal] and LoadAddOn then
         LoadAddOn(addonName)
     end
@@ -4299,7 +4311,7 @@ function SC_BuildMain()
     if SlyCharMainFrame then return end
 
     local f = CreateFrame("Frame", "SlyCharMainFrame", UIParent)
-    f:SetSize(FRAME_W, FRAME_H)
+    f:SetSize(CHAR_W + 1 + FLYOUT_PANEL_W, FRAME_H)
     f:SetFrameStrata("DIALOG")
     f:SetFrameLevel(100)  -- pre-set above CharacterFrame; avoid level changes in combat
     f:SetMovable(true)
@@ -4326,18 +4338,21 @@ function SC_BuildMain()
 
     -- Header
     local hdr = CreateFrame("Frame", nil, f)
-    hdr:SetSize(FRAME_W, HDR_H)
-    hdr:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    hdr:SetHeight(HDR_H)
+    hdr:SetPoint("TOPLEFT",  f, "TOPLEFT",  0, 0)
+    hdr:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
     themeRefs.hdrBg = FillBg(hdr, 0.09, 0.09, 0.14, 1)
 
     headerName = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     headerName:SetFont(headerName:GetFont(), 13, "OUTLINE")
-    headerName:SetPoint("LEFT", hdr, "LEFT", PAD, 0)
+    headerName:SetPoint("LEFT", hdr, "LEFT", PAD, 5)
     headerName:SetText("...")
 
     headerInfo = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    headerInfo:SetFont(headerInfo:GetFont(), 10, "")
-    headerInfo:SetPoint("CENTER", hdr, "CENTER", 0, 0)
+    headerInfo:SetFont(headerInfo:GetFont(), 9, "")
+    headerInfo:SetPoint("BOTTOMLEFT", hdr, "BOTTOMLEFT", PAD, 4)
+    headerInfo:SetWidth(CHAR_W - PAD - 152)   -- leave room for right-side buttons
+    headerInfo:SetJustifyH("LEFT")
     headerInfo:SetTextColor(0.65, 0.65, 0.65)
 
     -- Plain (non-secure) close button — works in combat, no UIPanelCloseButton template
@@ -4452,8 +4467,9 @@ function SC_BuildMain()
     end)
 
     local hdrSep = f:CreateTexture(nil, "ARTWORK")
-    hdrSep:SetSize(FRAME_W, 1)
-    hdrSep:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -HDR_H)
+    hdrSep:SetHeight(1)
+    hdrSep:SetPoint("TOPLEFT",  f, "TOPLEFT",  0, -HDR_H)
+    hdrSep:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -HDR_H)
     hdrSep:SetColorTexture(0.25, 0.25, 0.32, 1)
     themeRefs.hdrSep = hdrSep
 
@@ -4520,55 +4536,60 @@ function SC_BuildMain()
         end
     end)
 
-    -- Side panel
-    local side = CreateFrame("Frame", nil, f)
-    side:SetSize(SIDE_W, FRAME_H - HDR_H - FOOT_H)
-    side:SetPoint("TOPLEFT", f, "TOPLEFT", CHAR_W + 1, -HDR_H)
-    themeRefs.sideBg = FillBg(side, 0.05, 0.05, 0.08, 1)
+    -- Side panel (Stats / Sets) — starts right after charDiv, always visible
+    local flyoutPanel = CreateFrame("Frame", nil, f)
+    flyoutPanel:SetSize(FLYOUT_PANEL_W, FRAME_H - HDR_H - FOOT_H)
+    flyoutPanel:SetPoint("TOPLEFT", f, "TOPLEFT", CHAR_W + 1, -HDR_H)
+    themeRefs.sideBg = FillBg(flyoutPanel, 0.05, 0.04, 0.08, 1)
 
-    local tabBar = CreateFrame("Frame", nil, side)
-    tabBar:SetSize(SIDE_W, 24)
-    tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
-    themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
+    local tcY = 0
+    local tcH    = FRAME_H - HDR_H - FOOT_H
+    local FLY_TAB_H = 22   -- tab strip at top of panel
 
-    local tabDefs = {
-        {key="stats",  label="Stats"},
-        {key="sets",   label="Sets"},
-        {key="misc",   label="Apps"},
-    }
-    local tbW = math.floor(SIDE_W / #tabDefs)
-    for i, td in ipairs(tabDefs) do
-        local btn = CreateFrame("Button", nil, tabBar)
-        btn:SetSize(tbW, 24)
-        btn:SetPoint("TOPLEFT", tabBar, "TOPLEFT", (i-1)*tbW, 0)
-
-        local tbg = btn:CreateTexture(nil, "BACKGROUND")
-        tbg:SetAllPoints(btn) ; tbg:SetColorTexture(0.06,0.06,0.09,1)
-
-        local ttx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ttx:SetFont(ttx:GetFont(), 10, "")
-        ttx:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        ttx:SetText(td.label) ; ttx:SetTextColor(0.55, 0.55, 0.60)
-
-        btn:SetScript("OnClick", function()
-            SC_SwitchTab(td.key) ; SC_RefreshAll()
-        end)
-        tabBtnWidgets[td.key] = {btn=btn, bg=tbg, txt=ttx}
+    local activeFlyout = "stats"
+    SC_ToggleFlyout = function(key)
+        activeFlyout = key
+        SC_SwitchTab(key)
+        for k, tb in pairs(tabBtnWidgets) do
+            local active = (k == key)
+            if tb.bg then tb.bg:SetColorTexture(active and 0.16 or 0.08, active and 0.12 or 0.06, active and 0.26 or 0.14, 1) end
+        end
+        if key == "stats" then SC_RefreshStats() elseif key == "sets" then SC_RefreshSetsSub() end
     end
 
-    local tabSep = side:CreateTexture(nil, "ARTWORK")
-    tabSep:SetSize(SIDE_W, 1)
-    tabSep:SetPoint("TOPLEFT", side, "TOPLEFT", 0, -24)
-    tabSep:SetColorTexture(0.20, 0.20, 0.27, 1)
-    themeRefs.tabSep = tabSep
+    -- Tab strip at top of flyout panel (Stats | Gear Sets)
+    local flyTabSep = flyoutPanel:CreateTexture(nil, "ARTWORK")
+    flyTabSep:SetHeight(1)
+    flyTabSep:SetPoint("TOPLEFT",  flyoutPanel, "TOPLEFT",  0, -FLY_TAB_H)
+    flyTabSep:SetPoint("TOPRIGHT", flyoutPanel, "TOPRIGHT", 0, -FLY_TAB_H)
+    flyTabSep:SetColorTexture(0.20, 0.20, 0.30, 1)
+    local _flyTabDefs = {
+        {key="stats", lbl="Stats",     r=0.30, g=0.60, b=1.00},
+        {key="sets",  lbl="Gear Sets", r=0.65, g=0.35, b=1.00},
+    }
+    local FLY_TAB_BTN_W = math.floor(FLYOUT_PANEL_W / 2)
+    for i, def in ipairs(_flyTabDefs) do
+        local btn = CreateFrame("Button", nil, flyoutPanel)
+        btn:SetSize(FLY_TAB_BTN_W, FLY_TAB_H)
+        btn:SetPoint("TOPLEFT", flyoutPanel, "TOPLEFT", (i-1)*FLY_TAB_BTN_W, 0)
+        btn:EnableMouse(true) ; btn:RegisterForClicks("LeftButtonUp")
+        local bbg = btn:CreateTexture(nil, "BACKGROUND")
+        bbg:SetAllPoints() ; bbg:SetColorTexture(def.r*0.08, def.g*0.08, def.b*0.08, 1)
+        local btx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        btx:SetFont(btx:GetFont(), 9, "OUTLINE") ; btx:SetAllPoints()
+        btx:SetJustifyH("CENTER") ; btx:SetJustifyV("MIDDLE")
+        btx:SetText(def.lbl) ; btx:SetTextColor(def.r*0.65+0.35, def.g*0.65+0.35, def.b*0.65+0.35)
+        local bhl = btn:CreateTexture(nil, "HIGHLIGHT")
+        bhl:SetAllPoints() ; bhl:SetColorTexture(1, 1, 1, 0.10)
+        local capDef = def
+        btn:SetScript("OnClick", function() SC_ToggleFlyout(capDef.key) end)
+        tabBtnWidgets[def.key] = {btn=btn, bg=bbg, txt=btx}
+    end
 
-    local tcY = -25
-    local tcH = FRAME_H - HDR_H - FOOT_H - 25
-
-    local statsTab = CreateFrame("Frame", nil, side)
-    statsTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    statsTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    statsTab:SetHeight(tcH) ; statsTab:Hide()
+    local statsTab = CreateFrame("Frame", nil, flyoutPanel)
+    statsTab:SetPoint("TOPLEFT",  flyoutPanel, "TOPLEFT",  0, -(FLY_TAB_H+1))
+    statsTab:SetPoint("TOPRIGHT", flyoutPanel, "TOPRIGHT", 0, -(FLY_TAB_H+1))
+    statsTab:SetHeight(tcH - FLY_TAB_H - 1) ; statsTab:Hide()
     tabFrames["stats"] = statsTab
 
     local statsScroll = CreateFrame("ScrollFrame", nil, statsTab, "UIPanelScrollFrameTemplate")
@@ -4579,10 +4600,10 @@ function SC_BuildMain()
     statsScroll:SetScrollChild(statsCont)
     BuildStatRows(statsCont)
 
-    local setsTab = CreateFrame("Frame", nil, side)
-    setsTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    setsTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    setsTab:SetHeight(tcH) ; setsTab:Hide()
+    local setsTab = CreateFrame("Frame", nil, flyoutPanel)
+    setsTab:SetPoint("TOPLEFT",  flyoutPanel, "TOPLEFT",  0, -(FLY_TAB_H+1))
+    setsTab:SetPoint("TOPRIGHT", flyoutPanel, "TOPRIGHT", 0, -(FLY_TAB_H+1))
+    setsTab:SetHeight(tcH - FLY_TAB_H - 1) ; setsTab:Hide()
     tabFrames["sets"] = setsTab
 
     -- Sub-tab strip: [Gear Sets][Bars][BIS]
@@ -4614,7 +4635,7 @@ function SC_BuildMain()
     local gearContent = CreateFrame("Frame", nil, setsTab)
     gearContent:SetPoint("TOPLEFT",  setsTab, "TOPLEFT",  0, -17)
     gearContent:SetPoint("TOPRIGHT", setsTab, "TOPRIGHT", 0, -17)
-    gearContent:SetHeight(tcH - 17)
+    gearContent:SetHeight(tcH - FLY_TAB_H - 1 - 17)
     setsUI.gearContent = gearContent
 
     local saveLbl = gearContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -4633,12 +4654,16 @@ function SC_BuildMain()
     saveBtn:SetText("Save")
     local function doSave()
         local sn = saveInput:GetText()
-        if sn and sn:trim() ~= "" and IRR_SaveCurrentSet then
-            IRR_SaveCurrentSet(sn:trim())
+        if not sn or sn:trim() == "" or not IRR_SaveCurrentSet then return end
+        sn = sn:trim()
+        if IRR and IRR.db and IRR.db.sets and IRR.db.sets[sn] then
+            StaticPopup_Show("SC_OVERWRITE_SET", sn, nil, {setName=sn})
+        else
+            IRR_SaveCurrentSet(sn)
             saveInput:SetText("") ; saveInput:ClearFocus()
             SC_RefreshSets()
             DEFAULT_CHAT_FRAME:AddMessage(
-                "|cff88bbff[SlyChar]|r Saved: |cffffd700"..sn:trim().."|r")
+                "|cff88bbff[SlyChar]|r Saved: |cffffd700"..sn.."|r")
         end
     end
     saveBtn:SetScript("OnClick", doSave)
@@ -4651,7 +4676,7 @@ function SC_BuildMain()
 
     local setsCont = CreateFrame("Frame", nil, gearContent)
     setsCont:SetPoint("TOPLEFT", gearContent, "TOPLEFT", PAD, -48)
-    setsCont:SetSize(SIDE_W - PAD*2, MAX_SET_ROWS * 22)
+    setsCont:SetSize(SIDE_W - PAD*2, MAX_SET_ROWS * 28)
     BuildSetRows(setsCont)
 
     local setsInfo = gearContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -4772,412 +4797,6 @@ function SC_BuildMain()
     end)
 
     -- Apps tab — centralized launcher for all panels & wing flyouts
-    local miscTab = CreateFrame("Frame", nil, side)
-    miscTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    miscTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    miscTab:SetHeight(tcH) ; miscTab:Hide()
-    tabFrames["misc"] = miscTab
-
-    -- Build the apps grid lazily on first show (ensures wingFrame exists)
-    local appsBuilt = false
-    miscTab:SetScript("OnShow", function()
-        if appsBuilt then return end
-        appsBuilt = true
-        local APP_ITEMS = {
-            { tip="Reputation",      desc="Factions & standing",             lbl="Rep", r=0.70, g=0.85, b=1.00,
-              fn=function() SC_ToggleWing("rep")    end },
-            { tip="Skills",          desc="Professions & secondary skills",  lbl="Sk",  r=0.65, g=1.00, b=0.65,
-              fn=function() SC_ToggleWing("skills") end },
-            { tip="Honor",           desc="PvP honor, HKs & arena points",  lbl="Hk",  r=1.00, g=0.45, b=0.45,
-              fn=function() SC_ToggleWing("honor")  end },
-            { tip="Talents",         desc="Talent tree",                     lbl="T",   r=0.75, g=0.50, b=1.00,
-              fn=function() SC_ToggleSidePanel(SC_GetTalentFrame()) end },
-            { tip="Spellbook",       desc="Spells & abilities",              lbl="Sp",  r=0.35, g=0.70, b=1.00,
-              fn=function() SC_OpenPanel("Blizzard_SpellBookUI","SpellBookFrame",ToggleSpellBook) end },
-            { tip="Quest Log",       desc="Active quests",                   lbl="Q",   r=1.00, g=0.78, b=0.15,
-              fn=function() SC_OpenPanel("Blizzard_QuestLog","QuestLogFrame",ToggleQuestLog) end },
-            { tip="World Map",       desc="World map & locations",           lbl="M",   r=0.25, g=0.85, b=0.30,
-              fn=function() SC_OpenPanel("Blizzard_MapCanvas","WorldMapFrame",ToggleWorldMap) end },
-            { tip="Bags",            desc="Bag window",                      lbl="B",   r=0.85, g=0.65, b=0.20,
-              fn=function()
-                  if SlyBagFrame then
-                      if SlyBagFrame:IsShown() then SlyBagFrame:Hide()
-                      else
-                          if SlyBag_Refresh then SlyBag_Refresh() end
-                          SlyBagFrame:ClearAllPoints()
-                          SlyBagFrame:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
-                          SlyBagFrame:Show()
-                      end
-                  end
-              end },
-            { tip="Loot SR",         desc="Soft Res & loot rolls",           lbl="SR",  r=0.20, g=0.90, b=0.50,
-              fn=function()
-                  if SlyLootPanel and SlyLootPanel:IsShown() then SlyLootPanel:Hide() ; return end
-                  if SL_OpenSRTab then SL_OpenSRTab() elseif SL_BuildUI then SL_BuildUI() end
-                  if SlyCharMainFrame and SlyLootPanel and SlyLootPanel:IsShown() then
-                      SlyLootPanel:SetUserPlaced(true)
-                      SlyLootPanel:ClearAllPoints()
-                      SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
-                  end
-              end },
-            { tip="Whelp",           desc="Vendor ratings & reviews",        lbl="Wh",  r=0.20, g=0.78, b=1.00,
-              fn=function()
-                  local wp = _G["SlyWhelpPanelFrame"]
-                  if wp then if wp:IsShown() then wp:Hide() else wp:Show() end end
-              end },
-            { tip="Class Macros",    desc="Macro library for your class",    lbl="Mc",  r=0.95, g=0.70, b=0.20,
-              fn=function() SC_ToggleWing("macros") end },
-            { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.40, g=0.90, b=0.60,
-              fn=function() SC_ToggleWing("social") end },
-            { tip="Lockouts",        desc="Alt lockouts & layer detection",   lbl="NIT", r=0.30, g=0.80, b=1.00,
-              fn=function() SC_ToggleWing("nit")    end },
-        }
-        -- 2-column grid: ceil(13/2)=7 rows × 44px = 322px + 4px top pad = 326px ≤ tcH(329)
-        local ROW_H   = 44
-        local COL_GAP = 4
-        local appW    = SIDE_W - PAD * 2                          -- 314
-        local colW    = math.floor((appW - COL_GAP) / 2)         -- 155
-        for i, item in ipairs(APP_ITEMS) do
-            local col    = (i - 1) % 2                           -- 0 = left, 1 = right
-            local rowIdx = math.floor((i - 1) / 2)              -- 0-based row
-            local xOff   = PAD + col * (colW + COL_GAP)
-            local yOff   = -(rowIdx * (ROW_H + 2) + 4)
-
-            local btn = CreateFrame("Button", nil, miscTab)
-            btn:SetSize(colW, ROW_H)
-            btn:SetPoint("TOPLEFT", miscTab, "TOPLEFT", xOff, yOff)
-            btn:EnableMouse(true)
-
-            local rbg = btn:CreateTexture(nil, "BACKGROUND")
-            rbg:SetAllPoints(btn)
-            rbg:SetColorTexture(item.r*0.07, item.g*0.07, item.b*0.07, 1)
-            btn._rbg = rbg
-
-            local accent = btn:CreateTexture(nil, "ARTWORK")
-            accent:SetSize(3, ROW_H)
-            accent:SetPoint("LEFT", btn, "LEFT", 0, 0)
-            accent:SetColorTexture(item.r, item.g, item.b, 0.85)
-
-            local titleLbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            titleLbl:SetFont(titleLbl:GetFont(), 10, "OUTLINE")
-            titleLbl:SetPoint("TOPLEFT", btn, "TOPLEFT", 8, -6)
-            titleLbl:SetWidth(colW - 10) ; titleLbl:SetJustifyH("LEFT")
-            titleLbl:SetText(item.tip)
-            titleLbl:SetTextColor(
-                math.min(item.r * 0.80 + 0.20, 1),
-                math.min(item.g * 0.80 + 0.20, 1),
-                math.min(item.b * 0.80 + 0.20, 1))
-
-            local descLbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            descLbl:SetFont(descLbl:GetFont(), 8, "")
-            descLbl:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 8, 5)
-            descLbl:SetWidth(colW - 10) ; descLbl:SetJustifyH("LEFT")
-            descLbl:SetText(item.desc)
-            descLbl:SetTextColor(0.45, 0.45, 0.55)
-
-            btn:SetScript("OnEnter", function()
-                rbg:SetColorTexture(item.r*0.20, item.g*0.20, item.b*0.20, 1)
-            end)
-            btn:SetScript("OnLeave", function()
-                rbg:SetColorTexture(item.r*0.07, item.g*0.07, item.b*0.07, 1)
-            end)
-            btn:SetScript("OnClick", function() item.fn() end)
-        end
-    end)
-
-    -- NIT tab is now a wing flyout; no side-panel tab for social.
-
-    -- Quick-launch button strip (right edge)
-    local stripDiv = f:CreateTexture(nil, "ARTWORK")
-    stripDiv:SetSize(1, FRAME_H - HDR_H - FOOT_H)
-    stripDiv:SetPoint("TOPLEFT", f, "TOPLEFT", CHAR_W + 1 + SIDE_W, -HDR_H)
-    stripDiv:SetColorTexture(0.20, 0.20, 0.27, 1)
-
-    local btnStrip = CreateFrame("Frame", nil, f)
-    btnStrip:SetSize(BTN_STRIP_W, FRAME_H - HDR_H - FOOT_H)
-    btnStrip:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -HDR_H)
-    ThemeFill(btnStrip, "sideBg", 0.05, 0.04, 0.08, 1)
-
-    local STRIP_BTNS = {
-        { tip="Reputation",  desc="Factions & standing",           lbl="Rep", r=0.70, g=0.85, b=1.00,
-          fn=function() SC_ToggleWing("rep")    end },
-        { tip="Skills",      desc="Professions & secondary skills", lbl="Sk",  r=0.65, g=1.00, b=0.65,
-          fn=function() SC_ToggleWing("skills") end },
-        { tip="Honor",       desc="PvP honor, HKs & arena points", lbl="Hk",  r=1.00, g=0.45, b=0.45,
-          fn=function() SC_ToggleWing("honor")  end },
-        { tip="Talents",   desc="Open Talent frame",          lbl="T",   r=0.75, g=0.50, b=1.00,
-          fn=function()
-              SC_ToggleSidePanel(SC_GetTalentFrame())
-          end },
-        { tip="Spellbook", desc="Open Spellbook",             lbl="Sp",  r=0.35, g=0.70, b=1.00,
-          fn=function()
-              SC_OpenPanel("Blizzard_SpellBookUI", "SpellBookFrame", ToggleSpellBook)
-          end },
-        { tip="Quest Log", desc="Open Quest Log",             lbl="Q",   r=1.00, g=0.78, b=0.15,
-          fn=function()
-              SC_OpenPanel("Blizzard_QuestLog", "QuestLogFrame", ToggleQuestLog)
-          end },
-        { tip="World Map", desc="Open World Map",             lbl="M",   r=0.25, g=0.85, b=0.30,
-          fn=function()
-              SC_OpenPanel("Blizzard_MapCanvas", "WorldMapFrame", ToggleWorldMap)
-          end },
-        { tip="Bag",       desc="Open bag window",               lbl="B",   r=0.85, g=0.65, b=0.20,
-          fn=function()
-              if SlyBagFrame then
-                  if SlyBagFrame:IsShown() then
-                      SlyBagFrame:Hide()
-                  else
-                      if SlyBag_Refresh then SlyBag_Refresh() end
-                      SlyBagFrame:ClearAllPoints()
-                      SlyBagFrame:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
-                      SlyBagFrame:Show()
-                  end
-              else
-                  DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyChar]|r SlyBag is not loaded — enable it in /sly")
-              end
-          end },
-        { tip="SlyLoot SR",  desc="Soft Res & Loot rolls",  lbl="SR",  r=0.20, g=0.90, b=0.50,
-          fn=function()
-              if SlyLootPanel and SlyLootPanel:IsShown() then
-                  SlyLootPanel:Hide() ; return
-              end
-              if SL_OpenSRTab then
-                  SL_OpenSRTab()
-              elseif SL_BuildUI then
-                  SL_BuildUI()
-              else
-                  DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyChar]|r SlyLoot is not loaded — enable it in /sly")
-                  return
-              end
-              -- SL_BuildUI is synchronous; anchor immediately
-              if SlyCharMainFrame and SlyLootPanel and SlyLootPanel:IsShown() then
-                  SlyLootPanel:SetUserPlaced(true)
-                  SlyLootPanel:ClearAllPoints()
-                  SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
-              end
-          end },
-        { tip="Whelp",      desc="Vendor ratings & reviews", lbl="Wh",  r=0.20, g=0.78, b=1.00,
-          fn=function()
-              local wp = _G["SlyWhelpPanelFrame"]
-              if wp then
-                  if wp:IsShown() then wp:Hide()
-                  else wp:Show() end
-              end
-          end },
-        { tip="Class Macros",   desc="Macro library for your class (by spec)",         lbl="Mc", r=0.95, g=0.70, b=0.20,
-          fn=function()
-              SC_ToggleWing("macros")
-          end },
-        { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.40, g=0.90, b=0.60,
-          fn=function()
-              SC_ToggleWing("social")
-          end },
-        { tip="Lockouts & Layer", desc="Alt instance lockouts, layer detection", lbl="NIT", r=0.30, g=0.80, b=1.00,
-          fn=function()
-              SC_ToggleWing("nit")
-          end },
-    }
-
-    local bSz = BTN_STRIP_W - 6  -- 26px buttons with 3px margin each side
-
-    -- ── Strip flyout menu ──────────────────────────────────────────────────────
-    -- One >> button on the strip opens a popup menu; each row runs its action.
-    local FLYOUT_W   = 152
-    local FLYOUT_RH  = 24
-    local FLYOUT_PAD = 4
-
-    local flyoutMenu = CreateFrame("Frame", "SlyCharStripFlyout", UIParent)
-    flyoutMenu:SetSize(FLYOUT_W, #STRIP_BTNS * FLYOUT_RH + FLYOUT_PAD * 2)
-    flyoutMenu:SetFrameStrata("DIALOG")
-    flyoutMenu:SetFrameLevel(f:GetFrameLevel() + 10)
-    flyoutMenu:Hide()
-
-    local fmBg = flyoutMenu:CreateTexture(nil, "BACKGROUND")
-    fmBg:SetAllPoints() ; fmBg:SetColorTexture(0.04, 0.03, 0.08, 0.97)
-    if flyoutMenu.SetBackdrop then
-        flyoutMenu:SetBackdrop({
-            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile=true, tileSize=16, edgeSize=8,
-            insets={left=2, right=2, top=2, bottom=2},
-        })
-        flyoutMenu:SetBackdropColor(0.04, 0.03, 0.08, 0.97)
-        flyoutMenu:SetBackdropBorderColor(0.25, 0.20, 0.38, 1)
-    end
-
-    flyoutMenu:SetScript("OnShow", function()
-        flyoutMenu:ClearAllPoints()
-        flyoutMenu:SetPoint("TOPLEFT", f, "TOPRIGHT", 2, -HDR_H)
-    end)
-
-    tinsert(UISpecialFrames, "SlyCharStripFlyout")
-
-    local stripFlyoutBtn  -- forward ref
-    flyoutMenu:HookScript("OnHide", function()
-        if stripFlyoutBtn and stripFlyoutBtn._lbl then
-            stripFlyoutBtn._lbl:SetText(">>") end
-    end)
-
-    for i, bd in ipairs(STRIP_BTNS) do
-        local row = CreateFrame("Button", nil, flyoutMenu)
-        row:SetSize(FLYOUT_W - 4, FLYOUT_RH - 2)
-        row:SetPoint("TOPLEFT", flyoutMenu, "TOPLEFT", 2,
-                     -(FLYOUT_PAD + (i-1)*FLYOUT_RH))
-        row:EnableMouse(true)
-
-        local rowBg = row:CreateTexture(nil, "BACKGROUND")
-        rowBg:SetAllPoints(row)
-        rowBg:SetColorTexture(bd.r*0.08, bd.g*0.08, bd.b*0.08, 1)
-
-        local accent = row:CreateTexture(nil, "ARTWORK")
-        accent:SetSize(3, FLYOUT_RH - 2)
-        accent:SetPoint("LEFT", row, "LEFT", 0, 0)
-        accent:SetColorTexture(bd.r, bd.g, bd.b, 0.85)
-
-        local rlbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        rlbl:SetFont(rlbl:GetFont(), 9, "OUTLINE")
-        rlbl:SetPoint("LEFT", row, "LEFT", 8, 0)
-        rlbl:SetText(bd.tip)
-        rlbl:SetTextColor(
-            math.min(bd.r * 0.80 + 0.20, 1),
-            math.min(bd.g * 0.80 + 0.20, 1),
-            math.min(bd.b * 0.80 + 0.20, 1))
-
-        row:SetScript("OnEnter", function()
-            rowBg:SetColorTexture(bd.r*0.25, bd.g*0.25, bd.b*0.25, 1)
-            GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-            GameTooltip:SetText(bd.tip, 1, 1, 1)
-            GameTooltip:AddLine(bd.desc, 0.7, 0.7, 0.7)
-            GameTooltip:Show()
-        end)
-        row:SetScript("OnLeave", function()
-            rowBg:SetColorTexture(bd.r*0.08, bd.g*0.08, bd.b*0.08, 1)
-            GameTooltip:Hide()
-        end)
-        row:SetScript("OnClick", function()
-            flyoutMenu:Hide()
-            bd.fn()
-        end)
-    end
-
-    -- >> toggle button
-    stripFlyoutBtn = CreateFrame("Button", nil, btnStrip)
-    stripFlyoutBtn:SetSize(bSz, bSz)
-    stripFlyoutBtn:SetPoint("TOP", btnStrip, "TOP", 0, 0)
-    stripFlyoutBtn:EnableMouse(true)
-
-    local sfBord = stripFlyoutBtn:CreateTexture(nil, "BACKGROUND")
-    sfBord:SetAllPoints(stripFlyoutBtn)
-    sfBord:SetColorTexture(0.30*0.45, 0.25*0.45, 0.55*0.45, 0.7)
-
-    local sfBg = stripFlyoutBtn:CreateTexture(nil, "ARTWORK")
-    sfBg:SetPoint("TOPLEFT",     stripFlyoutBtn, "TOPLEFT",      1, -1)
-    sfBg:SetPoint("BOTTOMRIGHT", stripFlyoutBtn, "BOTTOMRIGHT", -1,  1)
-    sfBg:SetColorTexture(0.10, 0.08, 0.20, 1)
-
-    local sfLbl = stripFlyoutBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    sfLbl:SetFont(sfLbl:GetFont(), 9, "OUTLINE")
-    sfLbl:SetPoint("CENTER", stripFlyoutBtn, "CENTER", 0, 0)
-    sfLbl:SetText(">>")
-    sfLbl:SetTextColor(0.70, 0.65, 1.00)
-    stripFlyoutBtn._lbl = sfLbl
-
-    stripFlyoutBtn:SetScript("OnEnter", function()
-        sfBg:SetColorTexture(0.22, 0.18, 0.38, 1)
-        GameTooltip:SetOwner(stripFlyoutBtn, "ANCHOR_LEFT")
-        GameTooltip:SetText("Quick Launch", 1, 1, 1)
-        GameTooltip:AddLine("Open panel menu", 0.7, 0.7, 0.7)
-        GameTooltip:Show()
-    end)
-    stripFlyoutBtn:SetScript("OnLeave", function()
-        sfBg:SetColorTexture(0.10, 0.08, 0.20, 1)
-        GameTooltip:Hide()
-    end)
-    stripFlyoutBtn:SetScript("OnClick", function()
-        if flyoutMenu:IsShown() then
-            flyoutMenu:Hide() ; sfLbl:SetText(">>")
-        else
-            flyoutMenu:Show() ; sfLbl:SetText("<<")
-        end
-    end)
-
-    -- ── Suite flyout panel (right-hand side panel outside the character sheet) ───
-    do
-        local SP_W = 230
-        local SP_H = FRAME_H - HDR_H - FOOT_H   -- full content height
-        local suitePanel = CreateFrame("Frame", "SlySuitePanelFrame", UIParent)
-        suitePanel:SetSize(SP_W, SP_H)
-        suitePanel:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, -HDR_H)
-        suitePanel:SetFrameStrata("DIALOG")
-        suitePanel:Hide()
-
-        local spBg = suitePanel:CreateTexture(nil, "BACKGROUND")
-        spBg:SetAllPoints() ; spBg:SetColorTexture(0.04, 0.04, 0.08, 0.96)
-        if suitePanel.SetBackdrop then
-            suitePanel:SetBackdrop({
-                bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                tile=true, tileSize=16, edgeSize=8,
-                insets={left=2, right=2, top=2, bottom=2},
-            })
-            suitePanel:SetBackdropColor(0.04, 0.04, 0.08, 0.96)
-            suitePanel:SetBackdropBorderColor(0.20, 0.20, 0.30, 1)
-        end
-
-        local spTitleBg = suitePanel:CreateTexture(nil, "ARTWORK")
-        spTitleBg:SetPoint("TOPLEFT",  suitePanel, "TOPLEFT",  2, -2)
-        spTitleBg:SetPoint("TOPRIGHT", suitePanel, "TOPRIGHT", -2, -2)
-        spTitleBg:SetHeight(16)
-        spTitleBg:SetColorTexture(0.08, 0.08, 0.14, 1)
-
-        local spTitle = suitePanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        spTitle:SetFont(spTitle:GetFont(), 8, "OUTLINE")
-        spTitle:SetPoint("TOPLEFT", suitePanel, "TOPLEFT", 6, -5)
-        spTitle:SetText("|cff00ccffSlySuite|r Manager")
-
-        -- footer with error label + View/Clear buttons
-        local spFooter = CreateFrame("Frame", nil, suitePanel)
-        spFooter:SetSize(SP_W, 24)
-        spFooter:SetPoint("BOTTOMLEFT",  suitePanel, "BOTTOMLEFT",  0, 0)
-        spFooter:SetPoint("BOTTOMRIGHT", suitePanel, "BOTTOMRIGHT", 0, 0)
-        local spFBg = spFooter:CreateTexture(nil, "BACKGROUND")
-        spFBg:SetAllPoints(spFooter) ; spFBg:SetColorTexture(0.05, 0.05, 0.09, 1)
-
-        suiteErrLabel = spFooter:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        suiteErrLabel:SetFont(suiteErrLabel:GetFont(), 9, "")
-        suiteErrLabel:SetPoint("LEFT", spFooter, "LEFT", 4, 0)
-        suiteErrLabel:SetTextColor(0.45, 0.45, 0.5)
-        suiteErrLabel:SetText("0 errors")
-
-        local spViewBtn = CreateFrame("Button", nil, spFooter, "UIPanelButtonTemplate")
-        spViewBtn:SetSize(38, 16) ; spViewBtn:SetText("View")
-        spViewBtn:SetPoint("RIGHT", spFooter, "RIGHT", -44, 0)
-        spViewBtn:SetScript("OnClick", function()
-            if SlashCmdList["SLY"] then SlashCmdList["SLY"]("errors") end
-        end)
-
-        local spClearBtn = CreateFrame("Button", nil, spFooter, "UIPanelButtonTemplate")
-        spClearBtn:SetSize(38, 16) ; spClearBtn:SetText("Clear")
-        spClearBtn:SetPoint("RIGHT", spFooter, "RIGHT", -2, 0)
-        spClearBtn:SetScript("OnClick", function()
-            if SlashCmdList["SLY"] then SlashCmdList["SLY"]("clearerrors") end
-            local df2 = SlySuiteDataFrame
-            if df2 and df2.db then df2.db.errorLog = {} end
-            SC_RefreshSuite()
-        end)
-
-        -- scroll area for module rows
-        local spScroll = CreateFrame("ScrollFrame", nil, suitePanel, "UIPanelScrollFrameTemplate")
-        spScroll:SetPoint("TOPLEFT",     suitePanel, "TOPLEFT",      0, -18)
-        spScroll:SetPoint("BOTTOMRIGHT", suitePanel, "BOTTOMRIGHT", -18,  26)
-        local spContent = CreateFrame("Frame", nil, spScroll)
-        spContent:SetSize(SP_W - 18, 1)
-        spScroll:SetScrollChild(spContent)
-        suiteCont = spContent
-
-        suitePanel:HookScript("OnShow", function() SC_RefreshSuite() end)
-    end
-
     -- ── Whelp flyout panel (right-side) ────────────────────────────────────
     do
         local WP_W = 260
@@ -5307,86 +4926,18 @@ function SC_BuildMain()
         wpanel:HookScript("OnShow", function() SC_RefreshWhelp() end)
     end
 
-    -- Suite strip button (S) — toggles suite flyout above X button
-    do
-        local bS = CreateFrame("Button", nil, btnStrip)
-        bS:SetSize(bSz, bSz)
-        bS:SetPoint("BOTTOM", btnStrip, "BOTTOM", 0, 4 + bSz + 3)
-        bS:EnableMouse(true)
-        local bordS = bS:CreateTexture(nil, "BACKGROUND")
-        bordS:SetAllPoints(bS)
-        bordS:SetColorTexture(0.10, 0.35, 0.65, 0.7)
-        local bbgS = bS:CreateTexture(nil, "ARTWORK")
-        bbgS:SetPoint("TOPLEFT",     bS, "TOPLEFT",      1, -1)
-        bbgS:SetPoint("BOTTOMRIGHT", bS, "BOTTOMRIGHT", -1,  1)
-        bbgS:SetColorTexture(0.03, 0.10, 0.22, 1)
-        local lblS = bS:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lblS:SetFont(lblS:GetFont(), 8, "OUTLINE")
-        lblS:SetPoint("CENTER", bS, "CENTER", 0, 0)
-        lblS:SetText("S")
-        lblS:SetTextColor(0.30, 0.70, 1.00)
-        bS:SetScript("OnEnter", function()
-            bbgS:SetColorTexture(0.08, 0.25, 0.50, 1)
-            GameTooltip:SetOwner(bS, "ANCHOR_LEFT")
-            GameTooltip:SetText("SlySuite", 1, 1, 1)
-            GameTooltip:AddLine("Toggle suite manager panel", 0.7, 0.7, 0.7)
-            GameTooltip:Show()
-        end)
-        bS:SetScript("OnLeave", function()
-            bbgS:SetColorTexture(0.03, 0.10, 0.22, 1)
-            GameTooltip:Hide()
-        end)
-        bS:SetScript("OnClick", function()
-            local sp = _G["SlySuitePanelFrame"]
-            if sp then
-                if sp:IsShown() then sp:Hide() else sp:Show() end
-            end
-        end)
-    end
-
-    -- Close-side-panel button (×) at bottom of strip
-    do
-        local bX = CreateFrame("Button", nil, btnStrip)
-        bX:SetSize(bSz, bSz)
-        bX:SetPoint("BOTTOM", btnStrip, "BOTTOM", 0, 4)
-        bX:EnableMouse(true)
-        local bordX = bX:CreateTexture(nil, "BACKGROUND")
-        bordX:SetAllPoints(bX)
-        bordX:SetColorTexture(0.55, 0.12, 0.12, 0.7)
-        local bbgX = bX:CreateTexture(nil, "ARTWORK")
-        bbgX:SetPoint("TOPLEFT",     bX, "TOPLEFT",      1, -1)
-        bbgX:SetPoint("BOTTOMRIGHT", bX, "BOTTOMRIGHT", -1,  1)
-        bbgX:SetColorTexture(0.20, 0.04, 0.04, 1)
-        local lblX = bX:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lblX:SetFont(lblX:GetFont(), 11, "OUTLINE")
-        lblX:SetPoint("CENTER", bX, "CENTER", 0, 0)
-        lblX:SetText("×")
-        lblX:SetTextColor(1, 0.35, 0.35)
-        bX:SetScript("OnEnter", function()
-            bbgX:SetColorTexture(0.40, 0.08, 0.08, 1)
-            GameTooltip:SetOwner(bX, "ANCHOR_LEFT")
-            GameTooltip:SetText("Close panel", 1, 1, 1)
-            GameTooltip:AddLine("Dismiss current side panel", 0.7, 0.7, 0.7)
-            GameTooltip:Show()
-        end)
-        bX:SetScript("OnLeave", function()
-            bbgX:SetColorTexture(0.20, 0.04, 0.04, 1)
-            GameTooltip:Hide()
-        end)
-        bX:SetScript("OnClick", SC_CloseSidePanel)
-    end
-
     -- Footer
     local footer = CreateFrame("Frame", nil, f)
-    footer:SetSize(FRAME_W, FOOT_H)
-    footer:SetPoint("BOTTOM", f, "BOTTOM", 0, 0)
+    footer:SetHeight(FOOT_H)
+    footer:SetPoint("BOTTOMLEFT",  f, "BOTTOMLEFT",  0, 0)
+    footer:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
     themeRefs.footBg = FillBg(footer, 0.07, 0.07, 0.10, 1)
 
     local ftxt = footer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     ftxt:SetFont(ftxt:GetFont(), 8, "")
     ftxt:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     ftxt:SetTextColor(0.3, 0.3, 0.38)
-    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  >> = panel menu  |  x = close panel")
+    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  Sta/Set = stats / sets flyout")
 
     f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
     f:HookScript("OnHide", function(self)
@@ -5394,8 +4945,6 @@ function SC_BuildMain()
         SC_HidePicker()
         SC_CloseSidePanel()
         if wingFrame then wingFrame:Hide() ; activeWingKey = nil end
-        local fm = _G["SlyCharStripFlyout"]
-        if fm then fm:Hide() end
     end)
 
     BuildWingFrame(f)
