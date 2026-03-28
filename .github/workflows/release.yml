@@ -111,8 +111,9 @@ jobs:
             2>/dev/null || echo "")
 
           if [ -z "$TBC_TYPE_ID" ]; then
-            echo "WARNING: could not detect TBC type ID from API — using hardcoded fallback 73713"
-            TBC_TYPE_ID="73713"
+            echo "WARNING: could not detect TBC type ID from API — using hardcoded fallback 73246"
+            # 73246 = Burning Crusade Classic  (NOT 73713 which is WotLK Classic)
+            TBC_TYPE_ID="73246"
           fi
           echo "Using gameVersionTypeID: $TBC_TYPE_ID"
 
