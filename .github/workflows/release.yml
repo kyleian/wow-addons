@@ -95,72 +95,46 @@ jobs:
           BUNDLE="dist/SlySuite-${VERSION}-full.zip"
 
           # ----------------------------------------------------------------
-          # Step 1: Resolve the Burning Crusade Classic game version TYPE ID.
-          # The CurseForge App filters by gameVersionTypeID, not by version
-          # name strings. Without the correct type, the app won't list the
-          # file even if it appears on the website.
-          # Known stable fallback: 73713 = Burning Crusade Classic
-          # ----------------------------------------------------------------
-          echo "Fetching CurseForge game version types..."
-          CF_VERSION_TYPES=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
-            "https://wow.curseforge.com/api/game/2/version-types")
-          echo "Version types response: $CF_VERSION_TYPES"
-
-          TBC_TYPE_ID=$(echo "$CF_VERSION_TYPES" | \
-            jq -r '[.[] | select(.name | test("Burning Crusade|burning.crusade|TBC Classic|tbc_classic"; "i")) | .id] | first // empty' \
-            2>/dev/null || echo "")
-
-          if [ -z "$TBC_TYPE_ID" ]; then
-            echo "WARNING: could not detect TBC type ID from API — using hardcoded fallback 73246"
-            # 73246 = Burning Crusade Classic  (NOT 73713 which is WotLK Classic)
-            TBC_TYPE_ID="73246"
-          fi
-          echo "Using gameVersionTypeID: $TBC_TYPE_ID"
-
-          # ----------------------------------------------------------------
-          # Step 2: Fetch all game versions and filter by the TBC type ID.
-          # This correctly handles TBC Anniversary (same type as TBC Classic,
-          # interface 20505 / patch 2.5.5) without relying on name patterns
-          # that can break when Blizzard adds anniversary variants.
+          # Resolve the correct 2.5.5 (TBC Classic / Anniversary) game
+          # version ID. CF type 73246 = WoW Burning Crusade Classic.
+          # The upload API infers the flavor from gameVersions[] alone —
+          # no extra type field is needed or accepted in the metadata.
           # ----------------------------------------------------------------
           echo "Fetching CurseForge game versions..."
           CF_VERSIONS=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
             "https://wow.curseforge.com/api/game/versions")
 
-          # Primary: filter by resolved type ID
+          # Primary: filter by TBC Classic type ID (73246) and pick 2.5.5
           GAME_VERSION_IDS=$(echo "$CF_VERSIONS" | \
-            jq -r --argjson TYPE "$TBC_TYPE_ID" \
-            '[.[] | select(.gameVersionTypeID == $TYPE) | .id] | join(",")' \
+            jq -r '[.[] | select(.gameVersionTypeID == 73246) | .id] | join(",")' \
             2>/dev/null || echo "")
 
-          # Fallback: name-based 2.5.x filter (catches renamed anniversary entries)
+          # Fallback: name-based 2.5.x filter
           if [ -z "$GAME_VERSION_IDS" ]; then
-            echo "WARNING: type-ID filter returned no versions; falling back to 2.5.x name pattern"
+            echo "WARNING: type-ID filter returned nothing; falling back to 2.5.x name pattern"
             GAME_VERSION_IDS=$(echo "$CF_VERSIONS" | \
               jq -r '[.[] | select(.name | test("^2\\.5\\.")) | .id] | join(",")' \
               2>/dev/null || echo "")
           fi
 
-          # Hard fallback: known CF IDs for TBC Classic 2.5.1–2.5.5
+          # Hard fallback: known ID for 2.5.5 under type 73246
           if [ -z "$GAME_VERSION_IDS" ]; then
-            echo "WARNING: no TBC versions found via API — using hardcoded fallback IDs"
-            GAME_VERSION_IDS="9546,9560,9561,14301,14300"
+            echo "WARNING: API lookup failed — using hardcoded 2.5.5 ID"
+            GAME_VERSION_IDS="14300"
           fi
 
           echo "Using game version IDs: $GAME_VERSION_IDS"
 
           # ----------------------------------------------------------------
-          # Step 3: Upload. Including gameVersionTypeID in metadata is the
-          # critical field that makes the file appear in the CF App's
-          # "Burning Crusade Classic" filter rather than being invisible.
+          # Upload. gameVersions[] containing a 73246-type ID is what causes
+          # CF App to list the addon under "Burning Crusade Classic".
           # ----------------------------------------------------------------
           echo "Uploading $BUNDLE to CurseForge project $CF_PROJECT_ID..."
           METADATA=$(jq -n \
             --arg cl "https://github.com/kyleian/wow-addons/releases/tag/v${VERSION}" \
             --arg dn "SlySuite v${VERSION}" \
             --argjson gv "[$GAME_VERSION_IDS]" \
-            --argjson gvt "$TBC_TYPE_ID" \
-            '{changelog: $cl, changelogType: "text", displayName: $dn, gameVersions: $gv, gameVersionTypeID: $gvt, releaseType: "release"}')
+            '{changelog: $cl, changelogType: "text", displayName: $dn, gameVersions: $gv, releaseType: "release"}')
           echo "Metadata: $METADATA"
 
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
