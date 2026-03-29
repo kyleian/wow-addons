@@ -1254,7 +1254,13 @@ function SC_RefreshStats()
                 end
                 if s.label then addRow(s.label, s.value) end
             end
+        elseif not ok then
+            addSection("ECS ERROR")
+            addRow("Error", tostring(stats):sub(1, 60))
         end
+    else
+        addSection("ECS MISSING")
+        addRow("ExtendedCharStats", "not loaded")
     end
 
     -- Footer: show hidden count + click to restore all

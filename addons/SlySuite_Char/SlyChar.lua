@@ -122,6 +122,10 @@ local function SC_Slash(msg)
             SlyCharMainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         end
         DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Position reset.")
+    elseif msg == "stats reset" then
+        if SC.db then SC.db.hidden = {} ; SC.db.collapsed = {} end
+        if SC_RefreshStats then SC_RefreshStats() end
+        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Stats sections reset.")
     elseif msg == "stats" then
         SC_ShowMain()
         SC_SwitchTab("stats")
