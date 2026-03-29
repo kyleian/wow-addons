@@ -56,17 +56,23 @@ IRR.QUALITY_COLORS = {
 
 -- -------------------------------------------------------
 -- Default SavedVariables structure
+-- sets/specLinks/setIcons are stored per-character under chars[charKey]
+-- so that Slyw and Slysh (and any future alt) never share gear sets.
 -- -------------------------------------------------------
 local DB_DEFAULTS = {
-    sets      = {},                             -- { [setName] = { [slotId] = itemId, ... } }
-    specLinks = {},                             -- { [setName] = 1 or 2 }  dual-spec link
-    setIcons  = {},                             -- { [setName] = texture path }
+    chars     = {},                             -- { ["CharName"] = { sets={}, specLinks={}, setIcons={} } }
     position  = { point="CENTER", x=0, y=0 },
     options  = {
         showTooltips  = true,
         showQualityBorder = true,
         scale = 1.0,
     },
+}
+
+local CHAR_DEFAULTS = {
+    sets      = {},   -- { [setName] = { [slotId] = itemId, ... } }
+    specLinks = {},   -- { [setName] = 1 or 2 }  dual-spec link
+    setIcons  = {},   -- { [setName] = texture path }
 }
 
 -- Recursively apply defaults without overwriting existing values
@@ -98,6 +104,55 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             ItemRackRevivedDB = ItemRackRevivedDB or {}
             ApplyDefaults(ItemRackRevivedDB, DB_DEFAULTS)
             IRR.db = ItemRackRevivedDB
+
+            -- Per-character data keyed as "Realm-Name" to match WoW's own
+            -- per-character SavedVariables convention and preserve any data
+            -- already stored with that key format.
+            local realm    = GetRealmName() or "Unknown"
+            local charName = UnitName("player") or "Unknown"
+            local charKey  = realm .. "-" .. charName
+            IRR.charKey = charKey
+            IRR.db.chars = IRR.db.chars or {}
+            IRR.db.chars[charKey] = IRR.db.chars[charKey] or {}
+            ApplyDefaults(IRR.db.chars[charKey], CHAR_DEFAULTS)
+            IRR.chardata = IRR.db.chars[charKey]
+
+            -- Migration A: old flat DB had sets/specLinks/setIcons at the top
+            -- level. Move them into the current character's slot.
+            if IRR.db.sets and next(IRR.db.sets) then
+                for k, v in pairs(IRR.db.sets) do
+                    if IRR.chardata.sets[k] == nil then
+                        IRR.chardata.sets[k] = v
+                    end
+                end
+                IRR.db.sets = nil
+            end
+            if IRR.db.specLinks and next(IRR.db.specLinks) then
+                for k, v in pairs(IRR.db.specLinks) do
+                    if IRR.chardata.specLinks[k] == nil then
+                        IRR.chardata.specLinks[k] = v
+                    end
+                end
+                IRR.db.specLinks = nil
+            end
+            if IRR.db.setIcons and next(IRR.db.setIcons) then
+                for k, v in pairs(IRR.db.setIcons) do
+                    if IRR.chardata.setIcons[k] == nil then
+                        IRR.chardata.setIcons[k] = v
+                    end
+                end
+                IRR.db.setIcons = nil
+            end
+
+            -- Migration B: a previous deploy briefly used name-only keys
+            -- (e.g. "Massiveidiot") instead of "Realm-Name".  The stale entry
+            -- may contain corrupted data from an earlier bad migration, so just
+            -- delete it — the correct data is already in the realm-qualified key.
+            local staleKey = charName
+            if staleKey ~= charKey and IRR.db.chars[staleKey] then
+                IRR.db.chars[staleKey] = nil
+            end
+
             IRR_Init()
         end
 

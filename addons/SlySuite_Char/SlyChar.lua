@@ -10,8 +10,9 @@ SC.version = "1.0.0"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
-SC._skipHook       = false   -- true while Chr button is showing CharacterFrame directly
-SC._pendingHideChar = false  -- true when CharacterFrame was left open in combat
+SC._skipHook        = false   -- true while Chr button is showing CharacterFrame directly
+SC._pendingHideChar = false   -- true when CharacterFrame was left open in combat
+SC._hiddenByCombat  = false   -- true when we suppressed the panel at combat start
 
 -- --------------------------------------------------------
 -- SavedVariables defaults
@@ -50,7 +51,11 @@ function SC_ShowMain()
             DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Open the character sheet once out of combat first.")
             return
         end
-        SC_BuildMain()
+        local ok, err = pcall(SC_BuildMain)
+        if not ok then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
+            return
+        end
     end
     local pos = SC.db.position
     if pos and pos.point then
@@ -58,6 +63,7 @@ function SC_ShowMain()
         SlyCharMainFrame:SetPoint(pos.point, UIParent, pos.point, pos.x or 0, pos.y or 0)
     end
     SlyCharMainFrame:Show()
+    SlyCharMainFrame:SetAlpha(1)
     SC_RefreshAll()
 end
 
@@ -83,16 +89,20 @@ local function HookCharacterFrame()
         -- Chr button opened it on purpose — don't intercept.
         if SC._skipHook then return end
 
+        -- Don't intercept when the game opens CharacterFrame alongside vendor,
+        -- trade, or inspect panels — those are legitimate engine-driven shows.
+        if (MerchantFrame and MerchantFrame:IsShown())
+        or (TradeFrame    and TradeFrame:IsShown())
+        or (InspectFrame  and InspectFrame:IsShown()) then
+            return
+        end
+
         if InCombatLockdown() then
-            -- CharacterFrame:Hide() is restricted in combat.  Instead, suppress
-            -- its mouse/keyboard so it's dead beneath our pre-leveled frame.
+            -- In combat: suppress CharacterFrame but do NOT re-open SlyChar.
+            -- (SlyChar was already closed by PLAYER_REGEN_DISABLED.)
             CharacterFrame:EnableMouse(false)
             CharacterFrame:EnableKeyboard(false)
-            if SlyCharMainFrame then
-                SlyCharMainFrame:Show()
-                SC_RefreshAll()
-                SC._pendingHideChar = true
-            end
+            SC._pendingHideChar = true
             return
         end
         self:Hide()                 -- suppress the default frame
@@ -248,6 +258,7 @@ end
 local evFrame = CreateFrame("Frame", "SlyCharEventFrame", UIParent)
 evFrame:RegisterEvent("ADDON_LOADED")
 evFrame:RegisterEvent("PLAYER_LOGOUT")
+evFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 evFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 evFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 evFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
@@ -362,14 +373,43 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
         -- Pre-build the main frame now, while we are guaranteed to be outside
         -- combat lockdown. This ensures SlyCharMainFrame always exists by the
         -- time the player presses C, even if they never opened it manually.
-        if not SlyCharMainFrame and SC.db then
-            SC_BuildMain()
-            -- Build it but keep it hidden — just ensure the secure buttons exist.
-            if SlyCharMainFrame then SlyCharMainFrame:Hide() end
+        if not SlyCharMainFrame and SC.db and not InCombatLockdown() then
+            local ok, err = pcall(SC_BuildMain)
+            if not ok then
+                DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
+            elseif SlyCharMainFrame then
+                SlyCharMainFrame:Hide()
+            end
+        end
+
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        -- Combat started: close the character sheet.
+        -- Frames with SecureActionButtonTemplate children cannot always be
+        -- hidden via :Hide() during lockdown — disable mouse and zero alpha
+        -- first so it cannot block the screen even if Hide() silently fails.
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+            SlyCharMainFrame:EnableMouse(false)
+            SlyCharMainFrame:SetAlpha(0)
+            SC._hiddenByCombat = true
+            pcall(function() SlyCharMainFrame:Hide() end)
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        -- Combat ended: hide the native CharacterFrame we couldn't suppress earlier.
+        -- Combat ended.
+        if SC._hiddenByCombat then
+            SC._hiddenByCombat = false
+            if SlyCharMainFrame then
+                -- If Hide() failed during combat the frame is still "shown"
+                -- but invisible — fully hide it now lockdown is lifted.
+                if SlyCharMainFrame:IsShown() then
+                    SlyCharMainFrame:Hide()
+                else
+                    -- Restore alpha in case user re-opens manually next time.
+                    SlyCharMainFrame:SetAlpha(1)
+                end
+            end
+        end
+        -- Hide the native CharacterFrame we couldn't suppress earlier.
         if SC._pendingHideChar then
             SC._pendingHideChar = false
             if CharacterFrame and CharacterFrame:IsShown() then

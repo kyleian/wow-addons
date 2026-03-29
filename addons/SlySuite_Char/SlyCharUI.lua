@@ -212,6 +212,23 @@ local headerInfo    = nil
 local headerGS      = nil
 
 local MAX_STAT_ROWS  = 60
+
+-- Confirmation popup for overwriting an existing gear set.
+StaticPopupDialogs["IRR_CONFIRM_OVERWRITE"] = StaticPopupDialogs["IRR_CONFIRM_OVERWRITE"] or {
+    text          = "Overwrite set |cffffcc00%s|r with currently equipped gear?",
+    button1       = "Overwrite",
+    button2       = "Cancel",
+    OnAccept      = function(self, data)
+        if IRR_SaveCurrentSet then
+            IRR_SaveCurrentSet(data.setName)
+        end
+        if SC_RefreshSets then SC_RefreshSets() end
+    end,
+    timeout       = 0,
+    whileDead     = true,
+    hideOnEscape  = true,
+}
+
 local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
 local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
@@ -2399,7 +2416,7 @@ function SC_RefreshSets()
         if not w then break end
         local name = names[setsScrollOffset + i]
         if not name then break end
-        local setData = IRR and IRR.db and IRR.db.sets and IRR.db.sets[name]
+        local setData = IRR and IRR.chardata and IRR.chardata.sets and IRR.chardata.sets[name]
         local n = 0
         if setData then for _ in pairs(setData) do n = n + 1 end end
 
@@ -2476,10 +2493,7 @@ function SC_RefreshSets()
 
         w.saveBtn:EnableMouse(true)
         w.saveBtn:SetScript("OnClick", function()
-            if IRR_SaveCurrentSet then
-                IRR_SaveCurrentSet(name)
-                SC_RefreshSets()
-            end
+            StaticPopup_Show("IRR_CONFIRM_OVERWRITE", name, nil, { setName = name })
         end)
 
         w.delBtn:EnableMouse(true)
@@ -2489,10 +2503,10 @@ function SC_RefreshSets()
         end)
 
         w.row:SetScript("OnEnter", function()
-            if not (IRR and IRR.db and IRR.db.sets and IRR.db.sets[name]) then return end
+            if not (IRR and IRR.chardata and IRR.chardata.sets and IRR.chardata.sets[name]) then return end
             GameTooltip:SetOwner(w.row, "ANCHOR_RIGHT")
             GameTooltip:SetText(name, 1, 0.84, 0)
-            for _, itemId in pairs(IRR.db.sets[name]) do
+            for _, itemId in pairs(IRR.chardata.sets[name]) do
                 local n2 = GetItemInfo(itemId)
                 if n2 then GameTooltip:AddLine(n2, 0.8, 0.8, 0.8) end
             end
@@ -4305,7 +4319,10 @@ function SC_BuildMain()
     f:SetMovable(true)
     f:EnableMouse(false)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStart", function(self)
+        -- StartMoving is combat-restricted on frames with secure children.
+        if not InCombatLockdown() then self:StartMoving() end
+    end)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         local pt, _, _, x, y = self:GetPoint()

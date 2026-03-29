@@ -421,39 +421,79 @@ function ECS_GetStats()
 
     -- ---- CRUSH CAP (tank, vs level 73 boss) ----
     -- Uncrushable = Miss + Dodge + Parry + Block >= 102.4%
-    -- Miss vs a level 73 boss: 5% base + (defSkill - 350) * 0.04% per point above 350
-    -- Crit immune: need totalDef >= 490 (= 5.6% crit reduction at 0.04%/point above 350)
     local CRUSH_THRESHOLD = 102.4
     local CRIT_IMMUNE_DEF = 490
 
-    local crushMiss = 5.0 + math.max(0, totalDef - 350) * 0.04
+    local crushMiss  = 5.0 + math.max(0, totalDef - 350) * 0.04
     local crushDodge = safe(GetDodgeChance) or 0
     local crushParry = safe(GetParryChance) or 0
     local crushBlock = safe(GetBlockChance) or 0
-    local crushTotal = crushMiss + crushDodge + crushParry + crushBlock
+    local crushTotal  = crushMiss + crushDodge + crushParry + crushBlock
     local crushNeeded = CRUSH_THRESHOLD - crushTotal
-    local critDefNeeded = math.max(0, CRIT_IMMUNE_DEF - totalDef)
-
-    local crushColor = crushNeeded <= 0 and "|cff00ff00" or "|cffff4444"
-    local critColor  = critDefNeeded == 0 and "|cff00ff00" or "|cffff4444"
+    local crushColor  = crushNeeded <= 0 and "|cff00ff00" or "|cffff4444"
 
     table.insert(stats, { section="CRUSH CAP" })
-    table.insert(stats, { label="  Miss (vs boss)",  value=string.format("%.2f%%", crushMiss) })
-    table.insert(stats, { label="  Dodge",           value=string.format("%.2f%%", crushDodge) })
-    table.insert(stats, { label="  Parry",           value=string.format("%.2f%%", crushParry) })
-    table.insert(stats, { label="  Block",           value=string.format("%.2f%%", crushBlock) })
+    table.insert(stats, { label="  Miss (vs boss)",       value=string.format("%.2f%%", crushMiss) })
+    table.insert(stats, { label="  Dodge",                value=string.format("%.2f%%", crushDodge) })
+    table.insert(stats, { label="  Parry",                value=string.format("%.2f%%", crushParry) })
+    table.insert(stats, { label="  Block",                value=string.format("%.2f%%", crushBlock) })
     table.insert(stats, { label="  Total / Need 102.4",
         value=crushColor .. string.format("%.2f%%|r", crushTotal) })
     if crushNeeded > 0 then
         table.insert(stats, { label="  Still need",
             value="|cffff4444" .. string.format("%.2f%%|r", crushNeeded) })
     else
-        table.insert(stats, { label="  Status",
-            value="|cff00ff00UNCRUSHABLE|r" })
+        table.insert(stats, { label="  Status",          value="|cff00ff00UNCRUSHABLE|r" })
     end
-    table.insert(stats, { label="  Crit immune (490)",
-        value=critColor .. (critDefNeeded == 0 and "YES|r"
-            or string.format("need %d more|r", critDefNeeded)) })
+
+    -- ---- CRIT CAP (490 effective defense) ----
+    -- Each defense skill above 350 = 0.04% crit reduction vs boss.
+    -- Resilience contributes identical crit reduction: resPct / 0.04 = def-equiv.
+    -- Both sources combined must reach 490 effective defense to be crit-immune.
+    local resDefEquiv   = math.floor((resPct or 0) / 0.04)
+    local effectiveDef  = totalDef + resDefEquiv
+    local critDefNeeded = math.max(0, CRIT_IMMUNE_DEF - effectiveDef)
+    local critColor     = critDefNeeded == 0 and "|cff00ff00" or "|cffff4444"
+    local defDispColor  = totalDef >= CRIT_IMMUNE_DEF and "|cff00ff00"
+                          or (totalDef >= 450 and "|cffffcc00" or "|cffff4444")
+
+    table.insert(stats, { section="CRIT CAP (490)" })
+    table.insert(stats, { label="  Defense skill",
+        value=string.format("%s%d / 490|r", defDispColor, totalDef) })
+    if resDefEquiv > 0 then
+        -- Show resilience contribution as an explicit additive line
+        table.insert(stats, { label="  + Resilience equiv",
+            value=string.format("|cff88ccff+%d|r  (%.2f%% crit red)",
+                resDefEquiv, resPct or 0) })
+        table.insert(stats, { label="  = Effective def",
+            value=string.format("|cffbbbbff%d / 490|r  (%d still missing)",
+                effectiveDef, critDefNeeded) })
+    end
+    table.insert(stats, { label="  Crit immune",
+        value=critColor .. (critDefNeeded == 0
+            and "YES — IMMUNE|r"
+            or string.format("NO  — need %d more|r", critDefNeeded)) })
+
+    -- ---- RESISTANCES ----
+    -- UnitResistance returns base, bonus (gear+auras), negative, positive.
+    -- Total displayed = base + bonus.
+    local RES_SCHOOLS = { {2,"Holy","ffffff99"}, {3,"Fire","ff7700ff"}, {4,"Nature","00ff44ff"},
+                          {5,"Frost","88ddffff"}, {6,"Shadow","cc66ffff"}, {7,"Arcane","9988ffff"} }
+    table.insert(stats, { section="RESISTANCES" })
+    for _, s in ipairs(RES_SCHOOLS) do
+        local school, name, hex = s[1], s[2], s[3]
+        local base, bonus = UnitResistance("player", school)
+        base = base or 0 ; bonus = bonus or 0
+        local total = base + bonus
+        local col = "|cff" .. hex
+        local valStr
+        if bonus ~= 0 then
+            valStr = string.format("%s%d|r  (%d base + %d gear)", col, total, base, bonus)
+        else
+            valStr = string.format("%s%d|r", col, total)
+        end
+        table.insert(stats, { label="  " .. name, value=valStr })
+    end
 
     return stats
 end

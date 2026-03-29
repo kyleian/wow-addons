@@ -109,7 +109,7 @@ end
 -- Build itemId -> list-of-set-names map from IRR gear sets
 local function BuildSetMap()
     local map = {}
-    local irrSets = IRR and IRR.db and IRR.db.sets
+    local irrSets = IRR and IRR.chardata and IRR.chardata.sets
     if not irrSets then return map end
     for setName, slots in pairs(irrSets) do
         for _, itemId in pairs(slots) do
@@ -124,7 +124,7 @@ end
 
 -- Sorted list of gear set names for stable display order
 local function GetSetNames()
-    local irrSets = IRR and IRR.db and IRR.db.sets
+    local irrSets = IRR and IRR.chardata and IRR.chardata.sets
     if not irrSets then return {} end
     local names = {}
     for name in pairs(irrSets) do names[#names+1] = name end

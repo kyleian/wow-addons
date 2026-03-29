@@ -54,7 +54,7 @@ function IRR_SaveCurrentSet(name)
         print("|cff00ccff[ItemRack Revived]|r |cffff8800Warning:|r No equipped items found — set saved empty.")
     end
 
-    IRR.db.sets[name] = setData
+    IRR.chardata.sets[name] = setData
     print("|cff00ccff[ItemRack Revived]|r Set |cffffcc00" .. name .. "|r saved (" .. count .. " slot" .. (count == 1 and "" or "s") .. ").")
     IRR_UpdateSetsList()
     -- Also refresh SlyChar sets panel if it is open
@@ -67,11 +67,11 @@ end
 -- Removes a named set.
 -- -------------------------------------------------------
 function IRR_DeleteSet(name)
-    if not IRR.db.sets[name] then
+    if not IRR.chardata.sets[name] then
         print("|cff00ccff[ItemRack Revived]|r Set |cffff4444" .. name .. "|r not found.")
         return false
     end
-    IRR.db.sets[name] = nil
+    IRR.chardata.sets[name] = nil
     print("|cff00ccff[ItemRack Revived]|r Set |cffffcc00" .. name .. "|r deleted.")
     IRR_UpdateSetsList()
     -- Also refresh SlyChar sets panel if it is open
@@ -85,7 +85,7 @@ end
 -- -------------------------------------------------------
 function IRR_GetSetNames()
     local names = {}
-    for name in pairs(IRR.db.sets) do
+    for name in pairs(IRR.chardata.sets) do
         table.insert(names, name)
     end
     table.sort(names)
@@ -178,7 +178,7 @@ end
 -- Reports any missing items.
 -- -------------------------------------------------------
 function IRR_LoadSet(name)
-    local setData = IRR.db.sets[name]
+    local setData = IRR.chardata.sets[name]
     if not setData then
         print("|cff00ccff[ItemRack Revived]|r Set |cffff4444" .. name .. "|r not found.")
         return
@@ -229,46 +229,86 @@ function IRR_LoadSet(name)
         end
     end
 
-    -- Switch dual spec if linked
+    -- Switch dual spec if linked.
+    -- CRITICAL ORDER: spec switch must happen FIRST, then we re-equip gear
+    -- in a one-shot ACTIVE_TALENT_GROUP_CHANGED handler.  If we equip first,
+    -- TBC's dual-spec system restores its own saved gear for the new spec and
+    -- overwrites everything IRR just put on.
     local linkedSpec = IRR_GetSpecLink(name)
     if linkedSpec
-        and SetActiveTalentGroup          -- function must exist (dual-spec unlocked)
+        and SetActiveTalentGroup
         and GetNumTalentGroups and GetNumTalentGroups() >= 2 then
         local active = GetActiveTalentGroup and GetActiveTalentGroup() or 1
         if active ~= linkedSpec then
-            local ok, err = pcall(SetActiveTalentGroup, linkedSpec)
-            if not ok then
-                print("|cffff4444[ItemRack Revived]|r Spec switch failed: " .. tostring(err))
-            else
-                -- TBC shows a confirmation popup before actually switching.
-                -- Auto-confirm it on the next frame.
-                C_Timer.After(0, function()
-                    local popupNames = {
-                        "CONFIRM_TALENT_GROUP",
-                        "CONFIRM_TALENT_GROUP_SWITCH",
-                        "CONFIRM_ACTIVE_TALENT_GROUP",
-                    }
-                    for _, popupName in ipairs(popupNames) do
-                        local popup = StaticPopup_FindVisible(popupName)
-                        if popup then
-                            local okBtn = _G[popup .. "Button1"]
-                            if okBtn and okBtn:IsShown() then
-                                okBtn:Click()
-                            end
-                            break
+            -- Wipe whatever IRR equipped above — the spec swap will trash it
+            -- anyway, so don't bother reporting those as "equipped".
+            equipped = 0 ; missing = {}
+
+            -- One-shot frame: listens for ACTIVE_TALENT_GROUP_CHANGED then
+            -- re-equips the set after TBC has finished restoring its own gear.
+            local reEquipFrame = CreateFrame("Frame")
+            local watchdog = 0
+            reEquipFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+            reEquipFrame:SetScript("OnEvent", function(self, ev)
+                self:UnregisterAllEvents()
+                -- Wait one extra frame so TBC's own gear-restore finishes first.
+                C_Timer.After(0.3, function()
+                    local eq2, miss2 = 0, {}
+                    for slotId, itemId in pairs(setData) do
+                        local ok2 = IRR_EquipItemInSlot(itemId, tonumber(slotId))
+                        if ok2 then eq2 = eq2 + 1
+                        else
+                            local iName = GetItemInfo(itemId) or ("Item #" .. itemId)
+                            table.insert(miss2, iName)
                         end
                     end
-                    -- Verify switch actually happened
-                    local now = GetActiveTalentGroup and GetActiveTalentGroup() or 0
-                    if now == linkedSpec then
-                        print("|cff00ccff[ItemRack Revived]|r Switched to Spec " .. linkedSpec .. ".")
+                    if #miss2 == 0 then
+                        print("|cff00ccff[ItemRack Revived]|r Set |cffffcc00" .. name
+                            .. "|r equipped after spec switch (" .. eq2 .. " items).")
+                    else
+                        print("|cff00ccff[ItemRack Revived]|r Set |cffffcc00" .. name
+                            .. "|r: " .. eq2 .. " equipped, "
+                            .. #miss2 .. " not found in bags:")
+                        for _, iName in ipairs(miss2) do
+                            print("  |cffff4444- " .. iName .. "|r")
+                        end
                     end
                 end)
+            end)
+
+            -- Now initiate the spec switch.  TBC will show a confirmation popup.
+            local ok, err = pcall(SetActiveTalentGroup, linkedSpec)
+            if not ok then
+                reEquipFrame:UnregisterAllEvents()
+                print("|cffff4444[ItemRack Revived]|r Spec switch failed: " .. tostring(err))
+            else
+                local attempts = 0
+                local function tryConfirm()
+                    attempts = attempts + 1
+                    for i = 1, 4 do
+                        local popup = _G["StaticPopup" .. i]
+                        if popup and popup:IsShown() and popup.which then
+                            local w = popup.which:upper()
+                            if w:find("TALENT") or w:find("GROUP") or w:find("SPEC") then
+                                local btn = _G["StaticPopup" .. i .. "Button1"]
+                                if btn and btn:IsShown() then
+                                    btn:Click()
+                                    return
+                                end
+                            end
+                        end
+                    end
+                    if attempts < 6 then C_Timer.After(0.2, tryConfirm) end
+                end
+                C_Timer.After(0.15, tryConfirm)
+                -- Safety: un-register listener after 10 s in case event never fires
+                C_Timer.After(10, function() reEquipFrame:UnregisterAllEvents() end)
             end
+            return   -- gear equip + report handled by the one-shot handler above
         end
     end
 
-    -- Report
+    -- Report (no spec switch path)
     if #missing == 0 then
         print("|cff00ccff[ItemRack Revived]|r Set |cffffcc00" .. name
             .. "|r equipped (" .. equipped .. " items).")
@@ -288,13 +328,12 @@ end
 -- When IRR_LoadSet is called the linked spec is activated.
 -- -------------------------------------------------------
 function IRR_SetSpecLink(name, spec)
-    if not IRR.db.specLinks then IRR.db.specLinks = {} end
-    IRR.db.specLinks[name] = spec  -- nil clears the link
+    IRR.chardata.specLinks[name] = spec  -- nil clears the link
 end
 
 -- Returns 1, 2, or nil.
 function IRR_GetSpecLink(name)
-    return IRR.db.specLinks and IRR.db.specLinks[name] or nil
+    return IRR.chardata and IRR.chardata.specLinks[name] or nil
 end
 
 -- -------------------------------------------------------
@@ -302,14 +341,13 @@ end
 -- Store or retrieve a texture path for a set's display icon.
 -- -------------------------------------------------------
 function IRR_SetSetIcon(name, icon)
-    if not IRR or not IRR.db then return end
-    IRR.db.setIcons = IRR.db.setIcons or {}
-    IRR.db.setIcons[name] = icon
+    if not IRR or not IRR.chardata then return end
+    IRR.chardata.setIcons[name] = icon
 end
 
 function IRR_GetSetIcon(name)
-    if not IRR or not IRR.db or not IRR.db.setIcons then return nil end
-    return IRR.db.setIcons[name]
+    if not IRR or not IRR.chardata then return nil end
+    return IRR.chardata.setIcons[name]
 end
 
 -- -------------------------------------------------------
@@ -317,7 +355,7 @@ end
 -- Returns true if a set with that name is saved.
 -- -------------------------------------------------------
 function IRR_SetExists(name)
-    return IRR.db.sets[name] ~= nil
+    return IRR.chardata.sets[name] ~= nil
 end
 
 -- -------------------------------------------------------
@@ -326,8 +364,8 @@ end
 -- -------------------------------------------------------
 function IRR_GetSetItemCount(name)
     local count = 0
-    if IRR.db.sets[name] then
-        for _ in pairs(IRR.db.sets[name]) do count = count + 1 end
+    if IRR.chardata.sets[name] then
+        for _ in pairs(IRR.chardata.sets[name]) do count = count + 1 end
     end
     return count
 end
