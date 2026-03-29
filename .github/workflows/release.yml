@@ -37,11 +37,14 @@ jobs:
         run: |
           VER="${{ steps.ver.outputs.VERSION }}"
           BUNDLE="SlySuite-${VER}-full"
-          mkdir -p "$BUNDLE"
+          mkdir -p "dist_bundle"
+          # Place all addon folders at the ROOT of the zip — CF app requires
+          # addon .toc files to be directly inside the top-level zip entries,
+          # not nested inside a parent folder.
           for dir in addons/*/; do
-            cp -r "$dir" "${BUNDLE}/$(basename $dir)"
+            cp -r "$dir" "dist_bundle/$(basename $dir)"
           done
-          zip -r "dist/${BUNDLE}.zip" "${BUNDLE}/"
+          (cd dist_bundle && zip -r "../dist/${BUNDLE}.zip" .)
           echo "Bundle: dist/${BUNDLE}.zip"
           ls -lh "dist/${BUNDLE}.zip"
 
