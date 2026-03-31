@@ -475,24 +475,29 @@ function ECS_GetStats()
             or string.format("NO  — need %d more|r", critDefNeeded)) })
 
     -- ---- RESISTANCES ----
-    -- UnitResistance returns base, bonus (gear+auras), negative, positive.
-    -- Total displayed = base + bonus.
-    local RES_SCHOOLS = { {2,"Holy","ffffff99"}, {3,"Fire","ff7700ff"}, {4,"Nature","00ff44ff"},
-                          {5,"Frost","88ddffff"}, {6,"Shadow","cc66ffff"}, {7,"Arcane","9988ffff"} }
+    -- UnitResistance(unit, school) returns: base (gear/race/talent), pos (temp buffs), neg (debuffs).
+    -- Total = base + pos + neg.
+    local RES_SCHOOLS = { {2,"Holy","ffffff"}, {3,"Fire","ff7700"}, {4,"Nature","00ff44"},
+                          {5,"Frost","88ddff"}, {6,"Shadow","cc66ff"}, {7,"Arcane","9988ff"} }
     table.insert(stats, { section="RESISTANCES" })
     for _, s in ipairs(RES_SCHOOLS) do
         local school, name, hex = s[1], s[2], s[3]
-        local base, bonus = UnitResistance("player", school)
-        base = base or 0 ; bonus = bonus or 0
-        local total = base + bonus
+        local base, pos, neg = safe(UnitResistance, "player", school)
+        base = base or 0 ; pos = pos or 0 ; neg = neg or 0
+        local total = base + pos + neg
         local col = "|cff" .. hex
-        local valStr
-        if bonus ~= 0 then
-            valStr = string.format("%s%d|r  (%d base + %d gear)", col, total, base, bonus)
-        else
-            valStr = string.format("%s%d|r", col, total)
+        table.insert(stats, { label="  " .. name, value=string.format("%s%d|r", col, total) })
+        if total > 0 then
+            if base ~= 0 then
+                table.insert(stats, { label="    Gear", value=tostring(base) })
+            end
+            if pos ~= 0 then
+                table.insert(stats, { label="    Buffs", value=string.format("+%d", pos) })
+            end
+            if neg ~= 0 then
+                table.insert(stats, { label="    Debuffs", value=tostring(neg) })
+            end
         end
-        table.insert(stats, { label="  " .. name, value=valStr })
     end
 
     return stats
