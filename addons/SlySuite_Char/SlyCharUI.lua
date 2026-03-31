@@ -211,7 +211,7 @@ local headerName    = nil
 local headerInfo    = nil
 local headerGS      = nil
 
-local MAX_STAT_ROWS  = 60
+local MAX_STAT_ROWS  = 150
 
 -- Confirmation popup for overwriting an existing gear set.
 StaticPopupDialogs["IRR_CONFIRM_OVERWRITE"] = StaticPopupDialogs["IRR_CONFIRM_OVERWRITE"] or {

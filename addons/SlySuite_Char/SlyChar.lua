@@ -91,9 +91,14 @@ local function HookCharacterFrame()
 
         -- Don't intercept when the game opens CharacterFrame alongside vendor,
         -- trade, or inspect panels — those are legitimate engine-driven shows.
-        if (MerchantFrame and MerchantFrame:IsShown())
-        or (TradeFrame    and TradeFrame:IsShown())
-        or (InspectFrame  and InspectFrame:IsShown()) then
+        -- Also skip when the spellbook is open or the cursor is carrying
+        -- something (spell/item drag) — dragging from spellbook to bar
+        -- can trigger CharacterFrame:Show() and we must not hijack that.
+        if (MerchantFrame  and MerchantFrame:IsShown())
+        or (TradeFrame     and TradeFrame:IsShown())
+        or (InspectFrame   and InspectFrame:IsShown())
+        or (SpellBookFrame and SpellBookFrame:IsShown())
+        or GetCursorInfo() then
             return
         end
 

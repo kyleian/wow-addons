@@ -475,10 +475,13 @@ function ECS_GetStats()
             or string.format("NO  — need %d more|r", critDefNeeded)) })
 
     -- ---- RESISTANCES ----
-    -- UnitResistance(unit, school) returns: base (gear/race/talent), pos (temp buffs), neg (debuffs).
-    -- Total = base + pos + neg.
-    local RES_SCHOOLS = { {2,"Holy","ffffff"}, {3,"Fire","ff7700"}, {4,"Nature","00ff44"},
-                          {5,"Frost","88ddff"}, {6,"Shadow","cc66ff"}, {7,"Arcane","9988ff"} }
+    -- UnitResistance(unit, school): resistance school indices are 1-6, NOT spell school IDs 2-7.
+    --   1=Holy, 2=Fire, 3=Nature, 4=Frost, 5=Shadow, 6=Arcane
+    -- Returns: base (gear/race/talent), pos (temp buffs), neg (debuffs).
+    local RES_SCHOOLS = {
+        {1,"Holy","ffffff"}, {2,"Fire","ff7700"}, {3,"Nature","00ff44"},
+        {4,"Frost","88ddff"}, {5,"Shadow","cc66ff"}, {6,"Arcane","9988ff"},
+    }
     table.insert(stats, { section="RESISTANCES" })
     for _, s in ipairs(RES_SCHOOLS) do
         local school, name, hex = s[1], s[2], s[3]
