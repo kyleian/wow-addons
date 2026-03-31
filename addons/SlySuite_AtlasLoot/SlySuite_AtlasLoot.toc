@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: Sly AtlasLoot
 ## Notes: AtlasLoot drop rate integration â€” tooltip drop %, target-aware rates, item search panel.
-## Version: 1.5.0
+## Version: 1.5.1
 ## X-Curse-Project-ID: 1498485
 ## Author: Sly
 ## OptionalDependencies: SlySuite, AtlasLootClassic, AtlasLootClassic_DungeonsAndRaids
