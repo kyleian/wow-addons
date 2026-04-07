@@ -347,7 +347,7 @@ castFrame:SetScript("OnEvent", function(self, event, ...)
 
             SLASH_SLYTWIST1 = "/slytwist"
             SlashCmdList["SLYTWIST"] = function(msg)
-                msg = (msg or ""):lower():trim()
+                msg = strtrim((msg or ""):lower())
                 if msg == "lock" then
                     TT.db.locked = true
                     if mainFrame then mainFrame:EnableMouse(false) end
@@ -384,9 +384,11 @@ castFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-        -- TBC API: UNIT_SPELLCAST_SUCCEEDED(unit, spellName, spellRank, spellID)
-        local unit, spellName = ...
+        -- TBC 2.5.x API: UNIT_SPELLCAST_SUCCEEDED(unit, castGUID, spellID)
+        local unit, castGUID, spellID = ...
         if unit ~= "player" then return end
+        if not spellID then return end
+        local spellName = GetSpellInfo(spellID)
         if not spellName then return end
 
         if spellName:find(WFT_PATTERN, 1, true) then
