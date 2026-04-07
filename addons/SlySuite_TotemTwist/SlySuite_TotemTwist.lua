@@ -245,9 +245,15 @@ local function UpdateVisuals(now)
 
     local remaining = WFT_DURATION - (now - wftDropTime)
 
-    -- Expiry check
+    -- Expiry: only flag expired if we were in urgent (GoAT was down).
+    -- Armed timing out just means the twist window passed without a GoAT drop — reset quietly.
     if remaining <= 0 then
-        state = "expired"
+        if state == "urgent" then
+            state = "expired"
+        else
+            state = "idle"
+            return
+        end
     end
 
     if state == "expired" then
@@ -315,57 +321,11 @@ end)
 -- Spell cast detection
 -- ────────────────────────────────────────────────────────────
 local castFrame = CreateFrame("Frame")
-castFrame:RegisterEvent("ADDON_LOADED")
 castFrame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 castFrame:RegisterEvent("PLAYER_LOGOUT")
 
 castFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" then
-        local name = ...
-        if name == ADDON_NAME then
-            SlyTotemTwistDB = SlyTotemTwistDB or {}
-            ApplyDefaults(SlyTotemTwistDB, DB_DEFAULTS)
-            TT.db = SlyTotemTwistDB
-
-            SLASH_SLYTWIST1 = "/slytwist"
-            SlashCmdList["SLYTWIST"] = function(msg)
-                msg = strtrim((msg or ""):lower())
-                if msg == "lock" then
-                    TT.db.locked = true
-                    if mainFrame then mainFrame:EnableMouse(false) end
-                    DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[TotemTwist]|r Locked.")
-                elseif msg == "unlock" then
-                    TT.db.locked = false
-                    if mainFrame then mainFrame:EnableMouse(true) end
-                    DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[TotemTwist]|r Unlocked — drag to reposition.")
-                elseif msg == "reset" then
-                    TT.db.position = { point = "CENTER", x = 0, y = -200 }
-                    if mainFrame then
-                        mainFrame:ClearAllPoints()
-                        mainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-                    end
-                    DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[TotemTwist]|r Position reset.")
-                else
-                    -- toggle
-                    if not mainFrame then BuildUI() end
-                    if mainFrame:IsShown() then
-                        mainFrame:Hide()
-                        TT.db.shown = false
-                    else
-                        mainFrame:Show()
-                        TT.db.shown = true
-                    end
-                end
-            end
-
-            BuildUI()
-
-            DEFAULT_CHAT_FRAME:AddMessage(
-                "|cff88bbff[TotemTwist]|r v" .. VERSION ..
-                " loaded. |cffffcc00/slytwist|r to toggle.")
-        end
-
-    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+    if event == "UNIT_SPELLCAST_SUCCEEDED" then
         -- TBC 2.5.x API: UNIT_SPELLCAST_SUCCEEDED(unit, castGUID, spellID)
         local unit, castGUID, spellID = ...
         if unit ~= "player" then return end
@@ -385,11 +345,11 @@ castFrame:SetScript("OnEvent", function(self, event, ...)
         elseif spellName:find(GOAT_PATTERN, 1, true) then
             -- GoAT dropped while WFT is armed — THIS starts the urgent countdown
             if state == "armed" then
-                local now2        = GetTime()
-                goatDropTime      = now2
-                remainingAtGoat   = WFT_DURATION - (now2 - wftDropTime)
-                state             = "urgent"
-                pulseT            = 0
+                local now2       = GetTime()
+                goatDropTime     = now2
+                remainingAtGoat  = WFT_DURATION - (now2 - wftDropTime)
+                state            = "urgent"
+                pulseT           = 0
             end
         end
 
@@ -401,5 +361,73 @@ castFrame:SetScript("OnEvent", function(self, event, ...)
                 TT.db.shown    = mainFrame:IsShown()
             end
         end
+    end
+end)
+
+-- ────────────────────────────────────────────────────────────
+-- Init — called by SlySuite or directly on ADDON_LOADED
+-- ────────────────────────────────────────────────────────────
+local function Init()
+    -- Shaman only
+    local _, classFile = UnitClass("player")
+    if classFile ~= "SHAMAN" then return end
+
+    SlyTotemTwistDB = SlyTotemTwistDB or {}
+    ApplyDefaults(SlyTotemTwistDB, DB_DEFAULTS)
+    TT.db = SlyTotemTwistDB
+
+    SLASH_SLYTWIST1 = "/slytwist"
+    SlashCmdList["SLYTWIST"] = function(msg)
+        msg = strtrim((msg or ""):lower())
+        if msg == "lock" then
+            TT.db.locked = true
+            if mainFrame then mainFrame:EnableMouse(false) end
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[TotemTwist]|r Locked.")
+        elseif msg == "unlock" then
+            TT.db.locked = false
+            if mainFrame then mainFrame:EnableMouse(true) end
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[TotemTwist]|r Unlocked — drag to reposition.")
+        elseif msg == "reset" then
+            TT.db.position = { point = "CENTER", x = 0, y = -200 }
+            if mainFrame then
+                mainFrame:ClearAllPoints()
+                mainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
+            end
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[TotemTwist]|r Position reset.")
+        else
+            if not mainFrame then BuildUI() end
+            if mainFrame:IsShown() then
+                mainFrame:Hide()
+                TT.db.shown = false
+            else
+                mainFrame:Show()
+                TT.db.shown = true
+            end
+        end
+    end
+
+    BuildUI()
+
+    DEFAULT_CHAT_FRAME:AddMessage(
+        "|cff88bbff[TotemTwist]|r v" .. VERSION ..
+        " loaded. |cffffcc00/slytwist|r to toggle.")
+end
+
+-- ────────────────────────────────────────────────────────────
+-- Boot — register with SlySuite if present, else init directly
+-- ────────────────────────────────────────────────────────────
+local bootFrame = CreateFrame("Frame")
+bootFrame:RegisterEvent("ADDON_LOADED")
+bootFrame:SetScript("OnEvent", function(self, event, name)
+    if name ~= ADDON_NAME then return end
+    self:UnregisterEvent("ADDON_LOADED")
+    if SlySuiteDataFrame and SlySuiteDataFrame.Register then
+        SlySuiteDataFrame.Register(ADDON_NAME, VERSION, Init, {
+            description = "WFT/GoAT totem twist timer — tracks the re-drop window after GoAT.",
+            slash       = "/slytwist",
+            icon        = "Interface\\Icons\\Spell_Nature_Windfury",
+        })
+    else
+        Init()
     end
 end)
