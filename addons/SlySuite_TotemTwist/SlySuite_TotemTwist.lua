@@ -24,7 +24,7 @@ local VERSION    = "1.5.1"
 local WFT_DURATION  = 10.0   -- full buff window (seconds)
 local WARN_AT       = 7.0    -- yellow caution phase starts
 local TWIST_AT      = 8.5    -- red/flash TWIST phase starts
-local GOAT_FLASH_DUR = 1.0   -- how long "DROP WFT!" stays on screen
+local GOAT_FLASH_DUR = 1.5   -- how long "DROP WFT!" stays on screen
 
 -- ────────────────────────────────────────────────────────────
 -- Spell name matching (all ranks auto-match via prefix)
@@ -288,13 +288,12 @@ local function UpdateVisuals(now)
     timeText:SetText(string.format("|cffcccccc%.1f / %.1f s|r", elapsed, WFT_DURATION))
 
     if elapsed >= TWIST_AT then
-        -- Pulsing red — TWIST NOW
-        pulseT = pulseT + 0.033
-        local pulse = 0.6 + math.abs(math.sin(pulseT * 6)) * 0.4
+        -- Pulsing red — TWIST NOW (pulseT driven by OnUpdate, not incremented here)
+        local pulse = 0.65 + math.abs(math.sin(pulseT * 3)) * 0.3
         barFill:SetColorTexture(pulse, 0.1, 0.1, 1)
         stateLabel:SetText("|cffff2222TWIST!|r")
         wftIcon:SetAlpha(pulse)
-        goatIcon:SetAlpha(pulse)
+        goatIcon:SetAlpha(0.3)
     elseif elapsed >= WARN_AT then
         -- Yellow caution
         local warnFrac = (elapsed - WARN_AT) / (TWIST_AT - WARN_AT)
@@ -401,10 +400,10 @@ castFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
         elseif spellName:find(GOAT_PATTERN, 1, true) then
-            -- GoAT dropped — only meaningful as a mid-twist if WFT is active
+            -- GoAT dropped mid-twist — highlight whenever WFT window is active
             local now = GetTime()
-            if state == "wft" and (now - wftDropTime) >= WARN_AT then
-                state       = "goat"
+            if state == "wft" then
+                state        = "goat"
                 goatFlashEnd = now + GOAT_FLASH_DUR
             end
         end
