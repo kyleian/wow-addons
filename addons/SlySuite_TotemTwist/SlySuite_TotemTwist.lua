@@ -21,9 +21,8 @@ local VERSION    = "1.5.1"
 -- WFT buff in TBC lasts 10 s.  Twist by dropping GoAT at ~8.5 s,
 -- then immediately WFT to clip at the 9-second mark.
 -- ────────────────────────────────────────────────────────────
-local WFT_DURATION  = 10.0   -- full buff window (seconds)
-local WARN_AT       = 7.0    -- yellow caution phase starts
-local TWIST_AT      = 8.5    -- red/flash TWIST phase starts
+local WFT_DURATION  = 10.0   -- WFT aura lasts 10 s on melee
+local URGENT_BELOW  = 1.5    -- switch to red pulse when < 1.5 s remain after GoAT
 -- ────────────────────────────────────────────────────────────
 -- Spell name matching (all ranks auto-match via prefix)
 -- ────────────────────────────────────────────────────────────
@@ -36,9 +35,11 @@ local GOAT_PATTERN = "Grace of Air Totem"
 local TT = {}
 TT.db = nil
 
-local state       = "idle"   -- idle | wft | goat | expired
-local wftDropTime = 0
-local pulseT      = 0        -- for red-phase pulse
+local state            = "idle"   -- idle | armed | urgent | expired
+local wftDropTime      = 0
+local goatDropTime     = 0
+local remainingAtGoat  = 0        -- WFT aura time left the moment GoAT was dropped
+local pulseT           = 0
 
 -- DB defaults
 local DB_DEFAULTS = {
@@ -242,13 +243,10 @@ local function UpdateVisuals(now)
         return
     end
 
-    -- WFT aura always counts from the original drop — even during GoAT phase.
-    -- Dropping GoAT replaces the totem but the buff on melee is still burning.
-    local elapsed   = now - wftDropTime
-    local remaining = WFT_DURATION - elapsed
+    local remaining = WFT_DURATION - (now - wftDropTime)
 
-    -- Hard expiry check (covers both wft and goat states)
-    if elapsed >= WFT_DURATION then
+    -- Expiry check
+    if remaining <= 0 then
         state = "expired"
     end
 
@@ -257,51 +255,46 @@ local function UpdateVisuals(now)
         barFill:SetWidth(BAR_MAX_W)
         barSpark:Hide()
         stateLabel:SetText("|cffff3333EXPIRED|r")
-        timeText:SetText("|cffff4444WFT expired — re-drop!|r")
+        timeText:SetText("|cffff4444WFT expired — re-drop now!|r")
         goatIcon:SetAlpha(0.3)
         wftIcon:SetAlpha(1.0)
         return
     end
 
-    -- Bar always reflects true elapsed time regardless of state
-    local frac  = math.min(elapsed / WFT_DURATION, 1)
-    local fillW = math.max(1, math.floor(frac * BAR_MAX_W))
+    if state == "armed" then
+        -- WFT is active but GoAT not yet dropped — quiet indicator only
+        barFill:SetWidth(0.01)
+        barSpark:Hide()
+        stateLabel:SetText("|cff44cc44WFT ARMED|r")
+        timeText:SetText(string.format("|cff557755%.1fs on aura|r", remaining))
+        wftIcon:SetAlpha(1.0)
+        goatIcon:SetAlpha(0.3)
+        return
+    end
+
+    -- state == "urgent": GoAT is down, WFT aura burning — countdown to re-drop
+    local window    = math.max(remainingAtGoat, 0.1)
+    local frac      = math.max(remaining / window, 0)
+    local fillW     = math.max(1, math.floor(frac * BAR_MAX_W))
     barFill:SetWidth(fillW)
     barSpark:SetPoint("TOPLEFT", barBg, "TOPLEFT", fillW - 2, 1)
     barSpark:Show()
 
-    if state == "goat" then
-        -- GoAT is down, WFT aura still burning — timer continues, gold urgent display
-        local pulse = 0.75 + math.abs(math.sin(pulseT * 3)) * 0.25
-        barFill:SetColorTexture(0.9 * pulse, 0.65 * pulse, 0.0, 1)
-        stateLabel:SetText("|cffffd700RE-DROP WFT!|r")
+    -- Urgency ramps: >1.5s = gold, <=1.5s = red pulse
+    if remaining > URGENT_BELOW then
+        local t = 1 - (remaining / window)
+        barFill:SetColorTexture(0.9, 0.7 - t * 0.5, 0.0, 1)
+        stateLabel:SetText("|cffffd700RE-DROP WFT|r")
         timeText:SetText(string.format("|cffffd700GoAT active — %.1fs left!|r", remaining))
         goatIcon:SetAlpha(1.0)
-        wftIcon:SetAlpha(0.4)
-    elseif elapsed >= TWIST_AT then
-        -- Red pulsing — TWIST window, drop GoAT now
-        local pulse = 0.65 + math.abs(math.sin(pulseT * 3)) * 0.3
-        barFill:SetColorTexture(pulse, 0.1, 0.1, 1)
-        stateLabel:SetText("|cffff2222TWIST!|r")
-        timeText:SetText(string.format("|cffff4444%.1fs — drop GoAT now!|r", remaining))
-        wftIcon:SetAlpha(pulse)
-        goatIcon:SetAlpha(0.3)
-    elseif elapsed >= WARN_AT then
-        -- Yellow caution — get ready
-        local warnFrac = (elapsed - WARN_AT) / (TWIST_AT - WARN_AT)
-        barFill:SetColorTexture(0.9, 0.7 - warnFrac * 0.5, 0.0, 1)
-        stateLabel:SetText("|cffffcc00READY|r")
-        timeText:SetText(string.format("|cffffcc00%.1fs remaining|r", remaining))
-        wftIcon:SetAlpha(1.0)
-        goatIcon:SetAlpha(0.6 + warnFrac * 0.4)
+        wftIcon:SetAlpha(0.5)
     else
-        -- Green safe phase
-        local safeFrac = elapsed / WARN_AT
-        barFill:SetColorTexture(0.1 + safeFrac * 0.6, 0.7 - safeFrac * 0.1, 0.1, 1)
-        stateLabel:SetText(string.format("|cff44cc44%.1fs|r", remaining))
-        timeText:SetText(string.format("|cffaaffaa%.1f / %.1f s|r", elapsed, WFT_DURATION))
-        wftIcon:SetAlpha(1.0)
-        goatIcon:SetAlpha(0.3)
+        local pulse = 0.65 + math.abs(math.sin(pulseT * 3)) * 0.35
+        barFill:SetColorTexture(pulse, 0.1, 0.1, 1)
+        stateLabel:SetText("|cffff2222DROP WFT NOW!|r")
+        timeText:SetText(string.format("|cffff4444%.1fs — WFT NOW!|r", remaining))
+        goatIcon:SetAlpha(pulse)
+        wftIcon:SetAlpha(0.4)
     end
 end
 
@@ -381,8 +374,8 @@ castFrame:SetScript("OnEvent", function(self, event, ...)
         if not spellName then return end
 
         if spellName:find(WFT_PATTERN, 1, true) then
-            -- Fresh WFT drop — reset timer
-            state       = "wft"
+            -- WFT dropped — arm the timer, reset any prior twist cycle
+            state       = "armed"
             wftDropTime = GetTime()
             pulseT      = 0
             if mainFrame and not mainFrame:IsShown() and TT.db.shown then
@@ -390,9 +383,13 @@ castFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
         elseif spellName:find(GOAT_PATTERN, 1, true) then
-            -- GoAT dropped mid-twist — highlight whenever WFT window is active
-            if state == "wft" then
-                state = "goat"
+            -- GoAT dropped while WFT is armed — THIS starts the urgent countdown
+            if state == "armed" then
+                local now2        = GetTime()
+                goatDropTime      = now2
+                remainingAtGoat   = WFT_DURATION - (now2 - wftDropTime)
+                state             = "urgent"
+                pulseT            = 0
             end
         end
 
