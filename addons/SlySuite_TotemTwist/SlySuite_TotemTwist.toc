@@ -1,0 +1,10 @@
+## Interface: 20505
+## Title: Sly Totem Twist
+## Notes: WFT <-> GoAT totem twist timer. Tracks the 9-second WFT window and alerts when to clip. /slytwist
+## Version: 1.5.1
+## X-Curse-Project-ID: 1498485
+## Author: Sly
+## OptionalDeps: SlySuite, SlySuite_Style
+## SavedVariables: SlyTotemTwistDB
+
+SlySuite_TotemTwist.lua

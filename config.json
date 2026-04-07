@@ -161,6 +161,14 @@
                        "sourceDir":  "addons\\Whelp",
                        "version":  "1.5.1",
                        "curseProjectId":  ""
+                   },
+                   {
+                       "name":  "SlySuite_TotemTwist",
+                       "enabled":  true,
+                       "description":  "WFT/GoAT totem twist timer — tracks the 9-second WFT window and alerts when to clip. /slytwist",
+                       "sourceDir":  "addons\\SlySuite_TotemTwist",
+                       "version":  "1.5.1",
+                       "curseProjectId":  ""
                    }
                ],
     "deployment":  {

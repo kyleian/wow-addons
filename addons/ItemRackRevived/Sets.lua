@@ -84,6 +84,7 @@ end
 -- Returns a sorted list of saved set names.
 -- -------------------------------------------------------
 function IRR_GetSetNames()
+    if not (IRR.chardata and IRR.chardata.sets) then return {} end
     local names = {}
     for name in pairs(IRR.chardata.sets) do
         table.insert(names, name)

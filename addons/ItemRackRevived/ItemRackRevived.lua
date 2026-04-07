@@ -111,6 +111,10 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_LOGIN" then
         -- Player data is now available; build the per-character key.
+        if not IRR.db then
+            print("|cffff4444[ItemRack Revived]|r DB not set at PLAYER_LOGIN — ADDON_LOADED may have failed.")
+            return
+        end
         local realm    = GetRealmName() or "Unknown"
         local charName = UnitName("player") or "Unknown"
         local charKey  = realm .. "-" .. charName
