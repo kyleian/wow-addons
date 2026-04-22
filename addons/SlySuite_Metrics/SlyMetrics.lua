@@ -7,7 +7,7 @@ local ADDON_NAME    = "SlySuite_Metrics"
 local ADDON_VERSION = "1.2.0"
 
 SM = {}
-SM.panel    = "dps"   -- "dps" | "hps"
+SM.panel    = "dps"   -- "dps" | "hps" | "thr"
 SM.inCombat = false
 SM.db       = {}
 
@@ -389,7 +389,7 @@ thrFrame:SetScript("OnUpdate", function(_, dt)
     for i = 1, 40 do tryUnit("raid"..i)  end
     table.sort(rows, function(a, b) return a.val > b.val end)
     SM.threat = rows
-    if SM_RefreshThreat then SM_RefreshThreat() end
+    if SM_RefreshThreat and SM.panel == "thr" then SM_RefreshThreat() end
 end)
 
 -- refresh ticker (0.5s in combat + 3s linger after)

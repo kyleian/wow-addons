@@ -169,6 +169,22 @@
                        "sourceDir":  "addons\\SlySuite_TotemTwist",
                        "version":  "1.5.1",
                        "curseProjectId":  ""
+                   },
+                   {
+                       "name":  "SlySuite_ProcTracker",
+                       "enabled":  true,
+                       "description":  "Dragonstrike / Mongoose / Dragonspine Trophy proc tracker — per fight and per session, with boss fight history cache. /slyptoc",
+                       "sourceDir":  "addons\\SlySuite_ProcTracker",
+                       "version":  "1.5.1",
+                       "curseProjectId":  ""
+                   },
+                   {
+                       "name":  "SlySuite_FeralHelper",
+                       "enabled":  true,
+                       "description":  "TBC Feral Druid rotation advisor — Cat DPS powershift cycle and Bear Tank priority display with debuff/CD timers. /slyferal",
+                       "sourceDir":  "addons\\SlySuite_FeralHelper",
+                       "version":  "1.5.1",
+                       "curseProjectId":  ""
                    }
                ],
     "deployment":  {

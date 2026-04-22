@@ -1,21 +1,17 @@
 -- SlyMetricsUI.lua  (TBC Anniversary / Interface 20505)
--- Split pane: DPS/HPS rows on top, Threat rows always visible below.
+-- Three tabs: DPS / HPS / THREAT sharing a single row host.
 
 local W       = 280
-local TITLE_H = 20
+local TITLE_H = 16
 local TAB_H   = 18
 local ROW_H   = 18
 local ROW_PAD = 2
 local PAD     = 4
-local DPS_MAX = 8
-local THR_MAX = 6
-local SECT_H  = 18
-local SEP_H   = 4
+local ROW_MAX = 8
 local FOOT_H  = 16
 
-local DPS_BLK = DPS_MAX * (ROW_H + ROW_PAD)
-local THR_BLK = THR_MAX * (ROW_H + ROW_PAD)
-local H = TITLE_H + TAB_H + 2 + DPS_BLK + SEP_H + SECT_H + THR_BLK + FOOT_H + 4
+local ROW_BLK = ROW_MAX * (ROW_H + ROW_PAD)
+local H = TITLE_H + TAB_H + 2 + ROW_BLK + FOOT_H + 4
 
 local BAR_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
 
@@ -101,8 +97,7 @@ local function RenderRows(pool, host, rows, maxN, maxVal, labelFn)
     for i = n+1, #pool do pool[i]:Hide() end
 end
 
-local dpsPool = {}
-local thrPool = {}
+local rowPool = {}
 local tabs    = {}
 
 local function HighlightTabs()
@@ -133,7 +128,7 @@ function SM_RefreshDPS()
     tot = tot or 0
     el  = el  or 0
     for _, r in ipairs(rows) do r._sort = r.dmg end
-    RenderRows(dpsPool, f._dpsHost, rows, DPS_MAX, tot, function(d)
+    RenderRows(rowPool, f._rowHost, rows, ROW_MAX, tot, function(d)
         local dps = el > 0 and d.dmg/el or 0
         return string.format("|cffffcc00%s|r |cffaaaaaa%s/s|r",
             SM.Fmt(d.dmg), SM.Fmt(dps))
@@ -156,7 +151,7 @@ function SM_RefreshHPS()
     tot = tot or 0
     el  = el  or 0
     for _, r in ipairs(rows) do r._sort = r.heal end
-    RenderRows(dpsPool, f._dpsHost, rows, DPS_MAX, tot, function(d)
+    RenderRows(rowPool, f._rowHost, rows, ROW_MAX, tot, function(d)
         local hps = el > 0 and d.heal/el or 0
         return string.format("|cff66ff88%s|r |cffaaaaaa%s/s|r",
             SM.Fmt(d.heal), SM.Fmt(hps))
@@ -177,35 +172,36 @@ function SM_RefreshThreat()
     if not f or not f:IsShown() then return end
     local rows = SM.threat or {}
     if #rows == 0 then
-        for _, r in ipairs(thrPool) do r:Hide() end
-        if f._thrLabel then
-            f._thrLabel:SetText("|cff888888THREAT|r  " ..
-                (UnitExists("target")
-                    and "|cffaaaaaa(no data)|r"
-                    or  "|cffaaaaaa(no target)|r"))
-        end
+        for _, r in ipairs(rowPool) do r:Hide() end
+        SetStatus("|cff888888THREAT  " ..
+            (UnitExists("target")
+                and "|cffaaaaaa(no data)|r"
+                or  "|cffaaaaaa(no target)|r"))
         return
     end
     local maxV = rows[1].val or 1
     for _, r in ipairs(rows) do r._sort = r.val end
-    RenderRows(thrPool, f._thrHost, rows, THR_MAX, maxV, function(d)
+    RenderRows(rowPool, f._rowHost, rows, ROW_MAX, maxV, function(d)
         return string.format("%s|cffffcc00%d%%|r |cffaaaaaa%s|r",
             d.isTank and "|cffff6666T|r " or "",
             math.floor(d.pct or 0),
             SM.Fmt(d.val))
     end)
-    if f._thrLabel then
-        f._thrLabel:SetText(string.format("|cff888888THREAT|r  |cffcccccc%s|r",
-            UnitName("target") or "target"))
-    end
+    SetStatus(string.format("|cff888888Threat on: |cffcccccc%s|r",
+        UnitName("target") or "target"))
 end
 
 function SM_Refresh()
     local f = SlyMetricsFrame
     if not f or not f:IsShown() then return end
     HighlightTabs()
-    if SM.panel == "hps" then SM_RefreshHPS() else SM_RefreshDPS() end
-    SM_RefreshThreat()
+    if SM.panel == "hps" then
+        SM_RefreshHPS()
+    elseif SM.panel == "thr" then
+        SM_RefreshThreat()
+    else
+        SM_RefreshDPS()
+    end
 end
 
 -- ── SM_BuildUI ────────────────────────────────────────────────────────────────
@@ -267,22 +263,22 @@ function SM_BuildUI()
     title:SetText("|cff00ccffSly|rMetrics")
 
     local cBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    cBtn:SetSize(20, 20)
-    cBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", 4, 4)
+    cBtn:SetSize(16, 16)
+    cBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -1)
     cBtn:SetScript("OnClick", function() f:Hide() end)
 
     local rBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    rBtn:SetSize(42, 14)
-    rBtn:SetPoint("RIGHT", cBtn, "LEFT", -2, 1)
+    rBtn:SetSize(40, 13)
+    rBtn:SetPoint("RIGHT", cBtn, "LEFT", -2, 0)
     rBtn:SetText("Reset")
     rBtn:SetScript("OnClick", function()
         SM.Reset()
         SM_Refresh()
     end)
 
-    -- DPS / HPS tabs
-    local tw = math.floor(W/2)
-    local tabDefs = { {id="dps", label="DPS"}, {id="hps", label="HPS"} }
+    -- DPS / HPS / THREAT tabs
+    local tw = math.floor(W/3)
+    local tabDefs = { {id="dps", label="DPS"}, {id="hps", label="HPS"}, {id="thr", label="THREAT"} }
     for i, td in ipairs(tabDefs) do
         local b = CreateFrame("Button", nil, f)
         b:SetSize(tw, TAB_H)
@@ -306,7 +302,9 @@ function SM_BuildUI()
         b:SetScript("OnClick", function()
             SM.panel = pid
             HighlightTabs()
-            if pid == "hps" then SM_RefreshHPS() else SM_RefreshDPS() end
+            if pid == "hps" then SM_RefreshHPS()
+            elseif pid == "thr" then SM_RefreshThreat()
+            else SM_RefreshDPS() end
         end)
         tabs[pid] = b
     end
@@ -318,40 +316,14 @@ function SM_BuildUI()
     div:SetHeight(2)
     div:SetColorTexture(0.20, 0.20, 0.30, 1)
 
-    -- DPS row host
-    local dpsTop  = -(TITLE_H + TAB_H + 2)
-    local dpsHost = CreateFrame("Frame", nil, f)
-    dpsHost:SetPoint("TOPLEFT",  f, "TOPLEFT",   PAD,  dpsTop)
-    dpsHost:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD,  dpsTop)
-    dpsHost:SetHeight(DPS_BLK)
-    dpsHost:EnableMouse(false)
-    f._dpsHost = dpsHost
-
-    -- separator + THREAT header
-    local sepTop = dpsTop - DPS_BLK - SEP_H
-    local sep = f:CreateTexture(nil, "ARTWORK")
-    sep:SetPoint("TOPLEFT",  f, "TOPLEFT",  0, sepTop)
-    sep:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, sepTop)
-    sep:SetHeight(1)
-    sep:SetColorTexture(0.15, 0.15, 0.25, 1)
-
-    local thrLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    thrLabel:SetFont(thrLabel:GetFont(), 10, "OUTLINE")
-    thrLabel:SetPoint("TOPLEFT", f, "TOPLEFT", PAD+2, sepTop - 1)
-    thrLabel:SetHeight(SECT_H)
-    thrLabel:SetJustifyH("LEFT")
-    thrLabel:SetTextColor(0.55, 0.55, 0.65)
-    thrLabel:SetText("|cff888888THREAT|r")
-    f._thrLabel = thrLabel
-
-    -- Threat row host
-    local thrTop  = sepTop - SECT_H
-    local thrHost = CreateFrame("Frame", nil, f)
-    thrHost:SetPoint("TOPLEFT",  f, "TOPLEFT",   PAD,  thrTop)
-    thrHost:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD,  thrTop)
-    thrHost:SetHeight(THR_BLK)
-    thrHost:EnableMouse(false)
-    f._thrHost = thrHost
+    -- shared row host (used by all three tabs)
+    local rowTop  = -(TITLE_H + TAB_H + 2)
+    local rowHost = CreateFrame("Frame", nil, f)
+    rowHost:SetPoint("TOPLEFT",  f, "TOPLEFT",   PAD,  rowTop)
+    rowHost:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD,  rowTop)
+    rowHost:SetHeight(ROW_BLK)
+    rowHost:EnableMouse(false)
+    f._rowHost = rowHost
 
     -- status footer
     local st = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
