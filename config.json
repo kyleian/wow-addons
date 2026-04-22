@@ -185,6 +185,14 @@
                        "sourceDir":  "addons\\SlySuite_FeralHelper",
                        "version":  "1.5.1",
                        "curseProjectId":  ""
+                   },
+                   {
+                       "name":  "SlySuite_WarriorHelper",
+                       "enabled":  true,
+                       "description":  "TBC Warrior rotation advisor — Fury DPS (BT/WW), Arms DPS (Slam/MS/WW with swing timer), Protection Tank (SS>Revenge>Devastate loop, Shield Block, debuffs). Auto-detects spec. /slywarrior",
+                       "sourceDir":  "addons\\SlySuite_WarriorHelper",
+                       "version":  "1.0.0",
+                       "curseProjectId":  ""
                    }
                ],
     "deployment":  {
