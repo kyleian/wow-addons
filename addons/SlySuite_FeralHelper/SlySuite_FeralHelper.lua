@@ -557,6 +557,22 @@ local function UpdateCat(now)
         nextCost = 42   -- Shred is the default
     end
 
+    -- What's the NEXT ability name (for forward-looking display)
+    local nextName
+    if cps >= 4 and ripL == 0 then
+        nextName = "Rip"
+    elseif manL == 0 and manCD <= 0 then
+        nextName = "Mangle"
+    else
+        nextName = "Shred"
+    end
+    -- Energy ticks: ~20E per 2s in cat form. Estimate ticks needed.
+    local function TicksNeeded(need, have)
+        local deficit = math.max(0, need - have)
+        if deficit == 0 then return 0 end
+        return math.ceil(deficit / 20)
+    end
+
     -- Strict priority from guide
     local best
     if cps >= 4 and energy >= 30 and ripL == 0 then
@@ -604,18 +620,32 @@ local function UpdateCat(now)
             end
 
         elseif k == "SHRED" then
-            local col = energy >= 42 and "55ddff" or "666677"
-            s = Col(col, energy .. "E")
+            if energy >= 42 then
+                s = Col("55ddff", "CAST NOW  ") .. Col("888888", energy .. "E")
+            else
+                local need    = 42
+                local deficit = need - energy
+                local ticks   = TicksNeeded(need, energy)
+                local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
+                s = Col("555566", energy .. "E  ") .. Col("888888", "+" .. deficit .. "E  " .. tickStr)
+            end
 
         elseif k == "POWERSHIFT" then
-            -- Show how far below the needed cost we are
             local deficit = nextCost - energy
-            local col = deficit > 20 and "aaffaa" or "667766"
-            s = Col(col, energy .. "E  -" .. deficit)
+            local ticks   = TicksNeeded(nextCost, energy)
+            local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
+            if best == "POWERSHIFT" then
+                s = Col("aaffaa", "SHIFT  ") .. Col("888888", "→ " .. nextName .. " after")
+            else
+                s = Col("667766", energy .. "E  -" .. deficit .. "  " .. tickStr)
+            end
 
         elseif k == "WAIT" then
             local deficit = nextCost - energy
-            s = Col("555566", energy .. "E  -" .. deficit)
+            local ticks   = TicksNeeded(nextCost, energy)
+            local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
+            s = Col("888888", "→ ") .. Col("aaaacc", nextName) ..
+                Col("555566", "  +" .. deficit .. "E  ") .. Col("888888", tickStr)
 
         elseif k == "FB" then
             -- Passive swap indicator
@@ -651,11 +681,20 @@ local function UpdateCat(now)
 
     -- Spotlight: propagate winning action + live status
     local spotStatus = ""
-    if best == "RIP"        then spotStatus = cps .. "CP  " .. energy .. "E"
-    elseif best == "MANGLE_CAT" then spotStatus = energy .. "E"
-    elseif best == "SHRED"  then spotStatus = energy .. "E"
-    elseif best == "POWERSHIFT" then spotStatus = energy .. "E  need " .. nextCost
-    elseif best == "WAIT"   then spotStatus = energy .. "E  ticking..."
+    if best == "RIP" then
+        spotStatus = cps .. "CP  " .. energy .. "E"
+    elseif best == "MANGLE_CAT" then
+        spotStatus = energy .. "E"
+    elseif best == "SHRED" then
+        spotStatus = energy .. "E"
+    elseif best == "POWERSHIFT" then
+        local deficit = nextCost - energy
+        spotStatus = "shift → " .. nextName .. "  need +" .. deficit .. "E"
+    elseif best == "WAIT" then
+        local deficit = nextCost - energy
+        local ticks   = TicksNeeded(nextCost, energy)
+        local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
+        spotStatus = "→ " .. nextName .. "  +" .. deficit .. "E  " .. tickStr
     end
     UpdateSpotlight(best, CAT_ROWS, spotStatus)
 end

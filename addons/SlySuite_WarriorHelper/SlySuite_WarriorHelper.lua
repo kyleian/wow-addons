@@ -593,7 +593,9 @@ local function UpdateFury(now)
             elseif btSoon then
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(btCD))
             else
-                s = Col("ff8844", Fmt(btCD)) .. Col("888888", "  wait")
+                -- Show BT countdown and when WW follows after
+                local seqStr = wwCD > 0 and ("  → WW " .. Fmt(wwCD)) or "  → WW READY"
+                s = Col("ff8844", Fmt(btCD)) .. Col("555566", seqStr)
             end
 
         elseif k == "WW" then
@@ -602,7 +604,9 @@ local function UpdateFury(now)
             elseif wwSoon then
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(wwCD))
             else
-                s = Col("ff8844", Fmt(wwCD)) .. Col("888888", "  wait")
+                -- Show WW countdown and when BT follows after
+                local seqStr = btCD > 0 and ("  → BT " .. Fmt(btCD)) or "  → BT READY"
+                s = Col("ff8844", Fmt(wwCD)) .. Col("555566", seqStr)
             end
 
         elseif k == "EXECUTE" then
@@ -659,10 +663,23 @@ local function UpdateFury(now)
         Col(spCol, string.format("%.0f%%", tHP * 100))
     )
 
-    local spotSt = best == "BT"  and (btCD <= 0 and "CAST" or Fmt(btCD)) or
-                   best == "WW"  and (wwCD <= 0 and "CAST" or Fmt(wwCD)) or
-                   best == "EXECUTE" and (string.format("%.0f%%", tHP*100) .. "  " .. rage .. "R") or
-                   rage .. "R"
+    local nextFury = btCD <= wwCD and "BT" or "WW"
+    local nextFuryCD = btCD <= wwCD and btCD or wwCD
+    local afterFury  = btCD <= wwCD
+                       and (wwCD > 0 and (" → WW " .. Fmt(wwCD)) or " → WW READY")
+                       or  (btCD > 0 and (" → BT " .. Fmt(btCD)) or " → BT READY")
+    local spotSt
+    if best == "BT" or best == "WW" then
+        if nextFuryCD <= 0 then
+            spotSt = "CAST" .. afterFury
+        else
+            spotSt = "→ " .. nextFury .. " " .. Fmt(nextFuryCD) .. afterFury
+        end
+    elseif best == "EXECUTE" then
+        spotSt = string.format("%.0f%%", tHP*100) .. "  " .. rage .. "R"
+    else
+        spotSt = rage .. "R"
+    end
     UpdateSpotlight(best, FURY_ROWS, spotSt)
 end
 
@@ -734,12 +751,20 @@ local function UpdateArms(now)
         elseif k == "SLAM" then
             -- Entire spec revolves around this timing
             if slamWindow then
-                s = Col("ffee00", "CAST NOW!")  .. Col("888888", "  +" .. string.format("%.2f", timeSinceSwing) .. "s")
+                local nextAbility = msCD <= 0 and "MS" or (wwCD <= 0 and "WW" or (msCD <= wwCD and "MS" or "WW"))
+                local nextCD      = msCD <= 0 and 0   or (wwCD <= 0 and 0   or math.min(msCD, wwCD))
+                local seqStr      = nextCD <= 0 and (" → " .. nextAbility .. " READY") or (" → " .. nextAbility .. " " .. Fmt(nextCD))
+                s = Col("ffee00", "CAST NOW!") .. Col("888888", seqStr)
             elseif timeSinceSwing > 0.5 and swingDuration > 0 then
-                -- Window passed — note next swing
-                s = Col("555566", "next in  ") .. Col("ff8844", string.format("%.1f", nextSwingIn) .. "s")
+                -- Window passed — show next swing + what comes after
+                local nextAbility = msCD <= wwCD and "MS" or "WW"
+                local nextCD      = math.min(msCD, wwCD)
+                local seqStr      = nextCD <= 0 and (" → " .. nextAbility .. " READY") or (" → " .. nextAbility .. " " .. Fmt(nextCD))
+                s = Col("555566", "swing "  ) .. Col("ff8844", string.format("%.1f", nextSwingIn) .. "s") .. Col("555566", seqStr)
             else
-                s = Col("555566", "swing in  ") .. Col("888888", string.format("%.1f", nextSwingIn) .. "s")
+                local nextAbility = msCD <= wwCD and "MS" or "WW"
+                local seqStr      = " → SLAM → " .. nextAbility
+                s = Col("555566", "swing in  ") .. Col("888888", string.format("%.1f", nextSwingIn) .. "s") .. Col("444455", seqStr)
             end
 
         elseif k == "MS" then
@@ -748,7 +773,9 @@ local function UpdateArms(now)
             elseif msSoon then
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(msCD))
             else
-                s = Col("ff8844", Fmt(msCD)) .. Col("888888", "  wait")
+                -- Show MS countdown + when WW follows
+                local seqStr = wwCD > 0 and ("  → WW " .. Fmt(wwCD)) or "  → WW READY"
+                s = Col("ff8844", Fmt(msCD)) .. Col("555566", seqStr)
             end
 
         elseif k == "WW" then
@@ -757,7 +784,9 @@ local function UpdateArms(now)
             elseif wwSoon then
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(wwCD))
             else
-                s = Col("ff8844", Fmt(wwCD)) .. Col("888888", "  wait")
+                -- Show WW countdown + when MS follows
+                local seqStr = msCD > 0 and ("  → MS " .. Fmt(msCD)) or "  → MS READY"
+                s = Col("ff8844", Fmt(wwCD)) .. Col("555566", seqStr)
             end
 
         elseif k == "EXECUTE" then
@@ -800,10 +829,27 @@ local function UpdateArms(now)
         Col(swCol, string.format("%.1fs", nextSwingIn) .. "sw")
     )
 
-    local spotSt = slamWindow and "CAST NOW! +" .. string.format("%.2f", timeSinceSwing) .. "s" or
-                   best == "MS" and (msCD <= 0 and "CAST" or Fmt(msCD)) or
-                   best == "WW" and (wwCD <= 0 and "CAST" or Fmt(wwCD)) or
-                   rage .. "R"
+    local nextArms   = msCD <= wwCD and "MS" or "WW"
+    local nextArmsCD = msCD <= wwCD and msCD or wwCD
+    local afterArms  = msCD <= wwCD
+        and (wwCD > 0 and (" → WW " .. Fmt(wwCD)) or " → WW READY")
+        or  (msCD > 0 and (" → MS " .. Fmt(msCD)) or " → MS READY")
+    local spotSt
+    if slamWindow then
+        spotSt = "CAST NOW! +" .. string.format("%.2f", timeSinceSwing) .. "s" .. afterArms
+    elseif best == "MS" or best == "WW" then
+        if nextArmsCD <= 0 then
+            spotSt = "CAST" .. afterArms
+        else
+            spotSt = "→ " .. nextArms .. " " .. Fmt(nextArmsCD) .. afterArms
+        end
+    elseif best == "EXECUTE" then
+        spotSt = string.format("%.0f%%", tHP * 100) .. "  " .. rage .. "R"
+    elseif best == "SLAM" then
+        spotSt = "swing in " .. string.format("%.1f", nextSwingIn) .. "s" .. afterArms
+    else
+        spotSt = rage .. "R"
+    end
     UpdateSpotlight(best, ARMS_ROWS, spotSt)
 end
 
