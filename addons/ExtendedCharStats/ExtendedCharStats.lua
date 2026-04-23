@@ -419,55 +419,99 @@ function ECS_GetStats()
     table.insert(stats, { label="Resilience",
         value=string.format("%d (%.2f%%)", resRating or 0, resPct or 0) })
 
-    -- ---- CRUSH CAP (tank, vs level 73 boss) ----
-    -- Uncrushable = Miss + Dodge + Parry + Block >= 102.4%
-    local CRUSH_THRESHOLD = 102.4
-    local CRIT_IMMUNE_DEF = 490
+    -- ---- Feral Druid detection (for defense cap adjustment) ----
+    -- Survival of the Fittest (Feral, 3 ranks): 1% reduced crit chance/rank.
+    -- At 3/3, SotF covers 3% of the 5.6% boss crit, so only 2.6% must come from
+    -- defense skill (65 points above 350), giving a 415 cap instead of 490.
+    -- Bears are also crush-immune (no shield mechanic in bear form).
+    local _, playerClassFile = UnitClass("player")
+    local sotfRanks = 0
+    if playerClassFile == "DRUID" then
+        local ok0, numTabs = pcall(GetNumTalentTabs)
+        numTabs = ok0 and (numTabs or 0) or 0
+        for tab = 1, numTabs do
+            local okT, numT = pcall(GetNumTalents, tab)
+            numT = okT and (numT or 0) or 0
+            for i = 1, numT do
+                local ok, name, _, _, _, rank = pcall(GetTalentInfo, tab, i)
+                if ok and name and rank and rank > 0 then
+                    if name:lower() == "survival of the fittest" then
+                        sotfRanks = rank
+                    end
+                end
+            end
+        end
+    end
+    -- SotF equiv: each rank = 1% crit red = 25 def-equivalent (1% / 0.04 per def = 25)
+    local sotfDefEquiv   = sotfRanks * 25
+    local isFeralBear    = playerClassFile == "DRUID" and sotfRanks > 0
+    -- Effective cap: 490 minus whatever SotF already covers
+    local CRIT_IMMUNE_DEF = 490 - sotfDefEquiv
 
-    local crushMiss  = 5.0 + math.max(0, totalDef - 350) * 0.04
-    local crushDodge = safe(GetDodgeChance) or 0
-    local crushParry = safe(GetParryChance) or 0
-    local crushBlock = safe(GetBlockChance) or 0
-    local crushTotal  = crushMiss + crushDodge + crushParry + crushBlock
-    local crushNeeded = CRUSH_THRESHOLD - crushTotal
-    local crushColor  = crushNeeded <= 0 and "|cff00ff00" or "|cffff4444"
+    -- ---- CRUSH CAP (tank, vs level 73 boss) ----
+    -- Bears in bear form are mechanically crush-immune (no shield = no block,
+    -- but Blizzard exempts druids from crushing blow mechanics entirely).
+    -- Other tanks: Miss + Dodge + Parry + Block >= 102.4%
+    local CRUSH_THRESHOLD = 102.4
 
     table.insert(stats, { section="CRUSH CAP" })
-    table.insert(stats, { label="  Miss (vs boss)",       value=string.format("%.2f%%", crushMiss) })
-    table.insert(stats, { label="  Dodge",                value=string.format("%.2f%%", crushDodge) })
-    table.insert(stats, { label="  Parry",                value=string.format("%.2f%%", crushParry) })
-    table.insert(stats, { label="  Block",                value=string.format("%.2f%%", crushBlock) })
-    table.insert(stats, { label="  Total / Need 102.4",
-        value=crushColor .. string.format("%.2f%%|r", crushTotal) })
-    if crushNeeded > 0 then
-        table.insert(stats, { label="  Still need",
-            value="|cffff4444" .. string.format("%.2f%%|r", crushNeeded) })
+    if isFeralBear then
+        table.insert(stats, { label="  Status",
+            value="|cff00ff00IMMUNE|r  |cff888888(Bear form)|r" })
     else
-        table.insert(stats, { label="  Status",          value="|cff00ff00UNCRUSHABLE|r" })
+        local crushMiss  = 5.0 + math.max(0, totalDef - 350) * 0.04
+        local crushDodge = safe(GetDodgeChance) or 0
+        local crushParry = safe(GetParryChance) or 0
+        local crushBlock = safe(GetBlockChance) or 0
+        local crushTotal  = crushMiss + crushDodge + crushParry + crushBlock
+        local crushNeeded = CRUSH_THRESHOLD - crushTotal
+        local crushColor  = crushNeeded <= 0 and "|cff00ff00" or "|cffff4444"
+
+        table.insert(stats, { label="  Miss (vs boss)",       value=string.format("%.2f%%", crushMiss) })
+        table.insert(stats, { label="  Dodge",                value=string.format("%.2f%%", crushDodge) })
+        table.insert(stats, { label="  Parry",                value=string.format("%.2f%%", crushParry) })
+        table.insert(stats, { label="  Block",                value=string.format("%.2f%%", crushBlock) })
+        table.insert(stats, { label="  Total / Need 102.4",
+            value=crushColor .. string.format("%.2f%%|r", crushTotal) })
+        if crushNeeded > 0 then
+            table.insert(stats, { label="  Still need",
+                value="|cffff4444" .. string.format("%.2f%%|r", crushNeeded) })
+        else
+            table.insert(stats, { label="  Status",          value="|cff00ff00UNCRUSHABLE|r" })
+        end
     end
 
-    -- ---- CRIT CAP (490 effective defense) ----
+    -- ---- CRIT CAP ----
     -- Each defense skill above 350 = 0.04% crit reduction vs boss.
     -- Resilience contributes identical crit reduction: resPct / 0.04 = def-equiv.
-    -- Both sources combined must reach 490 effective defense to be crit-immune.
+    -- Feral druids: Survival of the Fittest reduces crit chance by 1%/rank (max 3).
+    --   SotF 3/3 = 3% covered, so effective cap drops from 490 → 415.
+    -- All sources combined must reach CRIT_IMMUNE_DEF effective defense.
     local resDefEquiv   = math.floor((resPct or 0) / 0.04)
-    local effectiveDef  = totalDef + resDefEquiv
-    local critDefNeeded = math.max(0, CRIT_IMMUNE_DEF - effectiveDef)
+    local effectiveDef  = totalDef + resDefEquiv + sotfDefEquiv
+    local critDefNeeded = math.max(0, CRIT_IMMUNE_DEF - totalDef - resDefEquiv)
     local critColor     = critDefNeeded == 0 and "|cff00ff00" or "|cffff4444"
-    local defDispColor  = totalDef >= CRIT_IMMUNE_DEF and "|cff00ff00"
-                          or (totalDef >= 450 and "|cffffcc00" or "|cffff4444")
+    local defDispColor  = (totalDef + resDefEquiv) >= CRIT_IMMUNE_DEF and "|cff00ff00"
+                          or (totalDef >= (CRIT_IMMUNE_DEF - 40) and "|cffffcc00" or "|cffff4444")
+    local capLabel      = string.format("CRIT CAP (%d)", CRIT_IMMUNE_DEF)
 
-    table.insert(stats, { section="CRIT CAP (490)" })
+    table.insert(stats, { section=capLabel })
     table.insert(stats, { label="  Defense skill",
-        value=string.format("%s%d / 490|r", defDispColor, totalDef) })
+        value=string.format("%s%d / %d|r", defDispColor, totalDef, CRIT_IMMUNE_DEF) })
+    if sotfRanks > 0 then
+        table.insert(stats, { label="  + SotF (" .. sotfRanks .. "/3)",
+            value=string.format("|cff88ff88+%d equiv|r  (%d%% crit red)",
+                sotfDefEquiv, sotfRanks) })
+    end
     if resDefEquiv > 0 then
-        -- Show resilience contribution as an explicit additive line
         table.insert(stats, { label="  + Resilience equiv",
             value=string.format("|cff88ccff+%d|r  (%.2f%% crit red)",
                 resDefEquiv, resPct or 0) })
+    end
+    if sotfRanks > 0 or resDefEquiv > 0 then
+        local totalEquiv = totalDef + sotfDefEquiv + resDefEquiv
         table.insert(stats, { label="  = Effective def",
-            value=string.format("|cffbbbbff%d / 490|r  (%d still missing)",
-                effectiveDef, critDefNeeded) })
+            value=string.format("|cffbbbbff%d / 490|r", totalEquiv) })
     end
     table.insert(stats, { label="  Crit immune",
         value=critColor .. (critDefNeeded == 0
