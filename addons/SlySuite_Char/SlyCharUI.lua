@@ -756,12 +756,14 @@ function SC_ShowGearPicker(slotId)
         end
     end
 
-    -- Bags 0-4: show ALL matching stacks including duplicates.
-    -- Only skip the exact item currently equipped in this slot.
+    -- Bags 0-4: show ALL matching stacks including duplicates of equipped items.
+    -- A second copy of the same ring/trinket in bags IS a valid swap candidate
+    -- (equipping it to the other ring slot, or swapping which slot holds which copy).
+    -- Do NOT filter by shownAsEquipped here — that would hide the bag copy.
     for bag = 0, 4 do
         for bs = 1, _GetContainerNumSlots(bag) do
             local id = _GetContainerItemID(bag, bs)
-            if id and not shownAsEquipped[id] then
+            if id then
                 local bagLink = _GetItemLink(bag, bs)
                 local n,_,q,ilvl,_,_,_,_,eqLoc,tex = GetItemInfo(id)
                 if n and validTypes[eqLoc] then
