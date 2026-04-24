@@ -1032,12 +1032,23 @@ local function BuildSlot(parent, slotId, label, x, y)
     -- Ammo slot (0): PickupInventoryItem(0) is invalid; ammo is equipped via the picker.
     btn:SetScript("OnReceiveDrag", function(self)
         if slotId == 0 then return end
-        local ctype = GetCursorInfo()
+        local ctype, itemId = GetCursorInfo()
         if not ctype then return end
-        -- Only block a spell cursor if the slot is empty — you can't apply an
-        -- enhancement to nothing, and an empty-slot click was likely accidental.
-        -- Occupied slots allow any cursor type (kits / oils / stones / poisons).
+        -- Only block a spell cursor if the slot is empty.
         if ctype == "spell" and not GetInventoryItemTexture("player", slotId) then return end
+        -- If an item is on cursor, check whether it is actually equippable.
+        -- Non-equippable usables (armor kits, weapon stones, oils, poisons) cannot
+        -- be placed into a gear slot via PickupInventoryItem — the game silently
+        -- ignores it.  These items must be RIGHT-CLICKED in the bag first to enter
+        -- targeting mode (SpellIsTargeting), then the slot's secure /use overlay handles it.
+        if ctype == "item" and itemId then
+            local _, _, _, _, _, _, _, _, invType = GetItemInfo(itemId)
+            if invType == "" or invType == "INVTYPE_NON_EQUIP" then
+                print("|cff00ccff[SlyChar]|r |cffff8800Right-click|r that item in your bags first " ..
+                    "to enter targeting mode, then click the gear slot.")
+                return
+            end
+        end
         GameTooltip:Hide()
         local ok = pcall(PickupInventoryItem, slotId)
         if ok then UpdateSlot(slotWidgets[slotId], slotId) end

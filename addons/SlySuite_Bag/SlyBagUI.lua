@@ -219,15 +219,18 @@ local function NewSlotButton(parent, idx)
         end
     end)
     -- SecureActionButtonTemplate for right-click: fires UseContainerItem via
-    -- the protected "/use bag N slot M" path, which is the only legal way to
-    -- call UseContainerItem in TBC Anniversary.  Handles enchant scrolls
-    -- (cursor type "enchant"), weapon stones/oils (SpellIsTargeting mode),
-    -- and vendor right-click sell — all without touching restricted APIs.
-    -- SetAttribute is only safe outside combat; guarded below.
+    -- the "/use bag slot" macro path — the only legal way to call UseContainerItem
+    -- in TBC Anniversary without tainting the frame stack.
+    -- This handles armor kits, weapon stones, oils, poisons (SpellIsTargeting mode)
+    -- and enchant scrolls — anything that needs a gear-slot target after use.
+    -- NOTE: type="item" with "bag N slot M" string is unreliable in the TBC client;
+    --       type="macro" + macrotext="/use N M" is the correct portable form.
+    -- macrotext is updated on each layout refresh (outside combat only).
     local sUse = CreateFrame("Button", nil, b, "SecureActionButtonTemplate")
     sUse:SetAllPoints(b)
     sUse:SetFrameLevel(b:GetFrameLevel() + 5)
-    sUse:SetAttribute("type", "item")
+    sUse:SetAttribute("type", "macro")
+    sUse:SetAttribute("macrotext", "")  -- filled in on refresh
     sUse:RegisterForClicks("RightButtonUp")
     b.sUse = sUse
     b:Hide()
@@ -423,8 +426,8 @@ function SlyBag_Refresh()
                 -- SetAttribute is forbidden in combat; SlyBag only opens
                 -- outside combat so this is safe under normal use.
                 if not InCombatLockdown() then
-                    b.sUse:SetAttribute("item",
-                        string.format("bag %d slot %d", it.bag, it.slot))
+                    b.sUse:SetAttribute("macrotext",
+                        string.format("/use %d %d", it.bag, it.slot))
                 end
                 b.icon:SetTexture(it.texture) ; b.icon:SetAlpha(1)
                 b.count:SetText(it.count > 1 and it.count or "")

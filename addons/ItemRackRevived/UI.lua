@@ -82,14 +82,12 @@ local SLOT_INVTYPES = {
 }
 
 -- Returns a list of { bag, bslot, itemId } for items in bags that can fill slotId.
--- Excludes the item currently equipped in that slot (avoids trivial self-matches
--- UNLESS there are two of the same itemID, in which case the second copy IS valid).
+-- Shows ALL bag items whose inventory type matches the slot — including identical
+-- itemIDs — because a second copy of the same ring/trinket IS a valid alternative
+-- (e.g. you want to swap which ring is in slot 1 vs slot 2).
 local function GetBagAlternatives(slotId)
     local validTypes = SLOT_INVTYPES[slotId]
     if not validTypes then return {} end
-
-    local equippedId = GetInventoryItemID("player", slotId)
-    local equippedSeen = false  -- allow ONE skip of equippedId so a second copy shows up
 
     local results = {}
     local _GetContainerNumSlots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
@@ -105,14 +103,7 @@ local function GetBagAlternatives(slotId)
             if itemId then
                 local _, _, _, _, _, _, _, _, invType = GetItemInfo(itemId)
                 if invType and validTypes[invType] then
-                    -- Skip the first occurrence of the currently-equipped itemID
-                    -- (it's the same physical item type already on, not an alternative).
-                    -- A SECOND copy of the same itemID is still a genuine alternative.
-                    if itemId == equippedId and not equippedSeen then
-                        equippedSeen = true
-                    else
-                        table.insert(results, { bag=bag, bslot=bslot, itemId=itemId })
-                    end
+                    table.insert(results, { bag=bag, bslot=bslot, itemId=itemId })
                 end
             end
         end
