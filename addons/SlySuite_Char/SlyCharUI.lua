@@ -3903,6 +3903,7 @@ function SC_RefreshAll()
     elseif tab == "sets"   then SC_RefreshSetsSub()
     elseif tab == "misc"   then SC_RefreshMisc()
     elseif tab == "suite"  then SC_RefreshSuite()
+    elseif tab == "colors" then -- lazy-built, nothing to refresh dynamically
     end
     -- Refresh whichever wing is currently open
     if wingFrame and wingFrame:IsShown() then
@@ -4558,6 +4559,7 @@ function SC_BuildMain()
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
         {key="misc",   label="Apps"},
+        {key="colors", label="Colors"},
     }
     local tbW = math.floor(SIDE_W / #tabDefs)
     for i, td in ipairs(tabDefs) do
@@ -4906,6 +4908,183 @@ function SC_BuildMain()
             end)
             btn:SetScript("OnClick", function() item.fn() end)
         end
+    end)
+
+    -- Colors tab — per-app color customisation
+    local colorsTab = CreateFrame("Frame", nil, side)
+    colorsTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
+    colorsTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
+    colorsTab:SetHeight(tcH) ; colorsTab:Hide()
+    tabFrames["colors"] = colorsTab
+
+    local colorsBuilt = false
+    colorsTab:SetScript("OnShow", function()
+        if colorsBuilt then return end
+        colorsBuilt = true
+
+        -- ── header row ──────────────────────────────────────────────────
+        local hdr = colorsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        hdr:SetFont(hdr:GetFont(), 9, "")
+        hdr:SetPoint("TOPLEFT", colorsTab, "TOPLEFT", PAD, -4)
+        hdr:SetText("App              Bg        Border    Header")
+        hdr:SetTextColor(0.40, 0.40, 0.50)
+
+        local sep = colorsTab:CreateTexture(nil, "ARTWORK")
+        sep:SetSize(SIDE_W - PAD*2, 1)
+        sep:SetPoint("TOPLEFT", colorsTab, "TOPLEFT", PAD, -16)
+        sep:SetColorTexture(0.22, 0.22, 0.28, 1)
+
+        -- ── per-app rows ─────────────────────────────────────────────────
+        local APP_DEFS = {
+            { key="slychar",  label="SlyChar"  },
+            { key="feral",    label="FeralHlpr"},
+            { key="warrior",  label="WarrHlpr" },
+        }
+        local ROW_H   = 28
+        local ROW_TOP = -20   -- below the header sep
+        local LBL_W   = 84
+        local SW_SIZE = 18    -- swatch square size
+        local SW_GAP  = 36    -- spacing between swatch columns
+
+        -- Swatch columns: Bg at x=LBL_W+4, Border at +SW_GAP, Header at +SW_GAP*2
+        local SW_X = { LBL_W + 4, LBL_W + 4 + SW_GAP, LBL_W + 4 + SW_GAP*2 }
+        local SW_KEYS = { "bg", "border", "header" }
+
+        -- helper: open the ColorPickerFrame for a saved-color component
+        local function OpenPicker(swatchTexture, appKey, compKey)
+            local def = SC.colorDefaults and SC.colorDefaults[appKey]
+            local saved = SC.db.colors and SC.db.colors[appKey]
+            local cur
+            if saved and saved[compKey] then
+                cur = saved[compKey]
+            elseif def then
+                cur = def[compKey]
+            else
+                cur = {0.05, 0.05, 0.07, 0.97}
+            end
+
+            -- Snapshot for cancel
+            local prevR, prevG, prevB = cur[1], cur[2], cur[3]
+
+            local function ApplyColor(r, g, b)
+                if not SC.db.colors       then SC.db.colors       = {} end
+                if not SC.db.colors[appKey] then SC.db.colors[appKey] = {} end
+                SC.db.colors[appKey][compKey] = {r, g, b, cur[4] or 1}
+                swatchTexture:SetColorTexture(r, g, b, 1)
+            end
+
+            ColorPickerFrame:SetColorRGB(cur[1], cur[2], cur[3])
+            ColorPickerFrame.func = function()
+                local r, g, b = ColorPickerFrame:GetColorRGB()
+                ApplyColor(r, g, b)
+            end
+            ColorPickerFrame.cancelFunc = function()
+                ApplyColor(prevR, prevG, prevB)
+            end
+            ColorPickerFrame:Hide()      -- force re-init
+            ColorPickerFrame:Show()
+        end
+
+        for rowIdx, appDef in ipairs(APP_DEFS) do
+            local yOff = ROW_TOP - (rowIdx - 1) * (ROW_H + 2)
+
+            -- App name label
+            local lbl = colorsTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            lbl:SetFont(lbl:GetFont(), 10, "")
+            lbl:SetPoint("TOPLEFT", colorsTab, "TOPLEFT", PAD, yOff - 5)
+            lbl:SetWidth(LBL_W) ; lbl:SetJustifyH("LEFT")
+            lbl:SetText(appDef.label)
+            lbl:SetTextColor(0.80, 0.80, 0.90)
+
+            -- 3 swatches
+            for si, sw_x in ipairs(SW_X) do
+                local compKey = SW_KEYS[si]
+
+                -- Determine current colour for this swatch
+                local function GetCurRGB()
+                    local saved = SC.db.colors and SC.db.colors[appDef.key]
+                    local def   = SC.colorDefaults and SC.colorDefaults[appDef.key]
+                    local tbl
+                    if saved and saved[compKey] then tbl = saved[compKey]
+                    elseif def                  then tbl = def[compKey]
+                    else                             tbl = {0.1, 0.1, 0.1}
+                    end
+                    return tbl[1], tbl[2], tbl[3]
+                end
+
+                local r0, g0, b0 = GetCurRGB()
+
+                local swBtn = CreateFrame("Button", nil, colorsTab)
+                swBtn:SetSize(SW_SIZE, SW_SIZE)
+                swBtn:SetPoint("TOPLEFT", colorsTab, "TOPLEFT", sw_x, yOff - (ROW_H - SW_SIZE)/2)
+
+                local swTex = swBtn:CreateTexture(nil, "BACKGROUND")
+                swTex:SetAllPoints(swBtn)
+                swTex:SetColorTexture(r0, g0, b0, 1)
+
+                local swBorder = swBtn:CreateTexture(nil, "ARTWORK")
+                swBorder:SetAllPoints(swBtn)
+                swBorder:SetColorTexture(0.45, 0.45, 0.55, 1)
+                swBorder:SetSize(SW_SIZE + 2, SW_SIZE + 2)
+                swBorder:SetPoint("CENTER", swBtn, "CENTER", 0, 0)
+                -- Put color fill on top
+                swTex:SetDrawLayer("OVERLAY")
+
+                swBtn:SetScript("OnClick", function()
+                    OpenPicker(swTex, appDef.key, compKey)
+                end)
+                swBtn:SetScript("OnEnter", function()
+                    swBorder:SetColorTexture(0.80, 0.80, 1.00, 1)
+                end)
+                swBtn:SetScript("OnLeave", function()
+                    swBorder:SetColorTexture(0.45, 0.45, 0.55, 1)
+                end)
+            end
+
+            -- Reset button
+            local rstBtn = CreateFrame("Button", nil, colorsTab)
+            rstBtn:SetSize(44, 16)
+            rstBtn:SetPoint("TOPLEFT", colorsTab, "TOPLEFT", SW_X[3] + SW_SIZE + 6, yOff - (ROW_H - 16)/2)
+
+            local rstBg = rstBtn:CreateTexture(nil, "BACKGROUND")
+            rstBg:SetAllPoints(rstBtn) ; rstBg:SetColorTexture(0.14, 0.10, 0.10, 1)
+
+            local rstTx = rstBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            rstTx:SetFont(rstTx:GetFont(), 8, "")
+            rstTx:SetAllPoints(rstBtn) ; rstTx:SetJustifyH("CENTER")
+            rstTx:SetText("Reset") ; rstTx:SetTextColor(0.90, 0.55, 0.45)
+
+            rstBtn:SetScript("OnClick", function()
+                if not SC.db.colors then return end
+                SC.db.colors[appDef.key] = nil
+                -- refresh swatch display by hiding + re-showing tab
+                colorsBuilt = false
+                colorsTab:Hide() ; colorsTab:Show()
+            end)
+            rstBtn:SetScript("OnEnter", function() rstBg:SetColorTexture(0.25, 0.12, 0.10, 1) end)
+            rstBtn:SetScript("OnLeave", function() rstBg:SetColorTexture(0.14, 0.10, 0.10, 1) end)
+        end
+
+        -- "Reset All" at the bottom
+        local rstAllBtn = CreateFrame("Button", nil, colorsTab)
+        rstAllBtn:SetSize(80, 18)
+        rstAllBtn:SetPoint("BOTTOMLEFT", colorsTab, "BOTTOMLEFT", PAD, 8)
+
+        local rabg = rstAllBtn:CreateTexture(nil, "BACKGROUND")
+        rabg:SetAllPoints(rstAllBtn) ; rabg:SetColorTexture(0.16, 0.08, 0.08, 1)
+
+        local ratx = rstAllBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ratx:SetFont(ratx:GetFont(), 8, "")
+        ratx:SetAllPoints(rstAllBtn) ; ratx:SetJustifyH("CENTER")
+        ratx:SetText("Reset All") ; ratx:SetTextColor(1.00, 0.50, 0.40)
+
+        rstAllBtn:SetScript("OnClick", function()
+            SC.db.colors = {}
+            colorsBuilt = false
+            colorsTab:Hide() ; colorsTab:Show()
+        end)
+        rstAllBtn:SetScript("OnEnter", function() rabg:SetColorTexture(0.28, 0.10, 0.08, 1) end)
+        rstAllBtn:SetScript("OnLeave", function() rabg:SetColorTexture(0.16, 0.08, 0.08, 1) end)
     end)
 
     -- NIT tab is now a wing flyout; no side-panel tab for social.

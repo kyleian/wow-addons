@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlySuite_FeralHelper
 -- TBC Feral Druid rotation advisor: Cat DPS + Bear Tank
 --
@@ -91,30 +91,30 @@ local ICO = {
 -- ────────────────────────────────────────────────────────────
 -- Priority row definitions
 -- Cat order matches guide exactly:
---   1. Rip        CPs≥4, E≥30, Rip expired
---   2. Mangle     E≥40, debuff expired
---   3. Shred      E≥42
+--   1. Rip        CPs>=4, E>=30, Rip expired
+--   2. Mangle     E>=40, debuff expired
+--   3. Shred      E>=42
 --   4. Powershift E > 20 below needed for next action
 --   5. Wait       (energy tick)
 -- Non-priority indicators:
---   FB  — swap row: only lights when target <20% HP, CPs≥4, Rip active
+--   FB  — swap row: only lights when target <20% HP, CPs>=4, Rip active
 --   TF  — passive: shows buff/CD, never a rotation action mid-fight
 -- ────────────────────────────────────────────────────────────
 local CAT_ROWS = {
     -- key, label, icon, color{r,g,b}
-    { key="RIP",        label="Rip  (≥4CP ≥30E)",  icon=ICO.RIP,        color={1.00, 0.28, 0.28} },
-    { key="MANGLE_CAT", label="Mangle  (≥40E)",    icon=ICO.MANGLE,     color={1.00, 0.68, 0.18} },
-    { key="SHRED",      label="Shred  (≥42E)",     icon=ICO.SHRED,      color={0.38, 0.84, 1.00} },
+    { key="RIP",        label="Rip  (4+CP  30E)",  icon=ICO.RIP,        color={1.00, 0.28, 0.28} },
+    { key="MANGLE_CAT", label="Mangle  (40E, down)", icon=ICO.MANGLE,     color={1.00, 0.68, 0.18} },
+    { key="SHRED",      label="Shred  (42E)",       icon=ICO.SHRED,      color={0.38, 0.84, 1.00} },
     { key="POWERSHIFT", label="Powershift",        icon=ICO.POWERSHIFT, color={0.45, 1.00, 0.45} },
     { key="WAIT",       label="Wait  (tick)",      icon=ICO.WAIT,       color={0.42, 0.42, 0.48} },
-    { key="FB",         label="↳ FB swap (dying)", icon=ICO.FB,         color={1.00, 0.55, 0.10} },
+    { key="FB",         label="> FB swap (<20% HP)",  icon=ICO.FB,         color={1.00, 0.55, 0.10} },
     { key="TF",         label="Tiger's Fury (CD)", icon=ICO.TF,         color={1.00, 0.65, 0.00} },
 }
 
 local BEAR_ROWS = {
     { key="MANGLE_BEAR", label="Mangle (Bear)",      icon=ICO.MANGLE,    color={1.00, 0.55, 0.10} },
     { key="LACERATE",    label="Lacerate  (spam)",   icon=ICO.LACERATE,  color={0.90, 0.28, 0.28} },
-    { key="MAUL",        label="↳ Maul  (off-GCD)",  icon=ICO.MAUL,      color={1.00, 0.82, 0.22} },
+    { key="MAUL",        label="> Maul  (off-GCD)",  icon=ICO.MAUL,      color={1.00, 0.82, 0.22} },
     { key="DEMO_ROAR",   label="Demo Roar  (opt)",   icon=ICO.DEMO_ROAR, color={0.65, 0.40, 1.00} },
     { key="BASH",        label="Bash",               icon=ICO.BASH,      color={0.40, 0.85, 1.00} },
     { key="FRENZIED",    label="Frenzied  (skip)",   icon=ICO.FRENZIED,  color={0.45, 0.45, 0.50} },
@@ -521,9 +521,9 @@ end
 -- ────────────────────────────────────────────────────────────
 -- Cat rotation logic — matches guide priority EXACTLY:
 --
---   1. Rip        if CPs≥4 AND E≥30 AND Rip expired
---   2. Mangle     if E≥40 AND Mangle debuff expired
---   3. Shred      if E≥42
+--   1. Rip        if CPs>=4 AND E>=30 AND Rip expired
+--   2. Mangle     if E>=40 AND Mangle debuff expired
+--   3. Shred      if E>=42
 --   4. Powershift if energy > 20 below cost of next action*
 --   5. Wait       otherwise
 --
@@ -547,14 +547,17 @@ local function UpdateCat(now)
                    (UnitHealth("target") / math.max(1, UnitHealthMax("target"))) or 1.0
 
     -- Determine what the NEXT castable action would be (for powershift threshold)
-    -- This mirrors the guide: "more than 20 energy below what is needed for your next action"
+    -- Guide: "more than 20 energy below what is needed for your next action"
+    -- Mangle only counts if its spell CD is also up — otherwise next is Shred
+    local ripUrgent = ripL > 0 and ripL < 5 and cps >= 4  -- Rip about to expire, prep refresh
+    local manUrgent = manL > 0 and manL < 3               -- Mangle debuff about to fall
     local nextCost
     if cps >= 4 and ripL == 0 then
         nextCost = 30   -- Rip pending
     elseif manL == 0 and manCD <= 0 then
-        nextCost = 40   -- Mangle pending
+        nextCost = 40   -- Mangle pending (debuff AND spell both ready)
     else
-        nextCost = 42   -- Shred is the default
+        nextCost = 42   -- Shred (Mangle on CD or debuff still up)
     end
 
     -- What's the NEXT ability name (for forward-looking display)
@@ -587,9 +590,9 @@ local function UpdateCat(now)
         best = "WAIT"
     end
 
-    -- FB swap fires as a visible highlight when target is dying AND Rip is already up
-    -- (non-priority — shown alongside whatever step is active)
-    local fbSwap = cps >= 4 and ripL > 0 and tgtHP < 0.20
+    -- FB swap: light up when target is dying and Rip is up (don't refresh Rip, Bite instead)
+    -- Also fires when Rip has < 3s left + target <20% — better to Bite than reapply
+    local fbSwap = cps >= 4 and tgtHP < 0.20 and (ripL > 0 and ripL > 3 or ripL == 0)
 
     -- Build status strings and activate rows
     for _, row in ipairs(catRowFrames) do
@@ -599,7 +602,12 @@ local function UpdateCat(now)
 
         if k == "RIP" then
             if ripL > 0 then
-                s = Col("44ff44", Fmt(ripL))
+                if ripUrgent then
+                    -- < 5s left and have CPs — warn player to prepare refresh
+                    s = Col("ff4444", Fmt(ripL) .. "!") .. Col("888888", "  prep " .. cps .. "CP")
+                else
+                    s = Col("44ff44", Fmt(ripL))
+                end
             elseif cps >= 4 and energy >= 30 then
                 s = Col("ff4444", "CAST!") .. " " .. Col("ffdd88", cps .. "CP")
             elseif cps >= 4 then
@@ -610,11 +618,15 @@ local function UpdateCat(now)
 
         elseif k == "MANGLE_CAT" then
             if manL > 0 then
-                s = Col("44ff44", Fmt(manL))
+                if manUrgent then
+                    s = Col("ff7744", Fmt(manL) .. "!")  -- debuff almost gone — urgent
+                else
+                    s = Col("44ff44", Fmt(manL))
+                end
             elseif manCD > 0 then
                 s = Col("ff8844", Fmt(manCD))
             else
-                -- Debuff gone — show energy vs needed
+                -- Debuff gone and spell ready
                 local col = energy >= 40 and "ff4444" or "ff7744"
                 s = Col(col, "GONE") .. " " .. Col("888888", energy .. "E")
             end
@@ -635,7 +647,7 @@ local function UpdateCat(now)
             local ticks   = TicksNeeded(nextCost, energy)
             local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
             if best == "POWERSHIFT" then
-                s = Col("aaffaa", "SHIFT  ") .. Col("888888", "→ " .. nextName .. " after")
+                s = Col("aaffaa", "SHIFT  ") .. Col("888888", "-> " .. nextName .. " after")
             else
                 s = Col("667766", energy .. "E  -" .. deficit .. "  " .. tickStr)
             end
@@ -644,7 +656,7 @@ local function UpdateCat(now)
             local deficit = nextCost - energy
             local ticks   = TicksNeeded(nextCost, energy)
             local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
-            s = Col("888888", "→ ") .. Col("aaaacc", nextName) ..
+            s = Col("888888", "-> ") .. Col("aaaacc", nextName) ..
                 Col("555566", "  +" .. deficit .. "E  ") .. Col("888888", tickStr)
 
         elseif k == "FB" then
@@ -689,12 +701,12 @@ local function UpdateCat(now)
         spotStatus = energy .. "E"
     elseif best == "POWERSHIFT" then
         local deficit = nextCost - energy
-        spotStatus = "shift → " .. nextName .. "  need +" .. deficit .. "E"
+        spotStatus = "shift -> " .. nextName .. "  need +" .. deficit .. "E"
     elseif best == "WAIT" then
         local deficit = nextCost - energy
         local ticks   = TicksNeeded(nextCost, energy)
         local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
-        spotStatus = "→ " .. nextName .. "  +" .. deficit .. "E  " .. tickStr
+        spotStatus = "-> " .. nextName .. "  +" .. deficit .. "E  " .. tickStr
     end
     UpdateSpotlight(best, CAT_ROWS, spotStatus)
 end
@@ -703,11 +715,11 @@ end
 -- Bear rotation logic — matches Wowhead TBC bear guide exactly:
 --
 --   GCD priority:
---   1. Mangle (Bear)  on cooldown (rage ≥ 15)
+--   1. Mangle (Bear)  on cooldown (rage >= 15)
 --   2. Lacerate       every remaining GCD (static threat on EVERY cast)
 --
 --   Off-GCD (queue alongside GCD action):
---   3. Maul           when rage is excess (≥ 60) — rage dump
+--   3. Maul           when rage is excess (>= 60) — rage dump
 --
 --   Passive indicators (never a rotation priority):
 --   Demo Roar — optional AP debuff, show timer only
@@ -780,7 +792,7 @@ local function UpdateBear(now)
             -- Off-GCD — communicate rage budget clearly
             if mangleWaitRage then
                 -- Holding for Mangle — explicitly say so
-                s = Col("ffdd22", "HOLD  ") .. Col("888866", rage .. "R → Mangle")
+                s = Col("ffdd22", "HOLD  ") .. Col("888866", rage .. "R -> Mangle")
             elseif maulDump then
                 s = Col("ffee55", "QUEUE  ") .. Col("aaaaaa", rage .. "R excess")
             elseif rage >= 45 then

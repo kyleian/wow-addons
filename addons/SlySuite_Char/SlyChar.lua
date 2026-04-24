@@ -23,7 +23,32 @@ local DB_DEFAULTS = {
     theme     = "shadow",
     collapsed = {},      -- {[sectionKey]=true} for collapsed stat sections
     hidden    = {},      -- {[sectionKey]=true} for fully hidden stat sections
+    colors    = {},      -- per-app color overrides; see SC_GetAppColors
 }
+
+-- Default palette shared by all apps (dark steel theme)
+local COLOR_DEFAULTS = {
+    slychar  = { bg={0.05,0.05,0.07,0.97}, border={0.28,0.28,0.35,1.0}, header={0.09,0.09,0.14,1.0} },
+    feral    = { bg={0.05,0.05,0.07,0.97}, border={0.28,0.28,0.35,1.0}, header={0.09,0.09,0.14,1.0} },
+    warrior  = { bg={0.05,0.05,0.07,0.97}, border={0.28,0.28,0.35,1.0}, header={0.09,0.09,0.14,1.0} },
+}
+
+-- Returns the {bg, border, header} color table for appKey.
+-- Consuming addons: call at Init, fall back gracefully if SC not loaded.
+function SC_GetAppColors(key)
+    local saved = SC.db and SC.db.colors and SC.db.colors[key]
+    local def   = COLOR_DEFAULTS[key] or COLOR_DEFAULTS.slychar
+    if not saved then return def end
+    -- merge: only override components that were actually saved
+    return {
+        bg     = saved.bg     or def.bg,
+        border = saved.border or def.border,
+        header = saved.header or def.header,
+    }
+end
+
+-- Expose defaults so SlyCharUI can read them
+SC.colorDefaults = COLOR_DEFAULTS
 
 SC.db = {}
 

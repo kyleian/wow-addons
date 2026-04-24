@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlySuite_WarriorHelper
 -- TBC Warrior rotation advisor: Fury DPS, Arms DPS, Prot Tank
 --
@@ -54,27 +54,29 @@ local function TC(key)
 end
 
 -- ────────────────────────────────────────────────────────────
--- Icons
+-- Icons — hardcoded interface paths (same approach as FeralHelper, which works).
 -- ────────────────────────────────────────────────────────────
 local ICO = {
-    BT         = "Interface\\Icons\\Ability_Warrior_Bloodthirst",
-    WW         = "Interface\\Icons\\Ability_Warrior_Whirlwind",
+    BT         = "Interface\\Icons\\Spell_Nature_Bloodlust",
+    WW         = "Interface\\Icons\\Ability_Whirlwind",
     MS         = "Interface\\Icons\\Ability_Warrior_SavageBlow",
-    SLAM       = "Interface\\Icons\\Ability_Warrior_Decimate",
-    SS         = "Interface\\Icons\\Ability_Warrior_ShieldSlam",
+    SLAM       = "Interface\\Icons\\Ability_Warrior_Slam",
+    SS         = "Interface\\Icons\\Inv_Shield_05",
     REVENGE    = "Interface\\Icons\\Ability_Warrior_Revenge",
-    DEVASTATE  = "Interface\\Icons\\Inv_Stone_15",
+    DEVASTATE  = "Interface\\Icons\\Inv_Sword_11",
     EXECUTE    = "Interface\\Icons\\Inv_Sword_48",
-    HS         = "Interface\\Icons\\Ability_Warrior_HeroicStrike",
+    HS         = "Interface\\Icons\\Ability_Rogue_Ambush",
     SUNDER     = "Interface\\Icons\\Ability_Warrior_Sunder",
     DEMO       = "Interface\\Icons\\Ability_Warrior_WarCry",
     TC         = "Interface\\Icons\\Spell_Nature_ThunderClap",
-    DW         = "Interface\\Icons\\Spell_Shadow_DeathScream",
+    DW         = "Interface\\Icons\\Spell_Shadow_DeathPact",
     SHIELD_BLK = "Interface\\Icons\\Ability_Defend",
     OVERPOWER  = "Interface\\Icons\\Ability_MeleeDamage",
-    RAMPAGE    = "Interface\\Icons\\Ability_Warrior_RampagePurple",
+    RAMPAGE    = "Interface\\Icons\\Ability_Warrior_Rampage",
     CLEAVE     = "Interface\\Icons\\Ability_Warrior_Cleave",
 }
+
+-- (icons are set directly on row defs below)
 
 -- ────────────────────────────────────────────────────────────
 -- Priority row definitions
@@ -84,26 +86,26 @@ local ICO = {
 -- Overpower: optional when dodge-procced, BT+WW both on CD.
 -- Death Wish: passive CD — use during BL or Execute phase.
 local FURY_ROWS = {
-    { key="SUNDER",     label="Sunder Armor",        icon=ICO.SUNDER,    color={0.70, 0.70, 0.70} },
-    { key="BT",         label="Bloodthirst",         icon=ICO.BT,        color={1.00, 0.25, 0.25} },
-    { key="WW",         label="Whirlwind",           icon=ICO.WW,        color={1.00, 0.68, 0.18} },
-    { key="EXECUTE",    label="Execute  (<20%)",     icon=ICO.EXECUTE,   color={1.00, 0.40, 0.10} },
-    { key="OVERPOWER",  label="↳ Overpower  (opt)",  icon=ICO.OVERPOWER, color={0.45, 1.00, 0.45} },
-    { key="HS",         label="↳ Heroic Strike",     icon=ICO.HS,        color={1.00, 0.82, 0.22} },
-    { key="DEATH_WISH", label="Death Wish  (passive)",icon=ICO.DW,       color={0.60, 0.25, 0.90} },
+    { key="SUNDER",     label="Sunder Armor",          icon=ICO.SUNDER,    color={0.70, 0.70, 0.70} },
+    { key="BT",         label="Bloodthirst",           icon=ICO.BT,        color={1.00, 0.25, 0.25} },
+    { key="WW",         label="Whirlwind",             icon=ICO.WW,        color={1.00, 0.68, 0.18} },
+    { key="EXECUTE",    label="Execute  (<20%)",       icon=ICO.EXECUTE,   color={1.00, 0.40, 0.10} },
+    { key="OVERPOWER",  label="> Overpower  (opt)",    icon=ICO.OVERPOWER, color={0.45, 1.00, 0.45} },
+    { key="HS",         label="> Heroic Strike",       icon=ICO.HS,        color={1.00, 0.82, 0.22} },
+    { key="DEATH_WISH", label="Death Wish  (passive)",  icon=ICO.DW,        color={0.60, 0.25, 0.90} },
 }
 
--- ARMS: Slam immediately post-swing, then MS → WW on CD,
+-- ARMS: Slam immediately post-swing, then MS -> WW on CD,
 -- Execute filler at <20%, HS rage dump.
 -- Death Wish: passive CD indicator.
 local ARMS_ROWS = {
-    { key="SUNDER",     label="Sunder Armor",        icon=ICO.SUNDER,    color={0.70, 0.70, 0.70} },
-    { key="SLAM",       label="Slam  (post-swing)",  icon=ICO.SLAM,      color={1.00, 0.95, 0.35} },
-    { key="MS",         label="Mortal Strike",       icon=ICO.MS,        color={1.00, 0.25, 0.25} },
-    { key="WW",         label="Whirlwind",           icon=ICO.WW,        color={1.00, 0.68, 0.18} },
-    { key="EXECUTE",    label="Execute  (<20%)",     icon=ICO.EXECUTE,   color={1.00, 0.40, 0.10} },
-    { key="HS",         label="↳ Heroic Strike",     icon=ICO.HS,        color={1.00, 0.82, 0.22} },
-    { key="DEATH_WISH", label="Death Wish  (passive)",icon=ICO.DW,       color={0.60, 0.25, 0.90} },
+    { key="SUNDER",     label="Sunder Armor",          icon=ICO.SUNDER,    color={0.70, 0.70, 0.70} },
+    { key="SLAM",       label="Slam  (post-swing)",    icon=ICO.SLAM,      color={1.00, 0.95, 0.35} },
+    { key="MS",         label="Mortal Strike",         icon=ICO.MS,        color={1.00, 0.25, 0.25} },
+    { key="WW",         label="Whirlwind",             icon=ICO.WW,        color={1.00, 0.68, 0.18} },
+    { key="EXECUTE",    label="Execute  (<20%)",       icon=ICO.EXECUTE,   color={1.00, 0.40, 0.10} },
+    { key="HS",         label="> Heroic Strike",       icon=ICO.HS,        color={1.00, 0.82, 0.22} },
+    { key="DEATH_WISH", label="Death Wish  (passive)",  icon=ICO.DW,        color={0.60, 0.25, 0.90} },
 }
 
 -- PROT: Shield Slam > Revenge > demo/TC debuffs > Devastate filler
@@ -111,12 +113,12 @@ local ARMS_ROWS = {
 -- Heroic Strike: last resort rage dump only.
 local PROT_ROWS = {
     { key="SHIELD_BLOCK", label="Shield Block  (crit/crush)", icon=ICO.SHIELD_BLK, color={0.40, 0.85, 1.00} },
-    { key="SHIELD_SLAM",  label="Shield Slam",               icon=ICO.SS,          color={1.00, 0.55, 0.10} },
-    { key="REVENGE",      label="Revenge",                   icon=ICO.REVENGE,     color={0.90, 0.28, 0.28} },
-    { key="DEMO_SHOUT",   label="Demo Shout",                icon=ICO.DEMO,        color={0.65, 0.40, 1.00} },
-    { key="THUNDER_CLAP", label="Thunder Clap",              icon=ICO.TC,          color={0.38, 0.84, 1.00} },
-    { key="DEVASTATE",    label="Devastate  (filler)",       icon=ICO.DEVASTATE,   color={0.65, 0.65, 0.70} },
-    { key="HS",           label="↳ Heroic Strike  (dump)",   icon=ICO.HS,          color={1.00, 0.82, 0.22} },
+    { key="SHIELD_SLAM",  label="Shield Slam",                icon=ICO.SS,         color={1.00, 0.55, 0.10} },
+    { key="REVENGE",      label="Revenge",                    icon=ICO.REVENGE,    color={0.90, 0.28, 0.28} },
+    { key="DEMO_SHOUT",   label="Demo Shout",                 icon=ICO.DEMO,       color={0.65, 0.40, 1.00} },
+    { key="THUNDER_CLAP", label="Thunder Clap",               icon=ICO.TC,         color={0.38, 0.84, 1.00} },
+    { key="DEVASTATE",    label="Devastate  (filler)",        icon=ICO.DEVASTATE,  color={0.65, 0.65, 0.70} },
+    { key="HS",           label="> Heroic Strike  (dump)",    icon=ICO.HS,         color={1.00, 0.82, 0.22} },
 }
 
 -- ────────────────────────────────────────────────────────────
@@ -143,9 +145,9 @@ local overpowerExpiry = 0
 
 -- ────────────────────────────────────────────────────────────
 -- Spec detection
--- Devastate = 41-pt Prot talent → PROT
--- Bloodthirst = 30-pt Fury talent → FURY
--- Mortal Strike = 30-pt Arms talent → ARMS
+-- Devastate = 41-pt Prot talent -> PROT
+-- Bloodthirst = 30-pt Fury talent -> FURY
+-- Mortal Strike = 30-pt Arms talent -> ARMS
 -- ────────────────────────────────────────────────────────────
 local function DetectSpec()
     if WH.db and WH.db.spec then return WH.db.spec end
@@ -216,12 +218,12 @@ end
 -- ────────────────────────────────────────────────────────────
 -- UI constants + frames
 -- ────────────────────────────────────────────────────────────
-local FRAME_W    = 210
+local FRAME_W    = 265
 local HDR_H      = 18
 local ROW_H      = 22
 local ICON_S     = 16
 local PAD        = 5
-local STATUS_W   = 70
+local STATUS_W   = 110
 
 local mainFrame       = nil
 local modeLabel       = nil
@@ -594,7 +596,7 @@ local function UpdateFury(now)
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(btCD))
             else
                 -- Show BT countdown and when WW follows after
-                local seqStr = wwCD > 0 and ("  → WW " .. Fmt(wwCD)) or "  → WW READY"
+                local seqStr = wwCD > 0 and ("  -> WW " .. Fmt(wwCD)) or "  -> WW READY"
                 s = Col("ff8844", Fmt(btCD)) .. Col("555566", seqStr)
             end
 
@@ -605,7 +607,7 @@ local function UpdateFury(now)
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(wwCD))
             else
                 -- Show WW countdown and when BT follows after
-                local seqStr = btCD > 0 and ("  → BT " .. Fmt(btCD)) or "  → BT READY"
+                local seqStr = btCD > 0 and ("  -> BT " .. Fmt(btCD)) or "  -> BT READY"
                 s = Col("ff8844", Fmt(wwCD)) .. Col("555566", seqStr)
             end
 
@@ -666,14 +668,14 @@ local function UpdateFury(now)
     local nextFury = btCD <= wwCD and "BT" or "WW"
     local nextFuryCD = btCD <= wwCD and btCD or wwCD
     local afterFury  = btCD <= wwCD
-                       and (wwCD > 0 and (" → WW " .. Fmt(wwCD)) or " → WW READY")
-                       or  (btCD > 0 and (" → BT " .. Fmt(btCD)) or " → BT READY")
+                       and (wwCD > 0 and (" -> WW " .. Fmt(wwCD)) or " -> WW READY")
+                       or  (btCD > 0 and (" -> BT " .. Fmt(btCD)) or " -> BT READY")
     local spotSt
     if best == "BT" or best == "WW" then
         if nextFuryCD <= 0 then
             spotSt = "CAST" .. afterFury
         else
-            spotSt = "→ " .. nextFury .. " " .. Fmt(nextFuryCD) .. afterFury
+            spotSt = "-> " .. nextFury .. " " .. Fmt(nextFuryCD) .. afterFury
         end
     elseif best == "EXECUTE" then
         spotSt = string.format("%.0f%%", tHP*100) .. "  " .. rage .. "R"
@@ -692,7 +694,7 @@ end
 --   4. Whirlwind      — second ability after Slam each loop
 --   5. Execute        — filler at <20%, never ahead of MS/WW
 --   6. Heroic Strike  — off-GCD rage dump
--- Loop = Swing → Slam → MS → Swing → Slam → WW → Swing → Slam → filler ∞
+-- Loop = Swing -> Slam -> MS -> Swing -> Slam -> WW -> Swing -> Slam -> filler ∞
 -- ────────────────────────────────────────────────────────────
 local function UpdateArms(now)
     local rage    = playerRage
@@ -753,17 +755,17 @@ local function UpdateArms(now)
             if slamWindow then
                 local nextAbility = msCD <= 0 and "MS" or (wwCD <= 0 and "WW" or (msCD <= wwCD and "MS" or "WW"))
                 local nextCD      = msCD <= 0 and 0   or (wwCD <= 0 and 0   or math.min(msCD, wwCD))
-                local seqStr      = nextCD <= 0 and (" → " .. nextAbility .. " READY") or (" → " .. nextAbility .. " " .. Fmt(nextCD))
+                local seqStr      = nextCD <= 0 and (" -> " .. nextAbility .. " READY") or (" -> " .. nextAbility .. " " .. Fmt(nextCD))
                 s = Col("ffee00", "CAST NOW!") .. Col("888888", seqStr)
             elseif timeSinceSwing > 0.5 and swingDuration > 0 then
                 -- Window passed — show next swing + what comes after
                 local nextAbility = msCD <= wwCD and "MS" or "WW"
                 local nextCD      = math.min(msCD, wwCD)
-                local seqStr      = nextCD <= 0 and (" → " .. nextAbility .. " READY") or (" → " .. nextAbility .. " " .. Fmt(nextCD))
+                local seqStr      = nextCD <= 0 and (" -> " .. nextAbility .. " READY") or (" -> " .. nextAbility .. " " .. Fmt(nextCD))
                 s = Col("555566", "swing "  ) .. Col("ff8844", string.format("%.1f", nextSwingIn) .. "s") .. Col("555566", seqStr)
             else
                 local nextAbility = msCD <= wwCD and "MS" or "WW"
-                local seqStr      = " → SLAM → " .. nextAbility
+                local seqStr      = " -> SLAM -> " .. nextAbility
                 s = Col("555566", "swing in  ") .. Col("888888", string.format("%.1f", nextSwingIn) .. "s") .. Col("444455", seqStr)
             end
 
@@ -774,7 +776,7 @@ local function UpdateArms(now)
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(msCD))
             else
                 -- Show MS countdown + when WW follows
-                local seqStr = wwCD > 0 and ("  → WW " .. Fmt(wwCD)) or "  → WW READY"
+                local seqStr = wwCD > 0 and ("  -> WW " .. Fmt(wwCD)) or "  -> WW READY"
                 s = Col("ff8844", Fmt(msCD)) .. Col("555566", seqStr)
             end
 
@@ -785,7 +787,7 @@ local function UpdateArms(now)
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(wwCD))
             else
                 -- Show WW countdown + when MS follows
-                local seqStr = msCD > 0 and ("  → MS " .. Fmt(msCD)) or "  → MS READY"
+                local seqStr = msCD > 0 and ("  -> MS " .. Fmt(msCD)) or "  -> MS READY"
                 s = Col("ff8844", Fmt(wwCD)) .. Col("555566", seqStr)
             end
 
@@ -832,8 +834,8 @@ local function UpdateArms(now)
     local nextArms   = msCD <= wwCD and "MS" or "WW"
     local nextArmsCD = msCD <= wwCD and msCD or wwCD
     local afterArms  = msCD <= wwCD
-        and (wwCD > 0 and (" → WW " .. Fmt(wwCD)) or " → WW READY")
-        or  (msCD > 0 and (" → MS " .. Fmt(msCD)) or " → MS READY")
+        and (wwCD > 0 and (" -> WW " .. Fmt(wwCD)) or " -> WW READY")
+        or  (msCD > 0 and (" -> MS " .. Fmt(msCD)) or " -> MS READY")
     local spotSt
     if slamWindow then
         spotSt = "CAST NOW! +" .. string.format("%.2f", timeSinceSwing) .. "s" .. afterArms
@@ -841,7 +843,7 @@ local function UpdateArms(now)
         if nextArmsCD <= 0 then
             spotSt = "CAST" .. afterArms
         else
-            spotSt = "→ " .. nextArms .. " " .. Fmt(nextArmsCD) .. afterArms
+            spotSt = "-> " .. nextArms .. " " .. Fmt(nextArmsCD) .. afterArms
         end
     elseif best == "EXECUTE" then
         spotSt = string.format("%.0f%%", tHP * 100) .. "  " .. rage .. "R"
@@ -855,7 +857,7 @@ end
 
 -- ────────────────────────────────────────────────────────────
 -- PROT rotation
--- Main GCD loop: Shield Slam → Revenge → Devastate → Devastate ∞
+-- Main GCD loop: Shield Slam -> Revenge -> Devastate -> Devastate ∞
 -- Debuff fillers replacing Devastate when expiring:
 --   Demo Shout (<3s left or missing), Thunder Clap (<3s or missing)
 -- Parallel tracks (off-GCD / separate priority):
@@ -875,7 +877,7 @@ local function UpdateProt(now)
     local ssUsable = IsUsableSpell and IsUsableSpell("Shield Slam")
     local GCD = 1.5
 
-    -- GCD priority: SS → Revenge → debuffs as fillers → Devastate
+    -- GCD priority: SS -> Revenge -> debuffs as fillers -> Devastate
     local best
     if ssUsable and ssCD <= 0 and rage >= 20 then
         best = "SHIELD_SLAM"
