@@ -96,6 +96,7 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_LOGOUT")
 eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("BAG_UPDATE")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -160,6 +161,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "UNIT_INVENTORY_CHANGED" then
         local unit = ...
         if unit == "player" and IRRFrame and IRRFrame:IsShown() then
+            IRR_UpdateSlots()
+        end
+
+    elseif event == "BAG_UPDATE" then
+        -- Refresh badges when bag contents change (items moved in/out)
+        if IRRFrame and IRRFrame:IsShown() then
             IRR_UpdateSlots()
         end
 

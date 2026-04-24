@@ -94,14 +94,18 @@ function IRR_GetSetNames()
 end
 
 -- -------------------------------------------------------
--- IRR_EquipItemInSlot(targetItemId, slotId)
+-- IRR_EquipItemInSlot(targetItemId, slotId, protectedSlots)
 -- Searches the player's bags for an item with targetItemId
 -- and equips it to slotId. Returns true on success.
+-- protectedSlots: optional { [slotId]=true } table of slots that are
+--   target slots in the current LoadSet call — the "equipped elsewhere"
+--   fallback will never steal from these, preventing duplicate-itemID
+--   ping-pong between two rings/trinkets with the same itemID.
 -- Player must trigger this via a UI button (not automated).
 -- -------------------------------------------------------
 local _UseContainerItem = C_Container and C_Container.UseContainerItem or UseContainerItem
 
-local function IRR_EquipItemInSlot(targetItemId, slotId)
+local function IRR_EquipItemInSlot(targetItemId, slotId, protectedSlots)
     -- Ammo slot (0): PickupInventoryItem(0) is not a valid API in TBC Anniversary.
     -- Ammo is equipped by right-clicking the stack (UseContainerItem).
     -- Just scan bags and UseContainerItem on the matching stack.
@@ -120,7 +124,7 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
         return false
     end
 
-    -- Already wearing it?
+    -- Already wearing it in the target slot?
     local currentId = GetInventoryItemID("player", slotId)
     if currentId == targetItemId then return true end
 
@@ -155,8 +159,15 @@ local function IRR_EquipItemInSlot(targetItemId, slotId)
 
     -- Item may already be equipped in a different slot (swap scenario).
     -- Skip slot 0 — ammo can't be swapped via PickupInventoryItem.
+    -- Also skip any slot that is itself a target in this LoadSet call
+    -- (protectedSlots), because that item will be handled — or is already
+    -- correct — in its own iteration.  Without this guard, two identical
+    -- rings would steal from each other, leaving one slot empty.
     for _, slotDef in ipairs(IRR.SLOTS) do
-        if slotDef.id ~= 0 and GetInventoryItemID("player", slotDef.id) == targetItemId then
+        if slotDef.id ~= 0
+            and GetInventoryItemID("player", slotDef.id) == targetItemId
+            and not (protectedSlots and protectedSlots[slotDef.id])
+        then
             local ok = pcall(PickupInventoryItem, slotDef.id)
             if not ok then ClearCursor(); return false end
             local ok2 = pcall(PickupInventoryItem, slotId)
@@ -189,9 +200,18 @@ function IRR_LoadSet(name)
     local equipped  = 0
     local missing   = {}
 
-    -- Build a target list: slot -> itemId
+    -- Build the set of slot IDs that this set is trying to fill.
+    -- Passed to IRR_EquipItemInSlot so the "equipped elsewhere" fallback
+    -- never steals an item from a slot that the set itself owns — this
+    -- prevents duplicate-itemID ping-pong (e.g. two identical rings).
+    local protectedSlots = {}
+    for slotId in pairs(setData) do
+        protectedSlots[tonumber(slotId)] = true
+    end
+
+    -- Equip each slot.  Pass protectedSlots so the fallback path is safe.
     for slotId, itemId in pairs(setData) do
-        local ok = IRR_EquipItemInSlot(itemId, tonumber(slotId))
+        local ok = IRR_EquipItemInSlot(itemId, tonumber(slotId), protectedSlots)
         if ok then
             equipped = equipped + 1
         else
@@ -256,7 +276,7 @@ function IRR_LoadSet(name)
                 C_Timer.After(0.3, function()
                     local eq2, miss2 = 0, {}
                     for slotId, itemId in pairs(setData) do
-                        local ok2 = IRR_EquipItemInSlot(itemId, tonumber(slotId))
+                        local ok2 = IRR_EquipItemInSlot(itemId, tonumber(slotId), protectedSlots)
                         if ok2 then eq2 = eq2 + 1
                         else
                             local iName = GetItemInfo(itemId) or ("Item #" .. itemId)
