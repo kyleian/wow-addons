@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyChar.lua  (full rewrite â€” movable character sheet)
 -- â€¢ Intercepts C key: hides CharacterFrame, shows our panel
 -- â€¢ SC_BuildMain() builds a full equipped-gear + model panel
@@ -76,42 +76,74 @@ function SC_ToggleMain()
 end
 
 -- --------------------------------------------------------
--- Hook CharacterFrame: C key â†’ suppress default, use ours
+-- Hook CharacterFrame: C key -> suppress default, use ours
 -- The C keybinding fires ShowUIPanel(CharacterFrame).
 -- HookScript on OnShow immediately hides it and toggles ours.
 -- Since CharacterFrame is always instantly hidden,
--- ToggleCharacter() always thinks it's closed and calls Show â€”
+-- ToggleCharacter() always thinks it's closed and calls Show --
 -- so we toggle based on our own panel state.
+--
+-- PROBLEM: ShowUIPanel(CharacterFrame) runs the WoW panel manager
+-- BEFORE our OnShow hook fires.  The panel manager displaces other
+-- registered UI panels (TradeFrame, MerchantFrame, etc.) to make
+-- room.  By the time we detect them in OnShow they are already gone.
+--
+-- FIX: pre-snapshot open panels in a hooksecurefunc("ShowUIPanel")
+-- that fires synchronously before ShowUIPanel does its work, then
+-- restore any panel that got displaced.
 -- --------------------------------------------------------
+local _displacedPanels = {}
+
 local function HookCharacterFrame()
     if not CharacterFrame then return end
-    CharacterFrame:HookScript("OnShow", function(self)
-        -- Chr button opened it on purpose — don't intercept.
-        if SC._skipHook then return end
 
-        -- Don't intercept when the game opens CharacterFrame alongside vendor,
-        -- trade, or inspect panels — those are legitimate engine-driven shows.
-        -- Also skip when the spellbook is open or the cursor is carrying
-        -- something (spell/item drag) — dragging from spellbook to bar
-        -- can trigger CharacterFrame:Show() and we must not hijack that.
-        if (MerchantFrame  and MerchantFrame:IsShown())
-        or (TradeFrame     and TradeFrame:IsShown())
-        or (InspectFrame   and InspectFrame:IsShown())
-        or (SpellBookFrame and SpellBookFrame:IsShown())
-        or GetCursorInfo() then
+    hooksecurefunc("ShowUIPanel", function(frame)
+        if frame ~= CharacterFrame then return end
+        wipe(_displacedPanels)
+        local candidates = {
+            TradeFrame, MerchantFrame, InspectFrame, SpellBookFrame,
+            GossipFrame, QuestFrame, ItemTextFrame,
+        }
+        for _, f in ipairs(candidates) do
+            if f and f:IsShown() then
+                table.insert(_displacedPanels, f)
+            end
+        end
+    end)
+
+    CharacterFrame:HookScript("OnShow", function(self)
+        if SC._skipHook then
+            wipe(_displacedPanels)
             return
         end
 
+        -- If any sibling panel was open when ShowUIPanel fired, do not hijack.
+        -- Also restore any that the panel manager displaced.
+        if #_displacedPanels > 0 then
+            self:Hide()
+            for _, f in ipairs(_displacedPanels) do
+                if not f:IsShown() then ShowUIPanel(f) end
+            end
+            wipe(_displacedPanels)
+            return
+        end
+
+        -- Guard: cursor carry (spell/item drag).
+        if GetCursorInfo() then
+            wipe(_displacedPanels)
+            return
+        end
+
+        wipe(_displacedPanels)
+
         if InCombatLockdown() then
-            -- In combat: suppress CharacterFrame but do NOT re-open SlyChar.
-            -- (SlyChar was already closed by PLAYER_REGEN_DISABLED.)
             CharacterFrame:EnableMouse(false)
             CharacterFrame:EnableKeyboard(false)
             SC._pendingHideChar = true
             return
         end
-        self:Hide()                 -- suppress the default frame
-        SC_ToggleMain()             -- toggle our panel
+        self:Hide()
+        SC_ToggleMain()
     end)
 end
 
