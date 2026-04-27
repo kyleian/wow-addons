@@ -14,7 +14,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlySuite_WarriorHelper"
-local VERSION    = "1.0.0"
+local VERSION    = "1.1.0"
 
 local WH = {}
 WH.db = nil
@@ -22,6 +22,8 @@ WH.db = nil
 local DB_DEFAULTS = {
     locked       = false,
     shown        = true,
+    combatOnly   = false,
+    showSunder   = true,
     position     = { point = "CENTER", x = 250, y = 0 },
     spotShown    = true,
     spotPosition = { point = "CENTER", x = 0, y = -150 },
@@ -74,6 +76,7 @@ local ICO = {
     OVERPOWER  = "Interface\\Icons\\Ability_MeleeDamage",
     RAMPAGE    = "Interface\\Icons\\Ability_Warrior_RampagePurple",
     CLEAVE     = "Interface\\Icons\\Ability_Warrior_Cleave",
+    PROCS      = "Interface\\Icons\\Ability_Rogue_Sprint",
 }
 
 -- ────────────────────────────────────────────────────────────
@@ -88,9 +91,10 @@ local FURY_ROWS = {
     { key="BT",         label="Bloodthirst",         icon=ICO.BT,        color={1.00, 0.25, 0.25} },
     { key="WW",         label="Whirlwind",           icon=ICO.WW,        color={1.00, 0.68, 0.18} },
     { key="EXECUTE",    label="Execute  (<20%)",     icon=ICO.EXECUTE,   color={1.00, 0.40, 0.10} },
-    { key="OVERPOWER",  label="↳ Overpower  (opt)",  icon=ICO.OVERPOWER, color={0.45, 1.00, 0.45} },
-    { key="HS",         label="↳ Heroic Strike",     icon=ICO.HS,        color={1.00, 0.82, 0.22} },
+    { key="OVERPOWER",  label="+ Overpower  (opt)",  icon=ICO.OVERPOWER, color={0.45, 1.00, 0.45} },
+    { key="HS",         label="+ Heroic Strike",     icon=ICO.HS,        color={1.00, 0.82, 0.22} },
     { key="DEATH_WISH", label="Death Wish  (passive)",icon=ICO.DW,       color={0.60, 0.25, 0.90} },
+    { key="PROCS",      label="Procs  (DST/DS/MG)",  icon=ICO.PROCS,    color={0.20, 0.90, 0.95} },
 }
 
 -- ARMS: Slam immediately post-swing, then MS → WW on CD,
@@ -102,8 +106,9 @@ local ARMS_ROWS = {
     { key="MS",         label="Mortal Strike",       icon=ICO.MS,        color={1.00, 0.25, 0.25} },
     { key="WW",         label="Whirlwind",           icon=ICO.WW,        color={1.00, 0.68, 0.18} },
     { key="EXECUTE",    label="Execute  (<20%)",     icon=ICO.EXECUTE,   color={1.00, 0.40, 0.10} },
-    { key="HS",         label="↳ Heroic Strike",     icon=ICO.HS,        color={1.00, 0.82, 0.22} },
+    { key="HS",         label="+ Heroic Strike",     icon=ICO.HS,        color={1.00, 0.82, 0.22} },
     { key="DEATH_WISH", label="Death Wish  (passive)",icon=ICO.DW,       color={0.60, 0.25, 0.90} },
+    { key="PROCS",      label="Procs  (DST/DS/MG)",  icon=ICO.PROCS,    color={0.20, 0.90, 0.95} },
 }
 
 -- PROT: Shield Slam > Revenge > demo/TC debuffs > Devastate filler
@@ -116,7 +121,7 @@ local PROT_ROWS = {
     { key="DEMO_SHOUT",   label="Demo Shout",                icon=ICO.DEMO,        color={0.65, 0.40, 1.00} },
     { key="THUNDER_CLAP", label="Thunder Clap",              icon=ICO.TC,          color={0.38, 0.84, 1.00} },
     { key="DEVASTATE",    label="Devastate  (filler)",       icon=ICO.DEVASTATE,   color={0.65, 0.65, 0.70} },
-    { key="HS",           label="↳ Heroic Strike  (dump)",   icon=ICO.HS,          color={1.00, 0.82, 0.22} },
+    { key="HS",           label="+ Heroic Strike  (dump)",   icon=ICO.HS,          color={1.00, 0.82, 0.22} },
 }
 
 -- ────────────────────────────────────────────────────────────
@@ -130,6 +135,8 @@ local playerGUID      = nil
 -- Debuff/buff timers
 local sunderStacks    = 0     -- Sunder Armor stacks on target (0-5)
 local sunderExpiry    = 0
+local exposeArmor     = false -- Expose Armor (rogue EA) present on target
+local exposeExpiry    = 0
 local demoShoutExpiry = 0     -- Demoralizing Shout on target
 local thunderExpiry   = 0     -- Thunder Clap on target
 local dwishExpiry     = 0     -- Death Wish buff on player
@@ -141,6 +148,11 @@ local swingDuration   = 2.0   -- MH attack speed in seconds
 -- Overpower proc window (dodge detected)
 local overpowerExpiry = 0
 
+-- Haste proc windows
+local dstExpiry          = 0   -- Dragonspine Trophy "Haste" proc
+local dragonstrikeExpiry = 0   -- Dragonstrike weapon enchant proc
+local mongooseExpiry     = 0   -- Mongoose weapon enchant proc
+
 -- ────────────────────────────────────────────────────────────
 -- Spec detection
 -- Devastate = 41-pt Prot talent → PROT
@@ -149,9 +161,13 @@ local overpowerExpiry = 0
 -- ────────────────────────────────────────────────────────────
 local function DetectSpec()
     if WH.db and WH.db.spec then return WH.db.spec end
-    if GetSpellInfo("Devastate")     then return "PROT" end
+    -- Check 30-pt DPS talents first — they are mutually exclusive with each other
+    -- and unambiguously identify the primary tree.  Devastate is the 41-pt Prot
+    -- talent but check it last so a Fury/Arms warrior who happens to have a few
+    -- Prot points doesn't get misidentified.
     if GetSpellInfo("Bloodthirst")   then return "FURY" end
     if GetSpellInfo("Mortal Strike") then return "ARMS" end
+    if GetSpellInfo("Devastate")     then return "PROT" end
     return "FURY"
 end
 
@@ -180,6 +196,8 @@ local function Col(hex, s) return string.format("|cff%s%s|r", hex, s) end
 local function ScanTargetDebuffs()
     sunderStacks    = 0
     sunderExpiry    = 0
+    exposeArmor     = false
+    exposeExpiry    = 0
     demoShoutExpiry = 0
     thunderExpiry   = 0
     if not UnitExists("target") then return end
@@ -192,6 +210,10 @@ local function ScanTargetDebuffs()
             sunderStacks = count or 1
             sunderExpiry = expireTime or 0
         end
+        if name == "Expose Armor" then
+            exposeArmor  = true
+            exposeExpiry = expireTime or 0
+        end
         if name == "Demoralizing Shout" then
             demoShoutExpiry = expireTime or 0
         end
@@ -203,12 +225,18 @@ local function ScanTargetDebuffs()
 end
 
 local function ScanPlayerBuffs()
-    dwishExpiry = 0
+    dwishExpiry         = 0
+    dstExpiry           = 0
+    dragonstrikeExpiry  = 0
+    mongooseExpiry      = 0
     local i = 1
     while true do
         local name, _, _, _, _, expireTime = UnitBuff("player", i)
         if not name then break end
-        if name == "Death Wish" then dwishExpiry = expireTime or 0 end
+        if name == "Death Wish"   then dwishExpiry         = expireTime or 0 end
+        if name == "Haste"        then dstExpiry           = expireTime or 0 end
+        if name == "Dragonstrike" then dragonstrikeExpiry  = expireTime or 0 end
+        if name == "Mongoose"     then mongooseExpiry      = expireTime or 0 end
         i = i + 1
     end
 end
@@ -307,6 +335,27 @@ local function SetRowState(row, active, statusStr)
     row.status:SetText(statusStr or "")
 end
 
+-- Show/hide and reposition Sunder rows in Fury and Arms containers.
+local function RefreshSunderRows()
+    local show = WH.db and WH.db.showSunder ~= false
+    local function relayout(rowFrames)
+        local visIdx = 0
+        for _, row in ipairs(rowFrames) do
+            local visible = (row.rowDef.key ~= "SUNDER") or show
+            row:SetShown(visible)
+            if visible then
+                visIdx = visIdx + 1
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 0, -(visIdx - 1) * (ROW_H + 1))
+                row.bg:SetColorTexture(0, 0, 0, visIdx % 2 == 0 and 0.18 or 0.05)
+                row.num:SetText(Col("444455", tostring(visIdx)))
+            end
+        end
+    end
+    relayout(furyRowFrames)
+    relayout(armsRowFrames)
+end
+
 local function BuildUI()
     if mainFrame then return end
 
@@ -319,7 +368,7 @@ local function BuildUI()
     local pos = WH.db.position
     local f = CreateFrame("Frame", "SlyWarriorHelperFrame", UIParent)
     f:SetSize(FRAME_W, FRAME_H)
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("MEDIUM")
     f:SetMovable(true)
     f:EnableMouse(false)
     f:SetClampedToScreen(true)
@@ -439,7 +488,7 @@ local function BuildSpotlight()
     local sp = WH.db.spotPosition or { point="CENTER", x=0, y=-150 }
     local f  = CreateFrame("Frame", "SlyWarriorHelperSpot", UIParent)
     f:SetSize(SPOT_W, SPOT_H)
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("MEDIUM")
     f:SetMovable(true)
     f:SetClampedToScreen(true)
     f:SetPoint(sp.point or "CENTER", UIParent, sp.point or "CENTER", sp.x or 0, sp.y or -150)
@@ -545,11 +594,16 @@ local function UpdateFury(now)
     local GCD     = 1.5
     local btSoon  = btCD < GCD
     local wwSoon  = wwCD < GCD
+    -- Haste proc windows
+    local dstL    = dstExpiry          > 0 and math.max(0, dstExpiry          - now) or 0
+    local dsL     = dragonstrikeExpiry > 0 and math.max(0, dragonstrikeExpiry - now) or 0
+    local mgL     = mongooseExpiry     > 0 and math.max(0, mongooseExpiry     - now) or 0
+    local anyProc = dstL > 0 or dsL > 0 or mgL > 0
 
     -- Priority decision
     local best
-    -- Sunder: urgent if stacks < 5 and neither BT nor WW is coming immediately
-    if sunderStacks < 5 and not btSoon and not wwSoon then
+    -- Sunder: urgent if stacks < 5, no EA rogue covering, and BT/WW not imminent
+    if WH.db.showSunder and sunderStacks < 5 and not exposeArmor and not btSoon and not wwSoon then
         best = "SUNDER"
     elseif btCD <= 0 then
         best = "BT"
@@ -566,16 +620,21 @@ local function UpdateFury(now)
     end
 
     -- HS: off-GCD rage dump — only when not risking BT/WW starvation
-    -- Safe threshold: 70+ rage and nothing immediately needed
-    local hsDump = rage >= 70 and btCD > 0 and wwCD > 0
+    -- Lower threshold when haste procs active (swing speed up → more rage income)
+    local hsThresh = anyProc and 60 or 70
+    local hsDump = rage >= hsThresh and btCD > 0 and wwCD > 0
 
     for _, row in ipairs(furyRowFrames) do
         local k      = row.rowDef.key
-        local active = (k == best) or (k == "HS" and hsDump)
+        local active = (k == best) or (k == "HS" and hsDump) or (k == "PROCS" and anyProc)
         local s      = ""
 
         if k == "SUNDER" then
-            if sunderStacks >= 5 then
+            if exposeArmor then
+                -- EA rogue covering armor slot -- do NOT overwrite a stronger debuff
+                local eaL = exposeExpiry > 0 and math.max(0, exposeExpiry - now) or 0
+                s = Col("44aa44", "EA up  ") .. Col("888888", eaL > 0 and Fmt(eaL) or "")
+            elseif sunderStacks >= 5 then
                 if sunL > 0 then
                     s = Col("44aa44", "5/5  ") .. Col("888888", Fmt(sunL))
                 else
@@ -605,7 +664,7 @@ local function UpdateFury(now)
                 s = Col("ffdd22", "SOON  ") .. Col("ff8844", Fmt(wwCD))
             else
                 -- Show WW countdown and when BT follows after
-                local seqStr = btCD > 0 and ("  → BT " .. Fmt(btCD)) or "  → BT READY"
+                local seqStr = btCD > 0 and ("  >> BT " .. Fmt(btCD)) or "  >> BT READY"
                 s = Col("ff8844", Fmt(wwCD)) .. Col("555566", seqStr)
             end
 
@@ -651,6 +710,20 @@ local function UpdateFury(now)
             else
                 s = Col("555566", "CD  ") .. Col("888888", Fmt(dwCD))
             end
+
+        elseif k == "PROCS" then
+            if anyProc then
+                local parts = {}
+                if dstL > 0 then parts[#parts+1] = Col("22ddff", "DST " .. Fmt(dstL)) end
+                if dsL  > 0 then parts[#parts+1] = Col("ff9944", "DS "  .. Fmt(dsL))  end
+                if mgL  > 0 then parts[#parts+1] = Col("44ff88", "MG "  .. Fmt(mgL))  end
+                s = table.concat(parts, Col("555566", " | "))
+                if rage >= hsThresh - 10 then
+                    s = s .. Col("ffee55", "  HS!")
+                end
+            else
+                s = Col("333344", "—")
+            end
         end
 
         SetRowState(row, active, s)
@@ -666,14 +739,14 @@ local function UpdateFury(now)
     local nextFury = btCD <= wwCD and "BT" or "WW"
     local nextFuryCD = btCD <= wwCD and btCD or wwCD
     local afterFury  = btCD <= wwCD
-                       and (wwCD > 0 and (" → WW " .. Fmt(wwCD)) or " → WW READY")
-                       or  (btCD > 0 and (" → BT " .. Fmt(btCD)) or " → BT READY")
+                       and (wwCD > 0 and (" >> WW " .. Fmt(wwCD)) or " >> WW READY")
+                       or  (btCD > 0 and (" >> BT " .. Fmt(btCD)) or " >> BT READY")
     local spotSt
     if best == "BT" or best == "WW" then
         if nextFuryCD <= 0 then
             spotSt = "CAST" .. afterFury
         else
-            spotSt = "→ " .. nextFury .. " " .. Fmt(nextFuryCD) .. afterFury
+            spotSt = ">> " .. nextFury .. " " .. Fmt(nextFuryCD) .. afterFury
         end
     elseif best == "EXECUTE" then
         spotSt = string.format("%.0f%%", tHP*100) .. "  " .. rage .. "R"
@@ -703,6 +776,11 @@ local function UpdateArms(now)
     local dwL     = dwishExpiry > 0 and math.max(0, dwishExpiry - now) or 0
     local sunL    = sunderExpiry > 0 and math.max(0, sunderExpiry - now) or 0
     local exPhase = tHP < 0.20
+    -- Haste proc windows
+    local dstL    = dstExpiry          > 0 and math.max(0, dstExpiry          - now) or 0
+    local dsL     = dragonstrikeExpiry > 0 and math.max(0, dragonstrikeExpiry - now) or 0
+    local mgL     = mongooseExpiry     > 0 and math.max(0, mongooseExpiry     - now) or 0
+    local anyProc = dstL > 0 or dsL > 0 or mgL > 0
 
     -- Swing timer
     local timeSinceSwing = now - lastSwingTime
@@ -716,7 +794,7 @@ local function UpdateArms(now)
 
     -- Priority decision
     local best
-    if sunderStacks < 5 and not slamWindow and not msSoon and not wwSoon then
+    if WH.db.showSunder and sunderStacks < 5 and not exposeArmor and not slamWindow and not msSoon and not wwSoon then
         best = "SUNDER"
     elseif slamWindow and rage >= 15 then
         best = "SLAM"    -- highest urgency — window is only 0.5s
@@ -732,15 +810,19 @@ local function UpdateArms(now)
         best = "WW"
     end
 
-    local hsDump = rage >= 70 and not slamWindow and not msSoon and not wwSoon
+    local hsThresh = anyProc and 60 or 70
+    local hsDump = rage >= hsThresh and not slamWindow and not msSoon and not wwSoon
 
     for _, row in ipairs(armsRowFrames) do
         local k      = row.rowDef.key
-        local active = (k == best) or (k == "HS" and hsDump)
+        local active = (k == best) or (k == "HS" and hsDump) or (k == "PROCS" and anyProc)
         local s      = ""
 
         if k == "SUNDER" then
-            if sunderStacks >= 5 then
+            if exposeArmor then
+                local eaL = exposeExpiry > 0 and math.max(0, exposeExpiry - now) or 0
+                s = Col("44aa44", "EA up  ") .. Col("888888", eaL > 0 and Fmt(eaL) or "")
+            elseif sunderStacks >= 5 then
                 s = Col("44aa44", "5/5  ") .. Col("888888", Fmt(sunL))
             elseif sunderStacks > 0 then
                 s = Col("ffcc44", sunderStacks .. "/5  ") .. Col("888888", Fmt(sunL))
@@ -817,6 +899,21 @@ local function UpdateArms(now)
             else
                 s = Col("555566", "CD  ") .. Col("888888", Fmt(dwCD))
             end
+
+        elseif k == "PROCS" then
+            if anyProc then
+                local parts = {}
+                if dstL > 0 then parts[#parts+1] = Col("22ddff", "DST " .. Fmt(dstL)) end
+                if dsL  > 0 then parts[#parts+1] = Col("ff9944", "DS "  .. Fmt(dsL))  end
+                if mgL  > 0 then parts[#parts+1] = Col("44ff88", "MG "  .. Fmt(mgL))  end
+                s = table.concat(parts, Col("555566", " | "))
+                -- Faster swings = more rage; remind player to HS sooner
+                if rage >= hsThresh - 10 then
+                    s = s .. Col("ffee55", "  HS!")
+                end
+            else
+                s = Col("333344", "—")
+            end
         end
 
         SetRowState(row, active, s)
@@ -841,7 +938,7 @@ local function UpdateArms(now)
         if nextArmsCD <= 0 then
             spotSt = "CAST" .. afterArms
         else
-            spotSt = "→ " .. nextArms .. " " .. Fmt(nextArmsCD) .. afterArms
+            spotSt = ">> " .. nextArms .. " " .. Fmt(nextArmsCD) .. afterArms
         end
     elseif best == "EXECUTE" then
         spotSt = string.format("%.0f%%", tHP * 100) .. "  " .. rage .. "R"
@@ -1055,6 +1152,8 @@ local evtFrame = CreateFrame("Frame")
 evtFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 evtFrame:RegisterEvent("UNIT_AURA")
 evtFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+evtFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+evtFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 evtFrame:RegisterEvent("PLAYER_LOGOUT")
 
 evtFrame:SetScript("OnEvent", function(self, event, ...)
@@ -1088,6 +1187,20 @@ evtFrame:SetScript("OnEvent", function(self, event, ...)
             local pt, _, _, x, y = spotFrame:GetPoint()
             WH.db.spotPosition = { point = pt or "CENTER", x = x or 0, y = y or 0 }
             WH.db.spotShown    = spotFrame:IsShown()
+        end
+
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        -- Entered combat — show if combatOnly mode is enabled and window is toggled on
+        if WH.db and WH.db.combatOnly and WH.db.shown then
+            if mainFrame then mainFrame:Show() end
+            if spotFrame and WH.db.spotShown then spotFrame:Show() end
+        end
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Left combat — hide if combatOnly mode is enabled
+        if WH.db and WH.db.combatOnly then
+            if mainFrame then mainFrame:Hide() end
+            if spotFrame then spotFrame:Hide() end
         end
     end
 end)
@@ -1149,6 +1262,29 @@ local function Init()
                 DEFAULT_CHAT_FRAME:AddMessage("|cff88ccff[WarriorHelper]|r Usage: /slywarrior spec fury|arms|prot|auto")
             end
 
+        elseif msg == "sunder" then
+            WH.db.showSunder = not WH.db.showSunder
+            RefreshSunderRows()
+            if WH.db.showSunder then
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88ccff[WarriorHelper]|r Sunder Armor row: |cff44ff44ON|r.")
+            else
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88ccff[WarriorHelper]|r Sunder Armor row: |cffff4444OFF|r.")
+            end
+
+        elseif msg == "combat" then
+            WH.db.combatOnly = not WH.db.combatOnly
+            if WH.db.combatOnly then
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88ccff[WarriorHelper]|r Combat-only: |cffff4444ON|r — window hidden out of combat.")
+                if not InCombatLockdown() then
+                    if mainFrame then mainFrame:Hide() end
+                    if spotFrame then spotFrame:Hide() end
+                end
+            else
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88ccff[WarriorHelper]|r Combat-only: |cff44ff44OFF|r.")
+                if WH.db.shown and mainFrame then mainFrame:Show() end
+                if WH.db.spotShown and spotFrame then spotFrame:Show() end
+            end
+
         else
             if not mainFrame then BuildUI() end
             if mainFrame:IsShown() then
@@ -1160,7 +1296,13 @@ local function Init()
     end
 
     BuildUI()
+    RefreshSunderRows()
     BuildSpotlight()
+    -- Apply combat-only: hide on login if enabled and currently out of combat
+    if WH.db.combatOnly and not InCombatLockdown() then
+        if mainFrame then mainFrame:Hide() end
+        if spotFrame then spotFrame:Hide() end
+    end
     ScanPlayerBuffs()
     ScanTargetDebuffs()
 

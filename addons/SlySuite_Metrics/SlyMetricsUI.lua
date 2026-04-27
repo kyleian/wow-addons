@@ -216,7 +216,7 @@ function SM_BuildUI()
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("MEDIUM")
     f:SetClampedToScreen(true)
 
     -- Restore saved position only if mx >= 0 (not off left edge of screen).
@@ -301,6 +301,7 @@ function SM_BuildUI()
         local pid = td.id
         b:SetScript("OnClick", function()
             SM.panel = pid
+            if SM.db then SM.db.panel = pid end
             HighlightTabs()
             if pid == "hps" then SM_RefreshHPS()
             elseif pid == "thr" then SM_RefreshThreat()

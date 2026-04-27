@@ -6,7 +6,7 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "1.0.0"
+SC.version = "1.5.2"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
@@ -88,28 +88,31 @@ end
 -- registered UI panels (TradeFrame, MerchantFrame, etc.) to make
 -- room.  By the time we detect them in OnShow they are already gone.
 --
--- FIX: pre-snapshot open panels in a hooksecurefunc("ShowUIPanel")
--- that fires synchronously before ShowUIPanel does its work, then
--- restore any panel that got displaced.
+-- FIX: wrap ShowUIPanel directly (it is plain Lua in TBC FrameXML)
+-- so our snapshot runs BEFORE the panel manager displaces anything.
 -- --------------------------------------------------------
 local _displacedPanels = {}
 
 local function HookCharacterFrame()
     if not CharacterFrame then return end
 
-    hooksecurefunc("ShowUIPanel", function(frame)
-        if frame ~= CharacterFrame then return end
-        wipe(_displacedPanels)
-        local candidates = {
-            TradeFrame, MerchantFrame, InspectFrame, SpellBookFrame,
-            GossipFrame, QuestFrame, ItemTextFrame,
-        }
-        for _, f in ipairs(candidates) do
-            if f and f:IsShown() then
-                table.insert(_displacedPanels, f)
+    -- True pre-hook: runs before the original ShowUIPanel displaces panels.
+    local _origShowUIPanel = ShowUIPanel
+    ShowUIPanel = function(frame, ...)
+        if frame == CharacterFrame then
+            wipe(_displacedPanels)
+            local candidates = {
+                TradeFrame, MerchantFrame, InspectFrame, SpellBookFrame,
+                GossipFrame, QuestFrame, ItemTextFrame,
+            }
+            for _, f in ipairs(candidates) do
+                if f and f:IsShown() then
+                    table.insert(_displacedPanels, f)
+                end
             end
         end
-    end)
+        return _origShowUIPanel(frame, ...)
+    end
 
     CharacterFrame:HookScript("OnShow", function(self)
         if SC._skipHook then

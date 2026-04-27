@@ -29,20 +29,67 @@ local QUAL_COLORS = {
 
 -- Category definitions (display order matters)
 local CATEGORIES = {
-    { id="WEAPON",     label="Weapons",          r=0.90, g=0.55, b=0.15, bg={0.22,0.12,0.04} },
-    { id="ARMOR",      label="Armor",            r=0.30, g=0.60, b=1.00, bg={0.05,0.10,0.26} },
-    { id="RESISTANCE", label="Resistance Gear",  r=0.20, g=0.90, b=0.80, bg={0.04,0.20,0.18} },
-    { id="CONSUMABLE", label="Consumables",      r=0.20, g=0.90, b=0.40, bg={0.04,0.20,0.08} },
-    { id="TRADESKILL", label="Trade Goods",      r=0.80, g=0.75, b=0.30, bg={0.20,0.18,0.04} },
-    { id="RECIPE",     label="Recipes",          r=1.00, g=0.50, b=0.80, bg={0.22,0.05,0.14} },
-    { id="QUEST",      label="Quest Items",      r=1.00, g=0.90, b=0.10, bg={0.24,0.20,0.02} },
-    { id="CONTAINER",  label="Bags",             r=0.65, g=0.55, b=0.40, bg={0.14,0.11,0.07} },
-    { id="KEY",        label="Keys",             r=1.00, g=0.82, b=0.00, bg={0.22,0.18,0.00} },
-    { id="MISC",       label="Misc",             r=0.55, g=0.55, b=0.60, bg={0.10,0.10,0.14} },
-    { id="JUNK",       label="Junk  (auto-sell)",        r=0.80, g=0.20, b=0.15, bg={0.20,0.04,0.04} },
+    { id="WEAPON",     label="Weapons",           r=0.90, g=0.55, b=0.15, bg={0.22,0.12,0.04} },
+    { id="ARMOR",      label="Armor",             r=0.30, g=0.60, b=1.00, bg={0.05,0.10,0.26} },
+    { id="RESISTANCE", label="Resistance Gear",   r=0.20, g=0.90, b=0.80, bg={0.04,0.20,0.18} },
+    { id="CONSUMABLE", label="Consumables",       r=0.20, g=0.90, b=0.40, bg={0.04,0.20,0.08} },
+    -- Trade Goods sub-categories
+    { id="TS_ENCHANT",   label="  Enchanting Mats",  r=0.85, g=0.65, b=1.00, bg={0.16,0.10,0.22} },
+    { id="TS_GEM",       label="  Gems",              r=0.95, g=0.40, b=0.90, bg={0.22,0.06,0.20} },
+    { id="TS_HERB",      label="  Herbs",             r=0.35, g=0.90, b=0.35, bg={0.05,0.20,0.05} },
+    { id="TS_METAL",     label="  Metal & Stone",     r=0.75, g=0.70, b=0.55, bg={0.18,0.16,0.08} },
+    { id="TS_CLOTH",     label="  Cloth",             r=0.95, g=0.80, b=0.85, bg={0.22,0.16,0.20} },
+    { id="TS_LEATHER",   label="  Leather",           r=0.80, g=0.55, b=0.25, bg={0.20,0.12,0.04} },
+    { id="TS_ELEMENTAL", label="  Elemental",         r=0.40, g=0.80, b=1.00, bg={0.06,0.16,0.24} },
+    { id="TS_PARTS",     label="  Parts & Devices",   r=0.70, g=0.70, b=0.75, bg={0.14,0.14,0.18} },
+    { id="TS_OTHER",     label="  Trade Goods",       r=0.80, g=0.75, b=0.30, bg={0.20,0.18,0.04} },
+    { id="RECIPE",     label="Recipes",           r=1.00, g=0.50, b=0.80, bg={0.22,0.05,0.14} },
+    { id="QUEST",      label="Quest Items",        r=1.00, g=0.90, b=0.10, bg={0.24,0.20,0.02} },
+    { id="TOKEN",      label="Badges & Tokens",   r=1.00, g=0.75, b=0.20, bg={0.24,0.16,0.02} },
+    { id="MOUNT",      label="Mounts",            r=0.80, g=0.55, b=1.00, bg={0.16,0.08,0.24} },
+    { id="PET",        label="Companion Pets",    r=1.00, g=0.70, b=0.90, bg={0.24,0.12,0.20} },
+    { id="KEYITEM",    label="Key Items",         r=1.00, g=0.90, b=0.50, bg={0.24,0.20,0.06} },
+    { id="CONTAINER",  label="Bags",              r=0.65, g=0.55, b=0.40, bg={0.14,0.11,0.07} },
+    { id="KEY",        label="Keys",              r=1.00, g=0.82, b=0.00, bg={0.22,0.18,0.00} },
+    { id="MISC",       label="Misc",              r=0.55, g=0.55, b=0.60, bg={0.10,0.10,0.14} },
+    { id="JUNK",       label="Junk  (auto-sell)", r=0.80, g=0.20, b=0.15, bg={0.20,0.04,0.04} },
 }
 
--- Maps localized TBC item-type strings to category ids
+-- Hard-coded overrides: itemId -> category. Covers items whose
+-- GetItemInfo type/subtype does not uniquely identify them.
+local ITEM_ID_OVERRIDES = {
+    -- Hearthstone and bind points
+    [6948]  = "KEYITEM",  -- Hearthstone
+    [18986] = "KEYITEM",  -- Ultrasafe Transporter: Gadgetzan
+    [18984] = "KEYITEM",  -- Dimensional Ripper  – Everlook
+    [30542] = "KEYITEM",  -- Dimensional Ripper  – Area 52
+    [30544] = "KEYITEM",  -- Ultrasafe Transporter: Toshley's
+    -- PvP & raid tokens / badges
+    [29434] = "TOKEN",    -- Badge of Justice
+    [20558] = "TOKEN",    -- Arathi Basin Mark of Honor
+    [20559] = "TOKEN",    -- Warsong Gulch Mark of Honor  (note: client may vary)
+    [20560] = "TOKEN",    -- Alterac Valley Mark of Honor
+    [24024] = "TOKEN",    -- Halaa Research Token
+    [24025] = "TOKEN",    -- Halaa Battle Token
+    [29024] = "TOKEN",    -- Eye of the Storm Mark of Honor
+    [24215] = "TOKEN",    -- Marks of Sargeras
+    [24214] = "TOKEN",    -- Sunfury Signet
+    [24316] = "TOKEN",    -- Arcane Tome
+    [23247] = "TOKEN",    -- Cenarion War Hippogryph token? (placeholder)
+    [34664] = "TOKEN",    -- Shattered Sun Pendant token
+}
+
+-- Name-pattern fallbacks for token/badge detection (covers future or missed IDs)
+local TOKEN_PATTERNS = {
+    "Mark of Honor",
+    "Badge of Justice",
+    "Halaa %a+ Token",
+    "Signet",
+    "Sargeras",
+    "Arcane Tome",
+}
+
+-- Maps localized TBC item-type strings -> initial category bucket
 local TYPE_MAP = {
     ["Weapon"]="WEAPON", ["Weapons"]="WEAPON",
     ["Armor"]="ARMOR",
@@ -50,10 +97,6 @@ local TYPE_MAP = {
     ["Food & Drink"]="CONSUMABLE", ["Potion"]="CONSUMABLE",
     ["Elixir"]="CONSUMABLE", ["Flask"]="CONSUMABLE", ["Bandage"]="CONSUMABLE",
     ["Trade Goods"]="TRADESKILL", ["Reagent"]="TRADESKILL",
-    ["Metal & Stone"]="TRADESKILL", ["Cloth"]="TRADESKILL",
-    ["Leather"]="TRADESKILL", ["Herb"]="TRADESKILL", ["Elemental"]="TRADESKILL",
-    ["Enchanting"]="TRADESKILL", ["Parts"]="TRADESKILL", ["Devices"]="TRADESKILL",
-    ["Projectile"]="TRADESKILL", ["Items"]="TRADESKILL",
     ["Recipe"]="RECIPE", ["Recipes"]="RECIPE", ["Book"]="RECIPE",
     ["Plans"]="RECIPE", ["Designs"]="RECIPE", ["Patterns"]="RECIPE",
     ["Schematics"]="RECIPE", ["Formulas"]="RECIPE",
@@ -61,17 +104,78 @@ local TYPE_MAP = {
     ["Key"]="KEY", ["Keys"]="KEY",
     ["Container"]="CONTAINER", ["Bag"]="CONTAINER", ["Quiver"]="CONTAINER",
     ["Soul Bag"]="CONTAINER", ["Ammo Pouch"]="CONTAINER",
-    ["Gem"]="MISC", ["Gems"]="MISC", ["Miscellaneous"]="MISC",
-    ["Junk"]="JUNK",   -- grey items — SlyRepair auto-sells these
-    ["Glyph"]="MISC", ["Companion Pets"]="MISC",
-    ["Holiday"]="MISC", ["Other"]="MISC", ["WoW Token"]="MISC", ["Mount"]="MISC",
+    ["Gem"]="TS_GEM", ["Gems"]="TS_GEM",
+    ["Miscellaneous"]="MISC",
+    ["Junk"]="JUNK",
+    ["Glyph"]="MISC",
+    ["Mount"]="MOUNT",           -- TBC Anniversary may return this itemType for some mounts
+    ["Holiday"]="MISC",
+    ["Other"]="MISC",
+    ["WoW Token"]="MISC",
+    ["Companion Pets"]="PET",
 }
 
-local function GetItemCategory(link)
+-- Trade Goods sub-type routing (itemSubType from GetItemInfo)
+-- TBC Classic returns English strings regardless of locale for this field.
+local TRADESKILL_SUBTYPE_MAP = {
+    -- Enchanting
+    ["Enchanting"]        = "TS_ENCHANT",
+    -- Herbs
+    ["Herb"]              = "TS_HERB",
+    ["Herbs"]             = "TS_HERB",
+    -- Metal / Stone
+    ["Metal & Stone"]     = "TS_METAL",
+    -- Cloth
+    ["Cloth"]             = "TS_CLOTH",
+    -- Leather
+    ["Leather"]           = "TS_LEATHER",
+    -- Elemental
+    ["Elemental"]         = "TS_ELEMENTAL",
+    -- Engineering / Blacksmithing parts
+    ["Parts"]             = "TS_PARTS",
+    ["Devices"]           = "TS_PARTS",
+    ["Explosives"]        = "TS_PARTS",
+    -- Ammo / catch-all
+    ["Projectile"]        = "TS_OTHER",
+    ["Items"]             = "TS_OTHER",
+    ["Other"]             = "TS_OTHER",
+    ["Materials"]         = "TS_OTHER",
+}
+
+-- Miscellaneous sub-type routing (itemSubType for Miscellaneous items)
+local MISC_SUBTYPE_MAP = {
+    ["Mount"]             = "MOUNT",
+    ["Companion Pets"]    = "PET",
+    ["Junk"]              = "MISC",   -- catch-all junk under Misc stays MISC
+}
+
+local function GetItemCategory(link, itemName)
     if not link then return "MISC" end
-    local _, _, _, _, _, itemType = GetItemInfo(link)
+    local itemId = tonumber(link:match("|Hitem:(%d+):"))
+    -- 1. Hard-coded itemId override wins
+    if itemId and ITEM_ID_OVERRIDES[itemId] then
+        return ITEM_ID_OVERRIDES[itemId]
+    end
+    local _, _, _, _, _, itemType, itemSubType = GetItemInfo(link)
     if not itemType then return "MISC" end
-    return TYPE_MAP[itemType] or "MISC"
+    local cat = TYPE_MAP[itemType] or "MISC"
+    -- 2. Trade Goods: split by sub-type
+    if cat == "TRADESKILL" then
+        return TRADESKILL_SUBTYPE_MAP[itemSubType] or "TS_OTHER"
+    end
+    -- 3. Miscellaneous: split mounts and pets by sub-type
+    if cat == "MISC" and itemSubType then
+        local mc = MISC_SUBTYPE_MAP[itemSubType]
+        if mc then return mc end
+    end
+    -- 4. Name-pattern fallback for tokens
+    if cat == "MISC" or cat == "QUEST" then
+        local nm = itemName or (itemId and GetItemInfo(link)) or ""
+        for _, pat in ipairs(TOKEN_PATTERNS) do
+            if nm:find(pat) then return "TOKEN" end
+        end
+    end
+    return cat
 end
 
 -- Resistance-item detection via hidden scanning tooltip (cached per itemId)
@@ -112,7 +216,9 @@ local function BuildSetMap()
     local irrSets = IRR and IRR.chardata and IRR.chardata.sets
     if not irrSets then return map end
     for setName, slots in pairs(irrSets) do
-        for _, itemId in pairs(slots) do
+        for _, slotVal in pairs(slots) do
+            -- slotVal is either a bare itemId (legacy) or { id=N, link="..." }
+            local itemId = type(slotVal) == "table" and slotVal.id or slotVal
             if type(itemId) == "number" then
                 if not map[itemId] then map[itemId] = {} end
                 map[itemId][#map[itemId]+1] = setName
@@ -232,6 +338,16 @@ local function NewSlotButton(parent, idx)
     sUse:SetAttribute("type", "macro")
     sUse:SetAttribute("macrotext", "")  -- filled in on refresh
     sUse:RegisterForClicks("RightButtonUp")
+    -- sUse covers b entirely, so tooltip events must be forwarded from here.
+    sUse:SetScript("OnEnter", function(self)
+        local btn = self:GetParent()
+        if btn.bag ~= nil then
+            GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+            GameTooltip:SetBagItem(btn.bag, btn.slot)
+            GameTooltip:Show()
+        end
+    end)
+    sUse:SetScript("OnLeave", function() GameTooltip:Hide() end)
     b.sUse = sUse
     b:Hide()
     return b
@@ -240,15 +356,56 @@ end
 local function NewSectionHeader(parent, idx)
     local f = CreateFrame("Frame", "SlyBagSection" .. idx, parent)
     f:SetHeight(SECTION_H)
+    f:EnableMouse(true)
     local bg = f:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints() ; f.bg = bg
     local accent = f:CreateTexture(nil, "ARTWORK")
     accent:SetSize(3, SECTION_H) ; accent:SetPoint("LEFT", f, "LEFT", 0, 0) ; f.accent = accent
+    -- Collapse chevron (▶ collapsed, ▼ expanded)
+    local chevron = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    chevron:SetFont(chevron:GetFont(), 9, "OUTLINE")
+    chevron:SetPoint("LEFT", f, "LEFT", 8, 0)
+    chevron:SetText("|cff888888[-]|r")
+    f.chevron = chevron
     local lbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    lbl:SetPoint("LEFT", f, "LEFT", SIDE_PAD, 0) ; lbl:SetJustifyH("LEFT") ; f.lbl = lbl
+    lbl:SetPoint("LEFT", f, "LEFT", SIDE_PAD + 10, 0) ; lbl:SetJustifyH("LEFT") ; f.lbl = lbl
+    -- "Equip Set" button — only shown for gear-set sections
+    local eqBtn = CreateFrame("Button", nil, f)
+    eqBtn:SetSize(58, 14)
+    eqBtn:SetPoint("RIGHT", f, "RIGHT", -SIDE_PAD - 52, 0)
+    local eqBg = eqBtn:CreateTexture(nil, "BACKGROUND")
+    eqBg:SetAllPoints() ; eqBg:SetColorTexture(0.15, 0.40, 0.15, 0.85) ; eqBtn.bg = eqBg
+    local eqLbl = eqBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    eqLbl:SetFont(eqLbl:GetFont(), 8, "OUTLINE")
+    eqLbl:SetPoint("CENTER") ; eqLbl:SetText("|cff88ff88Equip Set|r")
+    eqBtn:SetScript("OnEnter", function(self) eqBg:SetColorTexture(0.20, 0.60, 0.20, 0.95) end)
+    eqBtn:SetScript("OnLeave", function(self) eqBg:SetColorTexture(0.15, 0.40, 0.15, 0.85) end)
+    eqBtn:SetScript("OnClick", function(self)
+        local sn = f._setName
+        if not sn then return end
+        if IRR_LoadSet then
+            IRR_LoadSet(sn)
+            DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyBag]|r Equipping set: " .. sn)
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyBag]|r ItemRackRevived not loaded.")
+        end
+    end)
+    eqBtn:Hide() ; f.eqBtn = eqBtn
     local cntLbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cntLbl:SetPoint("RIGHT", f, "RIGHT", -SIDE_PAD, 0)
     cntLbl:SetJustifyH("RIGHT") ; cntLbl:SetTextColor(0.50, 0.50, 0.60) ; f.cntLbl = cntLbl
+    -- Click header to toggle collapse (Frame OnMouseUp — avoids Button propagation
+    -- issues that occur with child Buttons inside a ScrollFrame in TBC's UI)
+    f:SetScript("OnMouseUp", function(self, btn)
+        if btn ~= "LeftButton" then return end
+        local sid = self._sectionId
+        if not sid then return end
+        local db = SlyBag and SlyBag.db
+        if not db then return end
+        db.collapsedSections = db.collapsedSections or {}
+        db.collapsedSections[sid] = not db.collapsedSections[sid]
+        SlyBag_Refresh()
+    end)
     f:Hide()
     return f
 end
@@ -336,7 +493,7 @@ function SlyBag_Refresh()
                             if link and IsResistanceItem(link) then
                                 cat = "RESISTANCE"
                             else
-                                cat = link and GetItemCategory(link) or "MISC"
+                                cat = link and GetItemCategory(link, itemName) or "MISC"
                             end
                             if not buckets[cat] then buckets[cat] = {} end
                             buckets[cat][#buckets[cat]+1] = it
@@ -351,6 +508,7 @@ function SlyBag_Refresh()
     local visible = {}
     if #newItemList > 0 then
         visible[#visible+1] = {
+            id  = "NEWITEMS",
             def = { label="New Items", r=1.00, g=0.85, b=0.15, bg={0.22,0.17,0.02} },
             items = newItemList,
         }
@@ -360,28 +518,33 @@ function SlyBag_Refresh()
         if items and #items > 0 then
             local ti = SET_TINTS[((i-1) % #SET_TINTS) + 1]
             visible[#visible+1] = {
-                def = { label="Set: "..setName, r=ti.r, g=ti.g, b=ti.b, bg=ti.bg },
-                items = items,
+                id      = "SET:"..setName,
+                setName = setName,
+                def     = { label="Set: "..setName, r=ti.r, g=ti.g, b=ti.b, bg=ti.bg },
+                items   = items,
             }
         end
     end
     for _, catDef in ipairs(CATEGORIES) do
         local items = buckets[catDef.id]
         if items and #items > 0 then
-            visible[#visible+1] = { def=catDef, items=items }
+            visible[#visible+1] = { id=catDef.id, def=catDef, items=items }
         end
     end
 
-    -- Build virtual row list
+    -- Build virtual row list (skip item rows for collapsed sections)
+    local collapsed = (SlyBag.db and SlyBag.db.collapsedSections) or {}
     local rows = {}
     for _, sec in ipairs(visible) do
         rows[#rows+1] = { type="header", sec=sec }
-        for i = 1, #sec.items, COLS do
-            local row = { type="items", slots={} }
-            for j = i, math.min(i+COLS-1, #sec.items) do
-                row.slots[#row.slots+1] = sec.items[j]
+        if not collapsed[sec.id] then
+            for i = 1, #sec.items, COLS do
+                local row = { type="items", slots={} }
+                for j = i, math.min(i+COLS-1, #sec.items) do
+                    row.slots[#row.slots+1] = sec.items[j]
+                end
+                rows[#rows+1] = row
             end
-            rows[#rows+1] = row
         end
     end
 
@@ -411,6 +574,20 @@ function SlyBag_Refresh()
                 math.floor(def.r*255), math.floor(def.g*255), math.floor(def.b*255), def.label))
             local n = #row.sec.items
             h.cntLbl:SetText(n .. (n==1 and " item" or " items"))
+            -- Collapse chevron
+            h._sectionId = row.sec.id
+            local isCollapsed = collapsed[row.sec.id]
+            h.chevron:SetText(isCollapsed and "|cff888888[+]|r" or "|cff888888[-]|r")
+            -- Equip button: only for gear-set sections
+            if row.sec.setName then
+                h._setName = row.sec.setName
+                h.eqBtn:Show()
+                h.cntLbl:SetPoint("RIGHT", h.eqBtn, "LEFT", -4, 0)
+            else
+                h._setName = nil
+                h.eqBtn:Hide()
+                h.cntLbl:SetPoint("RIGHT", h, "RIGHT", -SIDE_PAD, 0)
+            end
             h:Show()
             curY = curY - (SECTION_H + 2)
         else
@@ -472,6 +649,8 @@ function SlyBag_BuildUI()
     f:SetSize(FRAME_W, FRAME_H)
     f:SetPoint(db.position.point, UIParent, db.position.point, db.position.x, db.position.y)
     f:SetMovable(true) ; f:EnableMouse(true) ; f:RegisterForDrag("LeftButton")
+    f:SetClampedToScreen(true)
+    f:SetFrameStrata("MEDIUM")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()

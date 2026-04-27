@@ -1004,7 +1004,8 @@ local function BuildSlot(parent, slotId, label, x, y)
         if GetInventoryItemTexture("player", slotId) then
             GameTooltip:SetInventoryItem("player", slotId)
             GameTooltip:AddLine("Left-click: swap gear", 0.5, 0.5, 0.5)
-            GameTooltip:AddLine("Shift+click: socket gems", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine("Right-click: link to chat", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine("Shift+right-click: socket gems", 0.5, 0.5, 0.5)
             GameTooltip:AddLine("Drag: move to trade/bank", 0.5, 0.5, 0.5)
         else
             GameTooltip:SetText(label, 0.65, 0.65, 0.65)
@@ -1060,14 +1061,6 @@ local function BuildSlot(parent, slotId, label, x, y)
     btn:SetScript("OnClick", function(self, mb)
         if mb == "LeftButton" then
             GameTooltip:Hide()
-            -- Shift+click: open gem socketing UI if the slot has an item
-            if IsShiftKeyDown() then
-                if GetInventoryItemTexture("player", slotId) then
-                    SC_HidePicker()
-                    SocketInventoryItem(slotId)
-                end
-                return
-            end
             -- If targeting/cursor is active and this slot has a secure overlay,
             -- sBtn already handled the click via the "/use N" secure macro.
             -- Bail here so we don't attempt the restricted PickupInventoryItem path.
@@ -1092,6 +1085,15 @@ local function BuildSlot(parent, slotId, label, x, y)
                 SC_ShowGearPicker(slotId)
             end
         elseif mb == "RightButton" then
+            -- Shift+right-click: open gem socketing UI (matches WoW convention)
+            if IsShiftKeyDown() then
+                if GetInventoryItemTexture("player", slotId) then
+                    SC_HidePicker()
+                    SocketInventoryItem(slotId)
+                end
+                return
+            end
+            -- Plain right-click: link item to chat
             local link = GetInventoryItemLink("player", slotId)
             if link and ChatFrame1EditBox then
                 ChatFrame1EditBox:Show()
@@ -5436,7 +5438,9 @@ function SC_BuildMain()
 
     BuildWingFrame(f)
     SlyCharMainFrame = f
-    tinsert(UISpecialFrames, "SlyCharMainFrame")
+    -- Do NOT register in UISpecialFrames: that causes CloseAllWindows()
+    -- (fired on TRADE_SHOW and similar events) to destroy our panel.
+    -- Escape handling is intentionally omitted; use C or the × button.
 
     SC_ApplyTheme(SC.db.theme or "shadow")
 end

@@ -414,6 +414,10 @@ end)
 local function Init()
     SlyMetricsDB = SlyMetricsDB or {}
     SM.db        = SlyMetricsDB
+    -- Restore last selected tab
+    if SM.db.panel and (SM.db.panel == "dps" or SM.db.panel == "hps" or SM.db.panel == "thr") then
+        SM.panel = SM.db.panel
+    end
     if SM_BuildUI then SM_BuildUI() end
 end
 
@@ -448,9 +452,15 @@ SlashCmdList["SLYMETRICS"] = function(msg)
         if SM_BuildUI then SM_BuildUI()
         else print("|cffff4444[SlyMetrics]|r Not ready yet.") ; return end
     end
+    local function SetPanel(p)
+        SM.panel = p
+        if SM.db then SM.db.panel = p end
+        if SM_Refresh then SM_Refresh() end
+    end
     if     msg == "reset" then Reset() ; if SM_Refresh then SM_Refresh() end
-    elseif msg == "dmg"   or msg == "dps"  then SM.panel = "dps"  ; if SM_Refresh then SM_Refresh() end
-    elseif msg == "heal"  or msg == "hps"  then SM.panel = "hps"  ; if SM_Refresh then SM_Refresh() end
+    elseif msg == "dmg"   or msg == "dps"  then SetPanel("dps")
+    elseif msg == "heal"  or msg == "hps"  then SetPanel("hps")
+    elseif msg == "thr"   or msg == "threat" then SetPanel("thr")
     elseif msg == "taken"                  then SM.panel = "taken" ; if SM_Refresh then SM_Refresh() end
     elseif msg == "misc"                   then SM.panel = "misc"  ; if SM_Refresh then SM_Refresh() end
     elseif msg == "pos" then

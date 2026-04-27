@@ -28,6 +28,15 @@ end
 -- Captures all currently equipped items into a named set.
 -- Overwrites an existing set of the same name.
 -- -------------------------------------------------------
+-- Helper: extract { id, link } from a stored slot value (handles old bare-number format).
+local function UnpackSlot(v)
+    if type(v) == "table" then
+        return v.id, v.link
+    else
+        return v, nil   -- legacy: bare itemId
+    end
+end
+
 function IRR_SaveCurrentSet(name)
     if not name or name == "" then
         print("|cff00ccff[ItemRack Revived]|r Set name cannot be empty.")
@@ -44,7 +53,9 @@ function IRR_SaveCurrentSet(name)
         if slotDef.id ~= 0 then  -- skip ammo slot (id=0, not a valid equip slot)
             local itemId = GetInventoryItemID("player", slotDef.id)
             if itemId then
-                setData[slotDef.id] = itemId
+                -- Store the full item link so gem/enchant variants are distinguishable.
+                local link = GetInventoryItemLink("player", slotDef.id)
+                setData[slotDef.id] = { id = itemId, link = link }
                 count = count + 1
             end
         end
@@ -105,7 +116,27 @@ end
 -- -------------------------------------------------------
 local _UseContainerItem = C_Container and C_Container.UseContainerItem or UseContainerItem
 
-local function IRR_EquipItemInSlot(targetItemId, slotId, protectedSlots)
+-- Returns the item link for a bag slot (C_Container-safe).
+local function GetBagItemLink(bag, slot)
+    if C_Container and C_Container.GetContainerItemInfo then
+        local info = C_Container.GetContainerItemInfo(bag, slot)
+        return info and info.hyperlink or nil
+    end
+    return GetContainerItemLink and GetContainerItemLink(bag, slot) or nil
+end
+
+-- Returns true if the bag slot's link matches targetLink, or if no targetLink
+-- is provided, falls back to id-only comparison.
+local function BagSlotMatches(bag, slot, targetItemId, targetLink)
+    local id = _GetContainerItemID(bag, slot)
+    if id ~= targetItemId then return false end
+    if not targetLink then return true end  -- legacy / ammo: id-only match
+    local slotLink = GetBagItemLink(bag, slot)
+    -- Exact link match preferred; fall back to id-only if link unavailable
+    return (not slotLink) or (slotLink == targetLink)
+end
+
+local function IRR_EquipItemInSlot(targetItemId, slotId, protectedSlots, targetLink)
     -- Ammo slot (0): PickupInventoryItem(0) is not a valid API in TBC Anniversary.
     -- Ammo is equipped by right-clicking the stack (UseContainerItem).
     -- Just scan bags and UseContainerItem on the matching stack.
@@ -115,7 +146,7 @@ local function IRR_EquipItemInSlot(targetItemId, slotId, protectedSlots)
         for bag = 0, 4 do
             local slots = _GetContainerNumSlots(bag)
             for bslot = 1, slots do
-                if _GetContainerItemID(bag, bslot) == targetItemId then
+                if BagSlotMatches(bag, bslot, targetItemId, targetLink) then
                     _UseContainerItem(bag, bslot)
                     return true
                 end
@@ -126,35 +157,64 @@ local function IRR_EquipItemInSlot(targetItemId, slotId, protectedSlots)
 
     -- Already wearing it in the target slot?
     local currentId = GetInventoryItemID("player", slotId)
-    if currentId == targetItemId then return true end
+    if currentId == targetItemId then
+        -- If we have a link, verify it matches (different enchant/gem = wrong copy)
+        if not targetLink then return true end
+        local equippedLink = GetInventoryItemLink("player", slotId)
+        if not equippedLink or equippedLink == targetLink then return true end
+        -- Wrong variant is in the slot — fall through to find the right one in bags
+    end
 
     -- Never touch items while cursor is occupied or a spell is targeting
     if GetCursorInfo() or SpellIsTargeting() then return false end
 
-    -- Search bag slots 0-4 using C_Container-safe API
+    -- Search bag slots 0-4 using C_Container-safe API.
+    -- First pass: prefer exact link match (different gem/enchant = different item).
+    -- Second pass: fall back to id-only match if no exact match found.
+    local fallbackBag, fallbackSlot
     for bag = 0, 4 do
         local slots = _GetContainerNumSlots(bag)
         for bslot = 1, slots do
-            if _GetContainerItemID(bag, bslot) == targetItemId then
-                -- Pick up from bag, equip to slot; any displaced item lands on
-                -- cursor — drop it back into the now-empty bag slot so the
-                -- cursor is clean for the next swap in the same loop.
-                _PickupContainerItem(bag, bslot)
-                local ok = pcall(PickupInventoryItem, slotId)
-                if not ok then
-                    -- equip failed (e.g. item locked); clear cursor to unblock future swaps
-                    ClearCursor()
-                    return false
+            local id = _GetContainerItemID(bag, bslot)
+            if id == targetItemId then
+                local slotLink = targetLink and GetBagItemLink(bag, bslot)
+                local exactMatch = (not targetLink) or (not slotLink) or (slotLink == targetLink)
+                if exactMatch then
+                    -- Pick up from bag, equip to slot; any displaced item lands on
+                    -- cursor — drop it back into the now-empty bag slot so the
+                    -- cursor is clean for the next swap in the same loop.
+                    _PickupContainerItem(bag, bslot)
+                    local ok = pcall(PickupInventoryItem, slotId)
+                    if not ok then
+                        -- equip failed (e.g. item locked); clear cursor to unblock future swaps
+                        ClearCursor()
+                        return false
+                    end
+                    if GetCursorInfo() then
+                        -- Displaced item is on cursor; drop it into the now-empty bag slot.
+                        -- If that also fails, force-clear to keep cursor clean.
+                        local ok2 = pcall(_PickupContainerItem, bag, bslot)
+                        if not ok2 or GetCursorInfo() then ClearCursor() end
+                    end
+                    return true
+                elseif not fallbackBag then
+                    -- Record first id-only match as fallback
+                    fallbackBag, fallbackSlot = bag, bslot
                 end
-                if GetCursorInfo() then
-                    -- Displaced item is on cursor; drop it into the now-empty bag slot.
-                    -- If that also fails, force-clear to keep cursor clean.
-                    local ok2 = pcall(_PickupContainerItem, bag, bslot)
-                    if not ok2 or GetCursorInfo() then ClearCursor() end
-                end
-                return true
             end
         end
+    end
+
+    -- No exact link match found — use id-only fallback if available
+    if fallbackBag then
+        _PickupContainerItem(fallbackBag, fallbackSlot)
+        local ok = pcall(PickupInventoryItem, slotId)
+        if not ok then ClearCursor() ; return false end
+        if GetCursorInfo() then
+            local ok2 = pcall(_PickupContainerItem, fallbackBag, fallbackSlot)
+            if not ok2 or GetCursorInfo() then ClearCursor() end
+        end
+        return true
     end
 
     -- Item may already be equipped in a different slot (swap scenario).
@@ -168,15 +228,25 @@ local function IRR_EquipItemInSlot(targetItemId, slotId, protectedSlots)
             and GetInventoryItemID("player", slotDef.id) == targetItemId
             and not (protectedSlots and protectedSlots[slotDef.id])
         then
-            local ok = pcall(PickupInventoryItem, slotDef.id)
-            if not ok then ClearCursor(); return false end
-            local ok2 = pcall(PickupInventoryItem, slotId)
-            if not ok2 then ClearCursor(); return false end
-            if GetCursorInfo() then
-                local ok3 = pcall(PickupInventoryItem, slotDef.id)
-                if not ok3 or GetCursorInfo() then ClearCursor() end
+            -- If we have a link, verify the equipped copy is the right variant
+            local wrongVariant = false
+            if targetLink then
+                local eqLink = GetInventoryItemLink("player", slotDef.id)
+                if eqLink and eqLink ~= targetLink then
+                    wrongVariant = true  -- keep looking; right copy may be in bags
+                end
             end
-            return true
+            if not wrongVariant then
+                local ok = pcall(PickupInventoryItem, slotDef.id)
+                if not ok then ClearCursor(); return false end
+                local ok2 = pcall(PickupInventoryItem, slotId)
+                if not ok2 then ClearCursor(); return false end
+                if GetCursorInfo() then
+                    local ok3 = pcall(PickupInventoryItem, slotDef.id)
+                    if not ok3 or GetCursorInfo() then ClearCursor() end
+                end
+                return true
+            end
         end
     end
 
@@ -209,9 +279,66 @@ function IRR_LoadSet(name)
         protectedSlots[tonumber(slotId)] = true
     end
 
+    -- Pre-pass: resolve mutual cross-slot swaps before the main equip loop.
+    -- Case: ring A is in slot 11, ring B is in slot 12, but the set wants A in 12 and B in 11.
+    -- Both slots are protectedSlots so the normal path can't steal from either.
+    -- We detect A↔B pairs and do a direct slot-to-slot swap here so the main loop
+    -- finds each slot already correct and skips it.
+    local swappedSlots = {}
+    for slotId, slotVal in pairs(setData) do
+        local sid = tonumber(slotId)
+        if not swappedSlots[sid] then
+            local targetId, targetLink = UnpackSlot(slotVal)
+            local curId   = GetInventoryItemID("player", sid)
+            local curLink = curId and GetInventoryItemLink("player", sid)
+            -- Already correct — no swap needed.
+            local alreadyOK = curId == targetId and
+                ((not targetLink) or (not curLink) or curLink == targetLink)
+            if not alreadyOK then
+                -- Search other target slots for the item we need.
+                for otherSlotId, otherSlotVal in pairs(setData) do
+                    local osid = tonumber(otherSlotId)
+                    if osid ~= sid and not swappedSlots[osid] then
+                        local otherCurId   = GetInventoryItemID("player", osid)
+                        local otherCurLink = otherCurId and GetInventoryItemLink("player", osid)
+                        -- Does the other slot hold exactly what this slot needs?
+                        local otherHasOurs = otherCurId == targetId and
+                            ((not targetLink) or (not otherCurLink) or otherCurLink == targetLink)
+                        if otherHasOurs then
+                            -- Does this slot hold exactly what the other slot needs?
+                            local otherTargetId, otherTargetLink = UnpackSlot(otherSlotVal)
+                            local weHaveTheirs = curId == otherTargetId and
+                                ((not otherTargetLink) or (not curLink) or curLink == otherTargetLink)
+                            if weHaveTheirs then
+                                -- Mutual swap: pick up from sid, click osid to swap.
+                                local ok1 = pcall(PickupInventoryItem, sid)
+                                if ok1 then
+                                    local ok2 = pcall(PickupInventoryItem, osid)
+                                    if ok2 then
+                                        if GetCursorInfo() then ClearCursor() end
+                                        swappedSlots[sid]  = true
+                                        swappedSlots[osid] = true
+                                    else
+                                        -- Undo: put back
+                                        pcall(PickupInventoryItem, sid)
+                                        if GetCursorInfo() then ClearCursor() end
+                                    end
+                                end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     -- Equip each slot.  Pass protectedSlots so the fallback path is safe.
-    for slotId, itemId in pairs(setData) do
-        local ok = IRR_EquipItemInSlot(itemId, tonumber(slotId), protectedSlots)
+    -- Slots resolved by the pre-pass will be detected as "already correct" and counted.
+    equipped = 0
+    for slotId, slotVal in pairs(setData) do
+        local itemId, itemLink = UnpackSlot(slotVal)
+        local ok = IRR_EquipItemInSlot(itemId, tonumber(slotId), protectedSlots, itemLink)
         if ok then
             equipped = equipped + 1
         else
@@ -275,11 +402,12 @@ function IRR_LoadSet(name)
                 -- Wait one extra frame so TBC's own gear-restore finishes first.
                 C_Timer.After(0.3, function()
                     local eq2, miss2 = 0, {}
-                    for slotId, itemId in pairs(setData) do
-                        local ok2 = IRR_EquipItemInSlot(itemId, tonumber(slotId), protectedSlots)
+                    for slotId, slotVal in pairs(setData) do
+                        local itemId2, itemLink2 = UnpackSlot(slotVal)
+                        local ok2 = IRR_EquipItemInSlot(itemId2, tonumber(slotId), protectedSlots, itemLink2)
                         if ok2 then eq2 = eq2 + 1
                         else
-                            local iName = GetItemInfo(itemId) or ("Item #" .. itemId)
+                            local iName = GetItemInfo(itemId2) or ("Item #" .. itemId2)
                             table.insert(miss2, iName)
                         end
                     end

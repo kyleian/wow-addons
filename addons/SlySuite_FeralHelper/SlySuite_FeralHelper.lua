@@ -22,6 +22,7 @@ FH.db = nil
 local DB_DEFAULTS = {
     locked       = false,
     shown        = true,
+    combatOnly   = false,
     position     = { point = "CENTER", x = 250, y = 0 },
     spotShown    = true,
     spotPosition = { point = "CENTER", x = 0, y = -150 },
@@ -59,7 +60,6 @@ local SP_RIP        = "Rip"
 local SP_MANGLE_C   = "Mangle (Cat)"
 local SP_MANGLE_B   = "Mangle (Bear)"
 local SP_SHRED      = "Shred"
-local SP_RAKE       = "Rake"
 local SP_FB         = "Ferocious Bite"
 local SP_TF         = "Tiger's Fury"
 local SP_LACERATE   = "Lacerate"
@@ -90,7 +90,7 @@ local ICO = {
 
 -- ────────────────────────────────────────────────────────────
 -- Priority row definitions
--- Cat order matches guide exactly:
+-- Cat order matches Wowhead guide exactly:
 --   1. Rip        CPs≥4, E≥30, Rip expired
 --   2. Mangle     E≥40, debuff expired
 --   3. Shred      E≥42
@@ -98,7 +98,7 @@ local ICO = {
 --   5. Wait       (energy tick)
 -- Non-priority indicators:
 --   FB  — swap row: only lights when target <20% HP, CPs≥4, Rip active
---   TF  — passive: shows buff/CD, never a rotation action mid-fight
+--   TF  — passive: shows buff/CD, use on pull only (DPS loss mid-rotation)
 -- ────────────────────────────────────────────────────────────
 local CAT_ROWS = {
     -- key, label, icon, color{r,g,b}
@@ -107,14 +107,14 @@ local CAT_ROWS = {
     { key="SHRED",      label="Shred  (≥42E)",     icon=ICO.SHRED,      color={0.38, 0.84, 1.00} },
     { key="POWERSHIFT", label="Powershift",        icon=ICO.POWERSHIFT, color={0.45, 1.00, 0.45} },
     { key="WAIT",       label="Wait  (tick)",      icon=ICO.WAIT,       color={0.42, 0.42, 0.48} },
-    { key="FB",         label="↳ FB swap (dying)", icon=ICO.FB,         color={1.00, 0.55, 0.10} },
+    { key="FB",         label="+ FB swap (dying)", icon=ICO.FB,         color={1.00, 0.55, 0.10} },
     { key="TF",         label="Tiger's Fury (CD)", icon=ICO.TF,         color={1.00, 0.65, 0.00} },
 }
 
 local BEAR_ROWS = {
     { key="MANGLE_BEAR", label="Mangle (Bear)",      icon=ICO.MANGLE,    color={1.00, 0.55, 0.10} },
     { key="LACERATE",    label="Lacerate  (spam)",   icon=ICO.LACERATE,  color={0.90, 0.28, 0.28} },
-    { key="MAUL",        label="↳ Maul  (off-GCD)",  icon=ICO.MAUL,      color={1.00, 0.82, 0.22} },
+    { key="MAUL",        label="+ Maul  (off-GCD)",  icon=ICO.MAUL,      color={1.00, 0.82, 0.22} },
     { key="DEMO_ROAR",   label="Demo Roar  (opt)",   icon=ICO.DEMO_ROAR, color={0.65, 0.40, 1.00} },
     { key="BASH",        label="Bash",               icon=ICO.BASH,      color={0.40, 0.85, 1.00} },
     { key="FRENZIED",    label="Frenzied  (skip)",   icon=ICO.FRENZIED,  color={0.45, 0.45, 0.50} },
@@ -322,7 +322,7 @@ local function BuildUI()
 
     local f = CreateFrame("Frame", "SlyFeralHelperFrame", UIParent)
     f:SetSize(FRAME_W, FRAME_H)
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("MEDIUM")
     f:SetMovable(true)
     f:EnableMouse(false)
 
@@ -432,7 +432,7 @@ local function BuildSpotlight()
     local sp = FH.db.spotPosition or { point="CENTER", x=0, y=-150 }
     local f  = CreateFrame("Frame", "SlyFeralHelperSpot", UIParent)
     f:SetSize(SPOT_W, SPOT_H)
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("MEDIUM")
     f:SetMovable(true)
     f:SetClampedToScreen(true)
     f:SetPoint(sp.point or "CENTER", UIParent, sp.point or "CENTER", sp.x or 0, sp.y or -150)
@@ -519,21 +519,17 @@ local function UpdateSpotlight(key, rows, statusStr)
 end
 
 -- ────────────────────────────────────────────────────────────
--- Cat rotation logic — matches guide priority EXACTLY:
+-- Cat rotation logic — matches Wowhead TBC guide exactly:
 --
 --   1. Rip        if CPs≥4 AND E≥30 AND Rip expired
---   2. Mangle     if E≥40 AND Mangle debuff expired
+--   2. Mangle     if E≥40 AND debuff expired
 --   3. Shred      if E≥42
---   4. Powershift if energy > 20 below cost of next action*
+--   4. Powershift if energy > 20 below cost of next action
 --   5. Wait       otherwise
 --
--- *next action cost = 30 (Rip pending), 40 (Mangle pending), 42 (Shred)
---  Powershift fires when energy < (nextCost - 20)
---
--- Tiger's Fury: on-pull pre-pop ONLY (DPS loss mid-rotation).
---   Shown as passive CD/buff indicator — never as a priority step.
--- Ferocious Bite: swap only when target is dying (<20% HP) or on AoE
---   trash where Rip won't tick full duration. Never in standard cycle.
+-- Tiger's Fury: use on pull only — DPS loss mid-rotation.
+-- Rake: never used in PvE (lower DPCT than Shred even with DoT).
+-- Ferocious Bite: swap only when target is dying (<20% HP).
 -- ────────────────────────────────────────────────────────────
 local function UpdateCat(now)
     local energy = catEnergy
@@ -546,26 +542,16 @@ local function UpdateCat(now)
     local tgtHP  = UnitExists("target") and
                    (UnitHealth("target") / math.max(1, UnitHealthMax("target"))) or 1.0
 
-    -- Determine what the NEXT castable action would be (for powershift threshold)
-    -- This mirrors the guide: "more than 20 energy below what is needed for your next action"
-    local nextCost
+    -- Next action cost for powershift threshold
+    local nextCost, nextName
     if cps >= 4 and ripL == 0 then
-        nextCost = 30   -- Rip pending
+        nextCost = 30 ; nextName = "Rip"
     elseif manL == 0 and manCD <= 0 then
-        nextCost = 40   -- Mangle pending
+        nextCost = 40 ; nextName = "Mangle"
     else
-        nextCost = 42   -- Shred is the default
+        nextCost = 42 ; nextName = "Shred"
     end
 
-    -- What's the NEXT ability name (for forward-looking display)
-    local nextName
-    if cps >= 4 and ripL == 0 then
-        nextName = "Rip"
-    elseif manL == 0 and manCD <= 0 then
-        nextName = "Mangle"
-    else
-        nextName = "Shred"
-    end
     -- Energy ticks: ~20E per 2s in cat form. Estimate ticks needed.
     local function TicksNeeded(need, have)
         local deficit = math.max(0, need - have)
@@ -573,7 +559,7 @@ local function UpdateCat(now)
         return math.ceil(deficit / 20)
     end
 
-    -- Strict priority from guide
+    -- Priority (guide verbatim)
     local best
     if cps >= 4 and energy >= 30 and ripL == 0 then
         best = "RIP"
@@ -587,8 +573,7 @@ local function UpdateCat(now)
         best = "WAIT"
     end
 
-    -- FB swap fires as a visible highlight when target is dying AND Rip is already up
-    -- (non-priority — shown alongside whatever step is active)
+    -- FB swap: visible highlight when target is dying and Rip is already ticking
     local fbSwap = cps >= 4 and ripL > 0 and tgtHP < 0.20
 
     -- Build status strings and activate rows
@@ -614,7 +599,6 @@ local function UpdateCat(now)
             elseif manCD > 0 then
                 s = Col("ff8844", Fmt(manCD))
             else
-                -- Debuff gone — show energy vs needed
                 local col = energy >= 40 and "ff4444" or "ff7744"
                 s = Col(col, "GONE") .. " " .. Col("888888", energy .. "E")
             end
@@ -631,24 +615,23 @@ local function UpdateCat(now)
             end
 
         elseif k == "POWERSHIFT" then
-            local deficit = nextCost - energy
+            local deficit = math.max(0, nextCost - energy)
             local ticks   = TicksNeeded(nextCost, energy)
             local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
             if best == "POWERSHIFT" then
-                s = Col("aaffaa", "SHIFT  ") .. Col("888888", "→ " .. nextName .. " after")
+                s = Col("aaffaa", "SHIFT  ") .. Col("888888", ">> " .. nextName .. " after")
             else
                 s = Col("667766", energy .. "E  -" .. deficit .. "  " .. tickStr)
             end
 
         elseif k == "WAIT" then
-            local deficit = nextCost - energy
+            local deficit = math.max(0, nextCost - energy)
             local ticks   = TicksNeeded(nextCost, energy)
             local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
-            s = Col("888888", "→ ") .. Col("aaaacc", nextName) ..
+            s = Col("888888", ">> ") .. Col("aaaacc", nextName) ..
                 Col("555566", "  +" .. deficit .. "E  ") .. Col("888888", tickStr)
 
         elseif k == "FB" then
-            -- Passive swap indicator
             if fbSwap then
                 s = Col("ffaa44", "SWAP!")
             else
@@ -658,7 +641,7 @@ local function UpdateCat(now)
             end
 
         elseif k == "TF" then
-            -- Passive indicator only — never a rotation priority
+            -- Passive indicator only — use on pull, DPS loss mid-rotation
             if tfL > 0 then
                 s = Col("ffdd55", Fmt(tfL))
             elseif tfCD > 0 then
@@ -679,7 +662,7 @@ local function UpdateCat(now)
         Col(cpCol,    cps .. "CP")
     )
 
-    -- Spotlight: propagate winning action + live status
+    -- Spotlight
     local spotStatus = ""
     if best == "RIP" then
         spotStatus = cps .. "CP  " .. energy .. "E"
@@ -688,13 +671,13 @@ local function UpdateCat(now)
     elseif best == "SHRED" then
         spotStatus = energy .. "E"
     elseif best == "POWERSHIFT" then
-        local deficit = nextCost - energy
-        spotStatus = "shift → " .. nextName .. "  need +" .. deficit .. "E"
+        local deficit = math.max(0, nextCost - energy)
+        spotStatus = "shift >> " .. nextName .. "  need +" .. deficit .. "E"
     elseif best == "WAIT" then
-        local deficit = nextCost - energy
+        local deficit = math.max(0, nextCost - energy)
         local ticks   = TicksNeeded(nextCost, energy)
         local tickStr = ticks == 1 and "~1 tick" or ticks .. " ticks"
-        spotStatus = "→ " .. nextName .. "  +" .. deficit .. "E  " .. tickStr
+        spotStatus = ">> " .. nextName .. "  +" .. deficit .. "E  " .. tickStr
     end
     UpdateSpotlight(best, CAT_ROWS, spotStatus)
 end
@@ -780,7 +763,7 @@ local function UpdateBear(now)
             -- Off-GCD — communicate rage budget clearly
             if mangleWaitRage then
                 -- Holding for Mangle — explicitly say so
-                s = Col("ffdd22", "HOLD  ") .. Col("888866", rage .. "R → Mangle")
+                s = Col("ffdd22", "HOLD  ") .. Col("888866", rage .. "R >> Mangle")
             elseif maulDump then
                 s = Col("ffee55", "QUEUE  ") .. Col("aaaaaa", rage .. "R excess")
             elseif rage >= 45 then
@@ -890,6 +873,8 @@ local evtFrame = CreateFrame("Frame")
 evtFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 evtFrame:RegisterEvent("UNIT_AURA")
 evtFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+evtFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+evtFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 evtFrame:RegisterEvent("PLAYER_LOGOUT")
 
 evtFrame:SetScript("OnEvent", function(self, event, arg1)
@@ -915,6 +900,20 @@ evtFrame:SetScript("OnEvent", function(self, event, arg1)
             local pt, _, _, x, y = spotFrame:GetPoint()
             FH.db.spotPosition = { point = pt or "CENTER", x = x or 0, y = y or 0 }
             FH.db.spotShown    = spotFrame:IsShown()
+        end
+
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        -- Entered combat — show if combatOnly mode is enabled and window is toggled on
+        if FH.db and FH.db.combatOnly and FH.db.shown then
+            if mainFrame then mainFrame:Show() end
+            if spotFrame and FH.db.spotShown then spotFrame:Show() end
+        end
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Left combat — hide if combatOnly mode is enabled
+        if FH.db and FH.db.combatOnly then
+            if mainFrame then mainFrame:Hide() end
+            if spotFrame then spotFrame:Hide() end
         end
     end
 end)
@@ -959,6 +958,19 @@ local function Init()
                 spotFrame:Show() ; FH.db.spotShown = true
                 DEFAULT_CHAT_FRAME:AddMessage("|cff88ff88[FeralHelper]|r Spotlight shown.")
             end
+        elseif msg == "combat" then
+            FH.db.combatOnly = not FH.db.combatOnly
+            if FH.db.combatOnly then
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88ff88[FeralHelper]|r Combat-only: |cffff4444ON|r — window hidden out of combat.")
+                if not InCombatLockdown() then
+                    if mainFrame then mainFrame:Hide() end
+                    if spotFrame then spotFrame:Hide() end
+                end
+            else
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88ff88[FeralHelper]|r Combat-only: |cff44ff44OFF|r.")
+                if FH.db.shown and mainFrame then mainFrame:Show() end
+                if FH.db.spotShown and spotFrame then spotFrame:Show() end
+            end
         else
             if not mainFrame then BuildUI() end
             if mainFrame:IsShown() then
@@ -971,6 +983,11 @@ local function Init()
 
     BuildUI()
     BuildSpotlight()
+    -- Apply combat-only: hide on login if enabled and currently out of combat
+    if FH.db.combatOnly and not InCombatLockdown() then
+        if mainFrame then mainFrame:Hide() end
+        if spotFrame then spotFrame:Hide() end
+    end
     ScanPlayerBuffs()
     ScanTargetDebuffs()
 
