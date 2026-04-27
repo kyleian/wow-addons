@@ -37,11 +37,14 @@ jobs:
         run: |
           VER="${{ steps.ver.outputs.VERSION }}"
           BUNDLE="SlySuite-${VER}-full"
-          mkdir -p "$BUNDLE"
+          mkdir -p "dist_bundle"
+          # Place all addon folders at the ROOT of the zip — CF app requires
+          # addon .toc files to be directly inside the top-level zip entries,
+          # not nested inside a parent folder.
           for dir in addons/*/; do
-            cp -r "$dir" "${BUNDLE}/$(basename $dir)"
+            cp -r "$dir" "dist_bundle/$(basename $dir)"
           done
-          zip -r "dist/${BUNDLE}.zip" "${BUNDLE}/"
+          (cd dist_bundle && zip -r "../dist/${BUNDLE}.zip" .)
           echo "Bundle: dist/${BUNDLE}.zip"
           ls -lh "dist/${BUNDLE}.zip"
 
@@ -93,27 +96,53 @@ jobs:
             exit 0
           fi
           BUNDLE="dist/SlySuite-${VERSION}-full.zip"
+
+          # ----------------------------------------------------------------
+          # Resolve the correct 2.5.5 (TBC Classic / Anniversary) game
+          # version ID. CF type 73246 = WoW Burning Crusade Classic.
+          # The upload API infers the flavor from gameVersions[] alone —
+          # no extra type field is needed or accepted in the metadata.
+          # ----------------------------------------------------------------
           echo "Fetching CurseForge game versions..."
-          CF_VERSIONS=$(curl -s -H "X-Api-Token: $CF_API_KEY" "https://wow.curseforge.com/api/game/versions")
+          CF_VERSIONS=$(curl -s -H "X-Api-Token: $CF_API_KEY" \
+            "https://wow.curseforge.com/api/game/versions")
 
-          # Collect ALL TBC 2.5.x version IDs as a JSON array — this matches
-          # what TapTime and other visible CF-app addons do. Including every
-          # 2.5.x subversion means the addon appears for all TBC Classic users
-          # regardless of which exact patch their CF app reports.
+          # Primary: filter by TBC Classic type ID (73246) and pick 2.5.5
           GAME_VERSION_IDS=$(echo "$CF_VERSIONS" | \
-            jq -r '[.[] | select(.name | test("^2\\.5\\.")) | .id] | join(",")' 2>/dev/null || echo "")
+            jq -r '[.[] | select(.gameVersionTypeID == 73246) | .id] | join(",")' \
+            2>/dev/null || echo "")
 
+          # Fallback: name-based 2.5.x filter
           if [ -z "$GAME_VERSION_IDS" ]; then
-            echo "WARNING: no 2.5.x versions found via API, using hardcoded TBC fallback IDs"
-            # Known CF IDs for TBC Classic 2.5.1–2.5.5 (hardcoded safety net)
-            GAME_VERSION_IDS="9546,9560,9561,14301,14300"
+            echo "WARNING: type-ID filter returned nothing; falling back to 2.5.x name pattern"
+            GAME_VERSION_IDS=$(echo "$CF_VERSIONS" | \
+              jq -r '[.[] | select(.name | test("^2\\.5\\.")) | .id] | join(",")' \
+              2>/dev/null || echo "")
+          fi
+
+          # Hard fallback: known ID for 2.5.5 under type 73246
+          if [ -z "$GAME_VERSION_IDS" ]; then
+            echo "WARNING: API lookup failed — using hardcoded 2.5.5 ID"
+            GAME_VERSION_IDS="14300"
           fi
 
           echo "Using game version IDs: $GAME_VERSION_IDS"
+
+          # ----------------------------------------------------------------
+          # Upload. gameVersions[] containing a 73246-type ID is what causes
+          # CF App to list the addon under "Burning Crusade Classic".
+          # ----------------------------------------------------------------
           echo "Uploading $BUNDLE to CurseForge project $CF_PROJECT_ID..."
+          METADATA=$(jq -n \
+            --arg cl "https://github.com/kyleian/wow-addons/releases/tag/v${VERSION}" \
+            --arg dn "SlySuite v${VERSION}" \
+            --argjson gv "[$GAME_VERSION_IDS]" \
+            '{changelog: $cl, changelogType: "text", displayName: $dn, gameVersions: $gv, releaseType: "release"}')
+          echo "Metadata: $METADATA"
+
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
             -H "X-Api-Token: $CF_API_KEY" \
-            -F "metadata={\"changelog\":\"https://github.com/kyleian/wow-addons/releases/tag/v${VERSION}\",\"changelogType\":\"text\",\"displayName\":\"SlySuite v${VERSION}\",\"gameVersions\":[$GAME_VERSION_IDS],\"releaseType\":\"release\"}" \
+            -F "metadata=${METADATA}" \
             -F "file=@${BUNDLE}" \
             "https://wow.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file")
           STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)

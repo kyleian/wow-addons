@@ -112,23 +112,19 @@ local SLOT_INVTYPES = {
     [0] ={INVTYPE_AMMO=true},
 }
 
--- Blizzard's secure character-frame slot button names, keyed by inventory slotId.
--- Used by the SecureActionButtonTemplate overlay so /click can resolve kit/oil
--- targeting mode through Blizzard's own secure code path.
-local BLIZ_SLOT_NAMES = {
-    [1] ="CharacterHeadSlot",            [2] ="CharacterNeckSlot",
-    [3] ="CharacterShoulderSlot",        [4] ="CharacterShirtSlot",
-    [5] ="CharacterChestSlot",           [6] ="CharacterWaistSlot",
-    [7] ="CharacterLegsSlot",            [8] ="CharacterFeetSlot",
-    [9] ="CharacterWristSlot",           [10]="CharacterHandsSlot",
-    [11]="CharacterFinger0Slot",         [12]="CharacterFinger1Slot",
-    [13]="CharacterTrinket0Slot",        [14]="CharacterTrinket1Slot",
-    [15]="CharacterBackSlot",
-    [16]="CharacterMainHandSlot",
-    [17]="CharacterSecondaryHandSlot",
-    [18]="CharacterRangedSlot",
-    [19]="CharacterTabardSlot",
+-- Blizzard inventory slot IDs for equipment slots (used by secure overlay macro).
+-- /use <slotId> resolves spell targeting, cursor-item equip, and enchant application
+-- onto the item in that equipment slot -- no CharacterFrame needed.
+local EQUIP_SLOT_IDS = {
+    [1]=true,  [2]=true,  [3]=true,  [4]=true,  [5]=true,
+    [6]=true,  [7]=true,  [8]=true,  [9]=true,  [10]=true,
+    [11]=true, [12]=true, [13]=true, [14]=true, [15]=true,
+    [16]=true, [17]=true, [18]=true, [19]=true,
 }
+-- SpellIsTargetingUnit was added after TBC; guard against it not existing.
+local _hasSpellIsTargetingUnit = type(SpellIsTargetingUnit) == "function"
+-- Only Hunters use the ammo slot; hide it for all other classes.
+local _classUsesAmmo = (select(2, UnitClass("player"))) == "HUNTER"
 
 -- ---- Widget refs (module-level) ----
 local slotWidgets   = {}
@@ -143,13 +139,67 @@ local _secureSlots  = {}
 -- One shared OnUpdate monitor that enables/disables the overlays.
 local _targetMonitor = CreateFrame("Frame")
 do
-    local _wasTargeting = false
+    local _wasTargeting   = false
+    local _autoShownSlyChar = false   -- true when we auto-opened the frame for targeting
     _targetMonitor:SetScript("OnUpdate", function()
-        local t = SpellIsTargeting()
-        if t ~= _wasTargeting then
-            _wasTargeting = t
-            for _, sBtn in pairs(_secureSlots) do
-                sBtn:EnableMouse(t)
+        -- Activate secure overlays whenever a spell is targeting (armor kit,
+        -- oil, stone, poison, enchant) OR any cursor type is set (item drag).
+        -- PickupInventoryItem is permanently restricted in TBC Anniversary; the
+        -- only valid path is SecureActionButtonTemplate firing "/use N", which
+        -- resolves SpellIsTargeting AND cursor-item equips onto gear slots.
+        local t = SpellIsTargeting() or (GetCursorInfo() ~= nil)
+        if t == _wasTargeting then return end
+        -- EnableMouse is NOT combat-restricted (only SetAttribute is).
+        _wasTargeting = t
+        for sid, sBtn in pairs(_secureSlots) do
+            sBtn:EnableMouse(t)
+            -- Un-register / re-register LeftButton drag on the parent slot button.
+            -- Without this, RegisterForDrag("LeftButton") on the parent claims
+            -- the LeftButton-down event and the secure child never sees LeftButtonUp.
+            local w = slotWidgets[sid]
+            if w and w.frame then
+                if t then
+                    w.frame:RegisterForDrag()           -- release while targeting
+                else
+                    w.frame:RegisterForDrag("LeftButton") -- restore
+                end
+            end
+        end
+
+        -- Auto-open SlyChar when there's an item on cursor (bag drag, enchant
+        -- scroll, etc.) OR when SpellIsTargeting for an item-use effect (weapon
+        -- stone, oil, armor kit, poison).  SpellIsTargetingUnit() is true for
+        -- targeted SPELL abilities (Polymorph, Sap, Trap) which should NOT open
+        -- SlyChar.  Guard: SpellIsTargetingUnit may not exist in TBC Anniversary;
+        -- in that case we cannot distinguish safely so we skip the spell-targeting
+        -- auto-open entirely (cursor-drag auto-open still works).
+        local cursorActive  = (GetCursorInfo() ~= nil)
+        local itemTargeting = _hasSpellIsTargetingUnit and
+            SpellIsTargeting() and not SpellIsTargetingUnit()
+        if t then
+            if cursorActive or itemTargeting then
+                if not (SlyCharMainFrame and SlyCharMainFrame:IsShown()) then
+                    if SC_ShowMain and not InCombatLockdown() then
+                        SC_ShowMain()
+                        _autoShownSlyChar = true
+                    end
+                else
+                    _autoShownSlyChar = false  -- was already open; don't auto-close it
+                end
+            end
+        else
+            -- Targeting ended (item applied or right-click cancelled).
+            -- Only auto-close if we were the ones who opened it.
+            if _autoShownSlyChar then
+                _autoShownSlyChar = false
+                -- Small delay so the player sees the result update on the slot.
+                C_Timer.After(1.5, function()
+                    if SlyCharMainFrame and SlyCharMainFrame:IsShown()
+                        and not (GetCursorInfo() ~= nil)
+                        and not SpellIsTargeting() then
+                        SlyCharMainFrame:Hide()
+                    end
+                end)
             end
         end
     end)
@@ -161,14 +211,31 @@ local headerName    = nil
 local headerInfo    = nil
 local headerGS      = nil
 
-local MAX_STAT_ROWS  = 60
+local MAX_STAT_ROWS  = 150
+
+-- Confirmation popup for overwriting an existing gear set.
+StaticPopupDialogs["IRR_CONFIRM_OVERWRITE"] = StaticPopupDialogs["IRR_CONFIRM_OVERWRITE"] or {
+    text          = "Overwrite set |cffffcc00%s|r with currently equipped gear?",
+    button1       = "Overwrite",
+    button2       = "Cancel",
+    OnAccept      = function(self, data)
+        if IRR_SaveCurrentSet then
+            IRR_SaveCurrentSet(data.setName)
+        end
+        if SC_RefreshSets then SC_RefreshSets() end
+    end,
+    timeout       = 0,
+    whileDead     = true,
+    hideOnEscape  = true,
+}
+
 local MAX_SET_ROWS        = 14   -- visible rows that fit the panel
 local setsScrollOffset    = 0    -- first visible set index (0-based)
 local setsScrollInfoLabel = nil  -- FontString updated by SC_RefreshSets
 local setsUI = { subTab="gear", gearContent=nil, barsContent=nil, bisContent=nil, subGearBtn=nil, subBarsBtn=nil, subBisBtn=nil }
 local MAX_REP_ROWS        = 80
 local MAX_SKILL_ROWS      = 60
-local miscUI = { subTab="rep", repContent=nil, skillContent=nil, subRepBtn=nil, subSkillBtn=nil }
+local miscUI = { honorContent=nil }  -- rep/skills/honor live in wing panes now
 local MAX_BAR_ROWS        = 14   -- visible action bar profile rows
 local barRowWidgets       = {}
 local barsScrollOffset    = 0
@@ -206,6 +273,28 @@ local socialUI = {               -- Friends / Guild social tab
     friendsHeaderFs = nil,
     subFriendsBtn   = nil,
     scrollOffset    = 0,
+}
+
+-- Macro wing state
+local macroRows       = {}
+local macroScrollOff  = 0
+local macroSpecFilter = "All"
+local MAX_MACRO_ROWS  = 17
+local macroSpecBtns   = {}
+local macroScrollLabel = nil
+
+-- Spec filter tabs per class (keyed by UnitClassBase token)
+local CLASS_SPECS = {
+    WARRIOR     = { "All", "Arms",        "Fury",   "Tank",         "PvP" },
+    PALADIN     = { "All", "Holy",        "Prot",   "Ret",          "PvP" },
+    HUNTER      = { "All", "BM",          "MM",     "Survival",     "PvP" },
+    ROGUE       = { "All", "Assassination","Combat", "Subtlety",    "PvP" },
+    PRIEST      = { "All", "Discipline",  "Holy",   "Shadow",       "PvP" },
+    SHAMAN      = { "All", "Elemental",   "Enhance","Resto",        "PvP" },
+    MAGE        = { "All", "Arcane",      "Fire",   "Frost",        "PvP" },
+    WARLOCK     = { "All", "Affliction",  "Demo",   "Destruction",  "PvP" },
+    DRUID       = { "All", "Balance",     "Feral",  "Resto",        "PvP" },
+    DEATHKNIGHT = { "All", "Blood",       "Frost",  "Unholy",       "PvP" },
 }
 
 -- ============================================================
@@ -408,10 +497,21 @@ local SC_THEMES = {
 local SC_THEME_ORDER = {"shadow","midnight","crimson","emerald","gold","storm","void","frost","obsidian","copper","rose","venom"}
 local themeRefs = {}   -- texture handles populated in SC_BuildMain
 
+-- If SlyStyle (SlySuite_Style addon) is loaded, use its shared theme table so
+-- all addons (SlyBag, SlyRepair, Whelp) see the same palettes and receive
+-- theme-change callbacks when the user cycles via the theme button.
+if SlyStyle then
+    SC_THEMES     = SlyStyle.themes
+    SC_THEME_ORDER = SlyStyle.themeOrder
+end
+
 function SC_ApplyTheme(name)
     local th = SC_THEMES[name]
     if not th then name = "shadow" ; th = SC_THEMES.shadow end
     if SC.db then SC.db.theme = name end
+    -- Notify SlyStyle and all registered theme-change listeners across the suite
+    -- (SlyBag, SlyRepair, Whelp, etc. all repaint via OnThemeChange callbacks).
+    if SlyStyle then SlyStyle._fire(name) end
     local r = themeRefs
     local function sc(t, c) if t then t:SetColorTexture(c[1],c[2],c[3],c[4] or 1) end end
     sc(r.frameBg,    th.frameBg)
@@ -607,12 +707,14 @@ local function SC_BuildPicker()
     picker = f
 end
 
--- Parse enchant name + gem count from a full item hyperlink.
--- Returns: enchantName (string or nil), gemCount (int)
+-- Parse enchant presence + gem count from a full item hyperlink.
+-- Returns: enchanted (bool), gemCount (int)
+-- NOTE: GetSpellInfo(enchantId) often returns crafting-recipe names in TBC Classic
+-- (spell IDs collide), so we only report whether an enchant is present, not its name.
 local function ParseEnchantGems(link)
-    if not link then return nil, 0 end
+    if not link then return false, 0 end
     local itemStr = link:match("|Hitem:([^|]+)|h")
-    if not itemStr then return nil, 0 end
+    if not itemStr then return false, 0 end
     local parts = { strsplit(":", itemStr) }
     -- parts[1]=itemId  parts[2]=enchantId  parts[3..6]=gem slots
     local enchId   = tonumber(parts[2]) or 0
@@ -622,11 +724,7 @@ local function ParseEnchantGems(link)
             gemCount = gemCount + 1
         end
     end
-    local enchName = nil
-    if enchId > 0 then
-        enchName = GetSpellInfo(enchId)
-    end
-    return enchName, gemCount
+    return enchId > 0, gemCount
 end
 
 function SC_ShowGearPicker(slotId)
@@ -658,12 +756,14 @@ function SC_ShowGearPicker(slotId)
         end
     end
 
-    -- Bags 0-4: show ALL matching stacks including duplicates.
-    -- Only skip the exact item currently equipped in this slot.
+    -- Bags 0-4: show ALL matching stacks including duplicates of equipped items.
+    -- A second copy of the same ring/trinket in bags IS a valid swap candidate
+    -- (equipping it to the other ring slot, or swapping which slot holds which copy).
+    -- Do NOT filter by shownAsEquipped here — that would hide the bag copy.
     for bag = 0, 4 do
         for bs = 1, _GetContainerNumSlots(bag) do
             local id = _GetContainerItemID(bag, bs)
-            if id and not shownAsEquipped[id] then
+            if id then
                 local bagLink = _GetItemLink(bag, bs)
                 local n,_,q,ilvl,_,_,_,_,eqLoc,tex = GetItemInfo(id)
                 if n and validTypes[eqLoc] then
@@ -739,8 +839,8 @@ function SC_ShowGearPicker(slotId)
                 qc[1]*255, qc[2]*255, qc[3]*255, item.name))
             row.ilvl:SetText(item.ilvl > 0 and ("i"..item.ilvl) or "")
 
-            -- Sub-line: source + enchant name + gem count
-            local enchName, gemCount = ParseEnchantGems(item.link)
+            -- Sub-line: source + enchant indicator + gem count
+            local enchanted, gemCount = ParseEnchantGems(item.link)
             local subParts = {}
             if item.equipped then
                 subParts[#subParts+1] = "|cffddbb22Equipped|r"
@@ -749,8 +849,8 @@ function SC_ShowGearPicker(slotId)
             else
                 subParts[#subParts+1] = "|cff555566Bag|r"
             end
-            if enchName then
-                subParts[#subParts+1] = string.format("|cff55aaff%s|r", enchName:sub(1, 18))
+            if enchanted then
+                subParts[#subParts+1] = "|cff55aaffEnc|r"
             end
             if gemCount > 0 then
                 subParts[#subParts+1] = string.format("|cff88dd88+%d gem%s|r",
@@ -834,6 +934,33 @@ local function FillBg(f, r, g, b, a)
     return t
 end
 
+-- ThemeFill: like FillBg but reads from the active SlyStyle theme palette and
+-- registers an OnThemeChange listener so the texture repaints automatically.
+-- Falls back to raw r,g,b,a values when SlyStyle is not installed.
+local function ThemeFill(f, key, r, g, b, a)
+    local t = f:CreateTexture(nil, "BACKGROUND")
+    t:SetAllPoints(f)
+    if SlyStyle then
+        SlyStyle.Paint(t, key)
+        SlyStyle.OnThemeChange(function() SlyStyle.Paint(t, key) end)
+    else
+        t:SetColorTexture(r, g, b, a or 1)
+    end
+    return t
+end
+
+-- ThemeTex: like ThemeFill but the caller sets point anchors manually.
+local function ThemeTex(parent, key, layer, r, g, b, a)
+    local t = parent:CreateTexture(nil, layer or "ARTWORK")
+    if SlyStyle then
+        SlyStyle.Paint(t, key)
+        SlyStyle.OnThemeChange(function() SlyStyle.Paint(t, key) end)
+    else
+        t:SetColorTexture(r, g, b, a or 1)
+    end
+    return t
+end
+
 local function UpdateSlot(w, slotId)
     local tex = GetInventoryItemTexture("player", slotId)
     if tex then
@@ -877,7 +1004,8 @@ local function BuildSlot(parent, slotId, label, x, y)
         if GetInventoryItemTexture("player", slotId) then
             GameTooltip:SetInventoryItem("player", slotId)
             GameTooltip:AddLine("Left-click: swap gear", 0.5, 0.5, 0.5)
-            GameTooltip:AddLine("Shift+click: socket gems", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine("Right-click: link to chat", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine("Shift+right-click: socket gems", 0.5, 0.5, 0.5)
             GameTooltip:AddLine("Drag: move to trade/bank", 0.5, 0.5, 0.5)
         else
             GameTooltip:SetText(label, 0.65, 0.65, 0.65)
@@ -907,12 +1035,23 @@ local function BuildSlot(parent, slotId, label, x, y)
     -- Ammo slot (0): PickupInventoryItem(0) is invalid; ammo is equipped via the picker.
     btn:SetScript("OnReceiveDrag", function(self)
         if slotId == 0 then return end
-        local ctype = GetCursorInfo()
+        local ctype, itemId = GetCursorInfo()
         if not ctype then return end
-        -- Only block a spell cursor if the slot is empty — you can't apply an
-        -- enhancement to nothing, and an empty-slot click was likely accidental.
-        -- Occupied slots allow any cursor type (kits / oils / stones / poisons).
+        -- Only block a spell cursor if the slot is empty.
         if ctype == "spell" and not GetInventoryItemTexture("player", slotId) then return end
+        -- If an item is on cursor, check whether it is actually equippable.
+        -- Non-equippable usables (armor kits, weapon stones, oils, poisons) cannot
+        -- be placed into a gear slot via PickupInventoryItem — the game silently
+        -- ignores it.  These items must be RIGHT-CLICKED in the bag first to enter
+        -- targeting mode (SpellIsTargeting), then the slot's secure /use overlay handles it.
+        if ctype == "item" and itemId then
+            local _, _, _, _, _, _, _, _, invType = GetItemInfo(itemId)
+            if invType == "" or invType == "INVTYPE_NON_EQUIP" then
+                print("|cff00ccff[SlyChar]|r |cffff8800Right-click|r that item in your bags first " ..
+                    "to enter targeting mode, then click the gear slot.")
+                return
+            end
+        end
         GameTooltip:Hide()
         local ok = pcall(PickupInventoryItem, slotId)
         if ok then UpdateSlot(slotWidgets[slotId], slotId) end
@@ -922,25 +1061,19 @@ local function BuildSlot(parent, slotId, label, x, y)
     btn:SetScript("OnClick", function(self, mb)
         if mb == "LeftButton" then
             GameTooltip:Hide()
-            -- Shift+click: open gem socketing UI if the slot has an item
-            if IsShiftKeyDown() then
-                if GetInventoryItemTexture("player", slotId) then
-                    SC_HidePicker()
-                    SocketInventoryItem(slotId)
-                end
-                return
-            end
-            -- If cursor has an item/enchant on it, equip or apply it.
-            -- "enchant" cursor = profession enchant or sharpening stone/wizard oil.
-            -- "item" cursor = bag item being dragged in — equip it.
-            -- "spell" cursor = rogue poison or weapon enchant targeting — allow on
-            --   weapon slots (16=mainhand, 17=offhand). Block on other slots.
-            -- SpellIsTargeting() mode (armor kit / oil / stone / poison) is handled
-            -- by the SecureActionButtonTemplate overlay — no insecure pcall needed here.
+            -- If targeting/cursor is active and this slot has a secure overlay,
+            -- sBtn already handled the click via the "/use N" secure macro.
+            -- Bail here so we don't attempt the restricted PickupInventoryItem path.
+            if slotId ~= 0 and _secureSlots[slotId] and
+               (SpellIsTargeting() or GetCursorInfo()) then return end
+
+            -- Fallback for slots without a secure overlay (ammo slot 0, or any
+            -- future slot not in EQUIP_SLOT_IDS).  Outside combat lockdown this
+            -- is sometimes callable via OnReceiveDrag hardware path, but for
+            -- safety we only attempt it for truly unsecured slots.
             local ctype = GetCursorInfo()
-            if ctype and slotId ~= 0 then
-                -- Only block a spell cursor if the slot is empty — can't apply to nothing.
-                if ctype == "spell" and not GetInventoryItemTexture("player", slotId) then return end
+            if ctype and slotId == 0 then
+                -- Ammo slot: no sBtn, try direct path
                 local ok = pcall(PickupInventoryItem, slotId)
                 if ok then UpdateSlot(slotWidgets[slotId], slotId) end
                 return
@@ -952,6 +1085,15 @@ local function BuildSlot(parent, slotId, label, x, y)
                 SC_ShowGearPicker(slotId)
             end
         elseif mb == "RightButton" then
+            -- Shift+right-click: open gem socketing UI (matches WoW convention)
+            if IsShiftKeyDown() then
+                if GetInventoryItemTexture("player", slotId) then
+                    SC_HidePicker()
+                    SocketInventoryItem(slotId)
+                end
+                return
+            end
+            -- Plain right-click: link item to chat
             local link = GetInventoryItemLink("player", slotId)
             if link and ChatFrame1EditBox then
                 ChatFrame1EditBox:Show()
@@ -961,18 +1103,24 @@ local function BuildSlot(parent, slotId, label, x, y)
         end
     end)
 
-    -- SecureActionButtonTemplate overlay: when SpellIsTargeting() is active
-    -- (armor kit, oil, stone, poison being applied), left-click resolves the
-    -- pending application via Blizzard's own secure slot button.  The overlay
-    -- has EnableMouse(false) by default and is switched on by _targetMonitor.
-    local blizName = BLIZ_SLOT_NAMES[slotId]
-    if blizName then
+    -- Secure overlay for enchant/cursor/SpellIsTargeting application.
+    -- "/use N" via SecureActionButtonTemplate is the ONLY valid way to call
+    -- UseInventoryItem from addon code in TBC Anniversary (PickupInventoryItem
+    -- is permanently restricted to Blizzard-signed UI).  "/use N" resolves:
+    --   SpellIsTargeting() = true  → applies pending spell onto item in slot N
+    --   GetCursorInfo() = "item"   → equips cursor item to slot N (swap)
+    --   GetCursorInfo() = "enchant"→ applies cursor enchant to item in slot N
+    -- Enabled only while targeting/cursor is active (_targetMonitor above).
+    if EQUIP_SLOT_IDS[slotId] then
         local sBtn = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
         sBtn:SetAllPoints(btn)
         sBtn:SetAttribute("type", "macro")
-        sBtn:SetAttribute("macrotext", "/click "..blizName)
+        sBtn:SetAttribute("macrotext", "/use " .. slotId)
         sBtn:RegisterForClicks("LeftButtonUp")
-        sBtn:EnableMouse(false)  -- only active while SpellIsTargeting()
+        -- Explicitly raise frame level so sBtn sits above btn and wins the
+        -- mouse-hit test when both are enabled at the same screen position.
+        sBtn:SetFrameLevel(btn:GetFrameLevel() + 20)
+        sBtn:EnableMouse(false)
         _secureSlots[slotId] = sBtn
     end
 
@@ -1016,7 +1164,7 @@ end
 -- ============================================================
 local function BuildStatRows(parent)
     for i = 1, MAX_STAT_ROWS do
-        local row = CreateFrame("Frame", nil, parent)
+        local row = CreateFrame("Button", nil, parent)
         row:SetSize(SIDE_W - PAD*2 - 16, 24)
         row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((i-1)*24))
 
@@ -1031,6 +1179,7 @@ local function BuildStatRows(parent)
         val:SetPoint("RIGHT", row, "RIGHT", 0, 0)
         val:SetJustifyH("RIGHT")
 
+        row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         row:Hide()
         statRows[i] = {row=row, lbl=lbl, val=val}
     end
@@ -1038,24 +1187,70 @@ end
 
 function SC_RefreshStats()
     for _, w in ipairs(statRows) do
-        w.row:Hide() ; w.lbl:SetText("") ; w.val:SetText("")
+        w.row:Hide()
+        w.lbl:SetText("")
+        w.val:SetText("")
+        w.row:SetScript("OnClick", nil)
+        w.row:SetScript("OnEnter", nil)
+        w.row:SetScript("OnLeave", nil)
+        w.row:EnableMouse(false)
     end
     local ri = 0
-    local function addRow(lbl, val, sec)
+    local currentSection = nil
+    local collapsed = SC.db and SC.db.collapsed or {}
+    local hidden    = SC.db and SC.db.hidden    or {}
+    local hiddenCount = 0
+
+    local function addSection(secKey)
+        currentSection = secKey
+        if hidden[secKey] then
+            hiddenCount = hiddenCount + 1
+            return
+        end
         ri = ri + 1
         local w = statRows[ri]
         if not w then return end
-        if sec then
-            w.lbl:SetText("|cff66d4ff" .. lbl .. "|r")
+        local arrow = collapsed[secKey] and "[+] " or "[-] "
+        w.lbl:SetText("|cffaaaaaa" .. arrow .. "|r|cff66d4ff" .. secKey .. "|r")
+        w.val:SetText("")
+        w.row:EnableMouse(true)
+        w.row:SetScript("OnClick", function(self, btn)
+            if btn == "RightButton" then
+                hidden[secKey] = true
+                SC_RefreshStats()
+            else
+                if collapsed[secKey] then
+                    collapsed[secKey] = nil
+                else
+                    collapsed[secKey] = true
+                end
+                SC_RefreshStats()
+            end
+        end)
+        w.row:SetScript("OnEnter", function()
+            local arr = collapsed[secKey] and "[+] " or "[-] "
+            w.lbl:SetText("|cffaaaaaa" .. arr .. "|r|cffffffff" .. secKey .. "|r")
+            w.val:SetText("|cff666666right-click: hide|r")
+        end)
+        w.row:SetScript("OnLeave", function()
+            local arr = collapsed[secKey] and "[+] " or "[-] "
+            w.lbl:SetText("|cffaaaaaa" .. arr .. "|r|cff66d4ff" .. secKey .. "|r")
             w.val:SetText("")
-        else
-            w.lbl:SetText("|cffbbbbbb" .. lbl .. "|r")
-            w.val:SetText("|cffffd700" .. (val or "n/a") .. "|r")
-        end
+        end)
         w.row:Show()
     end
 
-    addRow("BASE STATS", nil, true)
+    local function addRow(lbl, val)
+        if currentSection and (collapsed[currentSection] or hidden[currentSection]) then return end
+        ri = ri + 1
+        local w = statRows[ri]
+        if not w then return end
+        w.lbl:SetText("|cffbbbbbb" .. lbl .. "|r")
+        w.val:SetText("|cffffd700" .. (val or "n/a") .. "|r")
+        w.row:Show()
+    end
+
+    addSection("BASE STATS")
     local NAMES = {"Strength","Agility","Stamina","Intellect","Spirit"}
     for i = 1, 5 do
         local base, pos, neg = UnitStat("player", i)
@@ -1069,11 +1264,40 @@ function SC_RefreshStats()
             local lastSec = nil
             for _, s in ipairs(stats) do
                 if s.section and s.section ~= lastSec then
-                    addRow(s.section, nil, true)
+                    addSection(s.section)
                     lastSec = s.section
                 end
                 if s.label then addRow(s.label, s.value) end
             end
+        elseif not ok then
+            addSection("ECS ERROR")
+            addRow("Error", tostring(stats):sub(1, 60))
+        end
+    else
+        addSection("ECS MISSING")
+        addRow("ExtendedCharStats", "not loaded")
+    end
+
+    -- Footer: show hidden count + click to restore all
+    if hiddenCount > 0 then
+        ri = ri + 1
+        local w = statRows[ri]
+        if w then
+            local txt = "|cffff9900" .. hiddenCount .. " section(s) hidden  [click to show all]|r"
+            w.lbl:SetText(txt)
+            w.val:SetText("")
+            w.row:EnableMouse(true)
+            w.row:SetScript("OnClick", function()
+                SC.db.hidden = {}
+                SC_RefreshStats()
+            end)
+            w.row:SetScript("OnEnter", function()
+                w.lbl:SetText("|cffffffff" .. hiddenCount .. " section(s) hidden  [click to show all]|r")
+            end)
+            w.row:SetScript("OnLeave", function()
+                w.lbl:SetText(txt)
+            end)
+            w.row:Show()
         end
     end
 end
@@ -2213,7 +2437,7 @@ function SC_RefreshSets()
         if not w then break end
         local name = names[setsScrollOffset + i]
         if not name then break end
-        local setData = IRR and IRR.db and IRR.db.sets and IRR.db.sets[name]
+        local setData = IRR and IRR.chardata and IRR.chardata.sets and IRR.chardata.sets[name]
         local n = 0
         if setData then for _ in pairs(setData) do n = n + 1 end end
 
@@ -2290,10 +2514,7 @@ function SC_RefreshSets()
 
         w.saveBtn:EnableMouse(true)
         w.saveBtn:SetScript("OnClick", function()
-            if IRR_SaveCurrentSet then
-                IRR_SaveCurrentSet(name)
-                SC_RefreshSets()
-            end
+            StaticPopup_Show("IRR_CONFIRM_OVERWRITE", name, nil, { setName = name })
         end)
 
         w.delBtn:EnableMouse(true)
@@ -2303,10 +2524,10 @@ function SC_RefreshSets()
         end)
 
         w.row:SetScript("OnEnter", function()
-            if not (IRR and IRR.db and IRR.db.sets and IRR.db.sets[name]) then return end
+            if not (IRR and IRR.chardata and IRR.chardata.sets and IRR.chardata.sets[name]) then return end
             GameTooltip:SetOwner(w.row, "ANCHOR_RIGHT")
             GameTooltip:SetText(name, 1, 0.84, 0)
-            for _, itemId in pairs(IRR.db.sets[name]) do
+            for _, itemId in pairs(IRR.chardata.sets[name]) do
                 local n2 = GetItemInfo(itemId)
                 if n2 then GameTooltip:AddLine(n2, 0.8, 0.8, 0.8) end
             end
@@ -2514,40 +2735,160 @@ function SC_RefreshSkills()
     end
 end
 
-function SC_SetMiscSubTab(key)
-    miscUI.subTab = key
-end
+function SC_RefreshHonor()
+    if not miscUI.honorContent then return end
+    if not miscUI.honorContent:IsShown() then return end
+    local rows = miscUI._honorRows
+    if not rows then return end
 
-function SC_RefreshMisc()
-    local function StyleMiscSub(btn, active)
-        if not btn then return end
-        if active then
-            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1)
-            btn.tx:SetTextColor(0.75, 0.88, 1.00)
-        else
-            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1)
-            btn.tx:SetTextColor(0.40, 0.40, 0.50)
+    -- Number formatter with thousands separators: 75000 → "75,000"
+    local function commaNum(n)
+        n = math.floor(n or 0)
+        local s = tostring(n)
+        local result, count = "", 0
+        for i = #s, 1, -1 do
+            if count > 0 and count % 3 == 0 then result = "," .. result end
+            result = s:sub(i, i) .. result
+            count  = count + 1
+        end
+        return result
+    end
+
+    local rank = 0
+    if UnitPVPRank then rank = UnitPVPRank("player") or 0 end
+    local rankName = "Unranked"
+    if rank > 0 and GetPVPRankInfo then
+        local rn = GetPVPRankInfo(rank)
+        if rn then rankName = rn .. " (" .. rank .. ")" end
+    end
+
+    -- ── Honor currency (spendable amount) ────────────────────────────────────
+    -- TBC Classic (including Anniversary) uses an index-based currency list:
+    --   GetCurrencyListSize()  → total rows (headers + entries)
+    --   GetCurrencyListInfo(i) → name, isHeader, isExpanded, _, _, qty, icon, maxQty
+    --   ExpandCurrencyList(i, 1/0) → expand/collapse a header row
+    local honorCurr, honorMax = 0, 75000
+    local arenaPts = 0
+    local function scanCurrencyList()
+        if not GetCurrencyListSize then return end
+        local size = GetCurrencyListSize()
+        if (size or 0) == 0 then return end
+        -- Expand every collapsed header so child entries become visible
+        local toCollapse = {}
+        for i = 1, size do
+            local _, isHeader, isExpanded = GetCurrencyListInfo(i)
+            if isHeader and not isExpanded then
+                toCollapse[#toCollapse+1] = i
+                ExpandCurrencyList(i, 1)
+            end
+        end
+        size = GetCurrencyListSize()   -- re-query after expansion
+        for i = 1, size do
+            local name, isHeader, _, _, _, qty, _, maxQty = GetCurrencyListInfo(i)
+            if not isHeader and name then
+                local lname = name:lower()
+                if lname:find("honor") then
+                    honorCurr = math.floor(qty or 0)
+                    honorMax  = (maxQty and maxQty > 0) and math.floor(maxQty) or 75000
+                elseif lname:find("arena") then
+                    arenaPts  = math.floor(qty or 0)
+                end
+            end
+        end
+        -- Re-collapse headers we opened
+        for i = #toCollapse, 1, -1 do
+            ExpandCurrencyList(toCollapse[i], 0)
         end
     end
-    StyleMiscSub(miscUI.subRepBtn,   miscUI.subTab == "rep")
-    StyleMiscSub(miscUI.subSkillBtn, miscUI.subTab == "skills")
-    if miscUI.repContent   then miscUI.repContent:SetShown(miscUI.subTab == "rep") end
-    if miscUI.skillContent then miscUI.skillContent:SetShown(miscUI.subTab == "skills") end
-    if miscUI.subTab == "rep" then
-        SC_RefreshReputation()
-    elseif miscUI.subTab == "skills" then
-        SC_RefreshSkills()
+    scanCurrencyList()
+    -- WotLK+ fallbacks (nil on TBC Anniversary — kept for forward compat)
+    if honorCurr == 0 and GetHonorCurrency then
+        local c, m = GetHonorCurrency()
+        honorCurr = math.floor(c or 0)
+        honorMax  = (m and m > 0) and math.floor(m) or 75000
+    end
+    if arenaPts == 0 and GetArenaCurrency then
+        arenaPts = math.floor(GetArenaCurrency() or 0)
+    end
+
+    -- ── HK / kill stats via GetHonorInfo() ───────────────────────────────────
+    -- GetHonorInfo() -> todayHK, todayHonor, yHK, yHonor, lwHK, lwHonor,
+    --                   twHK, twHonor, lifetimeHK, lifetimeHighestRank
+    local twHK, yHK, lwHK, lfHK, lfDK = 0, 0, 0, 0, 0
+    if GetHonorInfo then
+        local _tdHK, _tdH, _yHK, _yH, _lwHK, _lwH, _twHK, _twH, _lfHK =
+            GetHonorInfo()
+        yHK  = math.floor(_yHK  or 0)
+        lwHK = math.floor(_lwHK or 0)
+        twHK = math.floor(_twHK or 0)
+        lfHK = math.floor(_lfHK or 0)
+        -- Use this-week honor as currency if C_CurrencyInfo gave us nothing
+        if honorCurr == 0 and _twH and _twH > 0 then
+            honorCurr = math.floor(_twH)
+        end
+    else
+        -- Final per-stat fallbacks (WotLK+)
+        if GetPVPThisWeekStats  then local a = GetPVPThisWeekStats()  ; twHK = math.floor(a or 0) end
+        if GetPVPYesterdayStats then local a = GetPVPYesterdayStats() ; yHK  = math.floor(a or 0) end
+        if GetPVPLastWeekStats  then local a = GetPVPLastWeekStats()  ; lwHK = math.floor(a or 0) end
+        if GetPVPLifetimeStats  then
+            local a, b = GetPVPLifetimeStats()
+            lfHK = math.floor(a or 0) ; lfDK = math.floor(b or 0)
+        end
+    end
+    if GetPVPLifetimeStats and lfHK == 0 then
+        local a, b = GetPVPLifetimeStats()
+        lfHK = math.floor(a or 0) ; lfDK = math.floor(b or 0)
+    end
+
+    local data = {
+        { lbl="Rank",              val=rankName },
+        { lbl="Honor",             val=commaNum(honorCurr).." / "..commaNum(honorMax) },
+        { lbl="Arena Points",      val=commaNum(arenaPts) },
+        { sep=true },
+        { lbl="Yesterday HKs",     val=commaNum(yHK) },
+        { lbl="This Week HKs",     val=commaNum(twHK) },
+        { lbl="Last Week HKs",     val=commaNum(lwHK) },
+        { sep=true },
+        { lbl="Lifetime HKs",      val=commaNum(lfHK) },
+        { lbl="Lifetime DKs",      val=commaNum(lfDK) },
+    }
+
+    for i = 1, #rows do
+        local row = rows[i]
+        local d   = data[i]
+        if d then
+            if d.sep then
+                row.lbl:SetText("")
+                row.val:SetText("")
+                row.bg:SetColorTexture(0.12, 0.12, 0.20, 0.8)
+                row:SetHeight(4)
+            else
+                row:SetHeight(14)
+                row.lbl:SetText("|cff8899bb" .. d.lbl .. "|r")
+                row.val:SetText("|cffdddddd" .. d.val .. "|r")
+                row.bg:SetColorTexture(0, 0, 0, (i % 2 == 0) and 0.10 or 0)
+            end
+            row:Show()
+        else
+            row:Hide()
+        end
     end
 end
+
+function SC_SetMiscSubTab(key) end  -- no-op; sub-tabs moved to wing flyout
+
+function SC_RefreshMisc() end  -- Apps tab is static; no refresh needed
 
 -- ============================================================
 -- NIT (NovaInstanceTracker) tab  — per-alt lockout view
 -- ============================================================
-local function BuildNitRows(parent)
-    local W = SIDE_W - PAD*2
+local function BuildNitRows(parent, width)
+    local W = width or (SIDE_W - PAD*2)
 
     -- ── Sub-tab strip: Lockouts | Guild | Friends | Layer ────────────────────
-    local stQtr = math.floor(W / 4)
+    -- NIT pane has 2 sub-tabs: Lockouts | Layer
+    local stHalf = math.floor(W / 2)
 
     local subBarBg = parent:CreateTexture(nil, "BACKGROUND")
     subBarBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, 0)
@@ -2557,7 +2898,7 @@ local function BuildNitRows(parent)
 
     local function MakeSubTab(label, xOff, key)
         local btn = CreateFrame("Button", nil, parent)
-        btn:SetSize(stQtr, 16)
+        btn:SetSize(stHalf, 16)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, 0)
         local bg = btn:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(btn) ; bg:SetColorTexture(0.06, 0.06, 0.10, 1)
@@ -2568,22 +2909,13 @@ local function BuildNitRows(parent)
         btn.bg = bg ; btn.tx = tx
         btn:SetScript("OnClick", function()
             nitSubTab = key
-            if key == "guild" then
-                if C_GuildInfo then C_GuildInfo.GuildRoster()
-                elseif GuildRoster then GuildRoster() end
-            elseif key == "friends" then
-                if C_FriendList and C_FriendList.ShowFriends then C_FriendList.ShowFriends()
-                elseif ShowFriends then ShowFriends() end
-            end
             SC_RefreshNIT()
         end)
         return btn
     end
 
-    nitSubLockBtn    = MakeSubTab("Locks",   0,          "locks")
-    nitSubGuildBtn   = MakeSubTab("Guild",   stQtr,      "guild")
-    nitSubFriendsBtn = MakeSubTab("Friends", stQtr * 2,  "friends")
-    nitSubLayerBtn   = MakeSubTab("Layer",   stQtr * 3,  "layer")
+    nitSubLockBtn  = MakeSubTab("Lockouts", 0,       "locks")
+    nitSubLayerBtn = MakeSubTab("Layer",    stHalf,  "layer")
 
     -- thin separator below sub-tab strip
     local subSep = parent:CreateTexture(nil, "ARTWORK")
@@ -2608,6 +2940,27 @@ local function BuildNitRows(parent)
     si:SetPoint("TOPRIGHT", lockContent, "TOPRIGHT", 0, 0)
     si:SetJustifyH("RIGHT") ; si:SetTextColor(0.45, 0.45, 0.50)
     nitScrollInfoLabel = si
+
+    -- Broadcast all alts' lockouts to party/raid/say
+    local bcBtn = CreateFrame("Button", nil, lockContent)
+    bcBtn:SetSize(70, 14)
+    bcBtn:SetPoint("TOPRIGHT", lockContent, "TOPRIGHT", 0, -18)
+    local bcBg = bcBtn:CreateTexture(nil, "BACKGROUND")
+    bcBg:SetAllPoints() ; bcBg:SetColorTexture(0.08, 0.22, 0.38, 0.90)
+    local bcHl = bcBtn:CreateTexture(nil, "HIGHLIGHT")
+    bcHl:SetAllPoints() ; bcHl:SetColorTexture(0.20, 0.50, 0.80, 0.35)
+    local bcTx = bcBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    bcTx:SetFont(bcTx:GetFont(), 8, "OUTLINE")
+    bcTx:SetAllPoints() ; bcTx:SetJustifyH("CENTER")
+    bcTx:SetText("|cff88ccff>> Broadcast|r")
+    bcBtn:SetScript("OnClick", function() SC_BroadcastLockouts() end)
+    bcBtn:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(bcBtn, "ANCHOR_LEFT")
+        GameTooltip:SetText("Broadcast Lockouts", 1, 1, 1)
+        GameTooltip:AddLine("Post all alts' lockouts to party, raid, or /say.", 0.7, 0.7, 0.7, true)
+        GameTooltip:Show()
+    end)
+    bcBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     for i = 1, MAX_NIT_LOCK_ROWS do
         local yOff = -(18 + (i-1)*18)
@@ -2641,172 +2994,9 @@ local function BuildNitRows(parent)
         nitLockRows[i] = row
     end
 
-    -- ── Guild content (shown when nitSubTab == "guild") ───────────────────────
-    local guildContent = CreateFrame("Frame", nil, parent)
-    guildContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
-    guildContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
-    guildContent:Hide()
-    nitGuildContent = guildContent
-
-    local gh = guildContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    gh:SetFont(gh:GetFont(), 10, "OUTLINE")
-    gh:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, 0)
-    gh:SetText("|cffffff99Online Guildies|r")
-    nitGuildHeaderFs = gh
-
-    for i = 1, MAX_NIT_LOCK_ROWS do
-        local yOff = -(18 + (i-1)*18)
-        local row = CreateFrame("Button", nil, guildContent)
-        row:SetSize(W, 17)
-        row:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, yOff)
-        row:RegisterForClicks("LeftButtonUp")
-
-        local bg = row:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints(row)
-        bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
-        row.bg = bg
-
-        local hl = row:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(row)
-        hl:SetColorTexture(1, 1, 1, 0.07)
-
-        -- layer number (compact left column)
-        local ly = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ly:SetFont(ly:GetFont(), 9, "OUTLINE")
-        ly:SetPoint("LEFT", row, "LEFT", 2, 0)
-        ly:SetJustifyH("CENTER") ; ly:SetWidth(22)
-        row.ly = ly
-
-        -- character name
-        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        nm:SetFont(nm:GetFont(), 9, "")
-        nm:SetPoint("LEFT", row, "LEFT", 26, 0)
-        nm:SetJustifyH("LEFT") ; nm:SetWidth(155)
-        row.nm = nm
-
-        -- zone (right-aligned, truncated)
-        local zn = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        zn:SetFont(zn:GetFont(), 8, "")
-        zn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-        zn:SetJustifyH("RIGHT") ; zn:SetWidth(W - 26 - 155 - 4)
-        row.zn = zn
-
-        row:SetScript("OnEnter", function(self)
-            if self._name then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText(self._name, 1, 1, 1)
-                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5)
-                GameTooltip:Show()
-            end
-        end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        row:Hide()
-        nitGuildRows[i] = row
-    end
-
-    -- ── Friends content (shown when nitSubTab == "friends") ──────────────────
-    local friendsContent = CreateFrame("Frame", nil, parent)
-    friendsContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
-    friendsContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
-    friendsContent:Hide()
-    nitFriendsContent = friendsContent
-
-    local fh = friendsContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    fh:SetFont(fh:GetFont(), 10, "OUTLINE")
-    fh:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, 0)
-    fh:SetText("|cffffff99Friends|r")
-    nitFriendsHeaderFs = fh
-
-    -- Small manual refresh button next to the header
-    local frRefreshBtn = CreateFrame("Button", nil, friendsContent)
-    frRefreshBtn:SetSize(36, 14)
-    frRefreshBtn:SetPoint("TOPRIGHT", friendsContent, "TOPRIGHT", 0, 0)
-    local frRBg = frRefreshBtn:CreateTexture(nil, "BACKGROUND")
-    frRBg:SetAllPoints() ; frRBg:SetColorTexture(0.10, 0.20, 0.35, 0.85)
-    local frRHl = frRefreshBtn:CreateTexture(nil, "HIGHLIGHT")
-    frRHl:SetAllPoints() ; frRHl:SetColorTexture(0.25, 0.50, 0.80, 0.40)
-    local frRTx = frRefreshBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    frRTx:SetFont(frRTx:GetFont(), 8, "OUTLINE")
-    frRTx:SetAllPoints() ; frRTx:SetJustifyH("CENTER") ; frRTx:SetText("|cffaaddffRefresh|r")
-    frRefreshBtn:SetScript("OnClick", function()
-        -- Request a fresh friends list from server
-        if C_FriendList and C_FriendList.ShowFriends then
-            C_FriendList.ShowFriends()
-        elseif ShowFriends then
-            ShowFriends()
-        end
-        -- Print raw API values + available functions to chat for debugging
-        local n = (C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetNumFriends())
-               or (GetNumFriends and GetNumFriends()) or 0
-        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Friends count=" .. tostring(n)
-            .. "  C_FriendList=" .. tostring(C_FriendList ~= nil))
-        if C_FriendList then
-            local fns = {}
-            for k in pairs(C_FriendList) do fns[#fns+1] = k end
-            table.sort(fns)
-            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r C_FriendList keys: " .. table.concat(fns, ", "))
-        end
-        -- Refresh will happen when FRIENDLIST_UPDATE fires; also try immediately
-        SC_RefreshNITFriends()
-    end)
-
-    for i = 1, MAX_NIT_LOCK_ROWS do
-        local yOff = -(18 + (i-1)*18)
-        local row = CreateFrame("Button", nil, friendsContent)
-        row:SetSize(W, 17)
-        row:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, yOff)
-        row:RegisterForClicks("LeftButtonUp")
-
-        local bg = row:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints(row)
-        bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
-        row.bg = bg
-
-        local hl = row:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
-
-        -- online dot
-        local dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        dot:SetFont(dot:GetFont(), 10, "OUTLINE")
-        dot:SetPoint("LEFT", row, "LEFT", 2, 0)
-        dot:SetWidth(10) ; dot:SetJustifyH("CENTER")
-        row.dot = dot
-
-        -- name
-        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        nm:SetFont(nm:GetFont(), 9, "")
-        nm:SetPoint("LEFT", row, "LEFT", 14, 0)
-        nm:SetJustifyH("LEFT") ; nm:SetWidth(130)
-        row.nm = nm
-
-        -- level
-        local lv = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lv:SetFont(lv:GetFont(), 8, "")
-        lv:SetPoint("LEFT", row, "LEFT", 146, 0)
-        lv:SetJustifyH("LEFT") ; lv:SetWidth(28)
-        row.lv = lv
-
-        -- area
-        local ar = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ar:SetFont(ar:GetFont(), 8, "")
-        ar:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-        ar:SetJustifyH("RIGHT") ; ar:SetWidth(W - 14 - 130 - 28 - 6)
-        row.ar = ar
-
-        row:SetScript("OnEnter", function(self)
-            if self._name then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText(self._name, 1, 1, 1)
-                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5)
-                GameTooltip:Show()
-            end
-        end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        row:Hide()
-        nitFriendsRows[i] = row
-    end
+    -- ── Friends content (moved to BuildSocialRows — see below) ───────────────
+    -- ── Friends Section placeholder: kept here for nitFriendsContent ref ─────
+    -- (Guild and Friends UIs are built in BuildSocialRows, called in BuildWingFrame)
 
     -- ── Layer content (shown when nitSubTab == "layer") ──────────────────────
     local layerContent = CreateFrame("Frame", nil, parent)
@@ -2840,6 +3030,401 @@ local function BuildNitRows(parent)
     layerHintFs:SetJustifyH("CENTER")
     layerHintFs:SetTextColor(0.28, 0.28, 0.36)
     layerHintFs:SetText("Target any NPC in a capital city\nto detect your layer")
+end
+
+-- ============================================================
+-- BuildSocialRows: Friends & Guild pane (separate wing from NIT)
+-- ============================================================
+local function BuildSocialRows(parent, width)
+    local W = width or (SIDE_W - PAD*2)
+    local stHalf = math.floor(W / 2)
+
+    local subBarBg = parent:CreateTexture(nil, "BACKGROUND")
+    subBarBg:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, 0)
+    subBarBg:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
+    subBarBg:SetHeight(16) ; subBarBg:SetColorTexture(0.05, 0.05, 0.09, 1)
+
+    local function MakeSocialTab(label, xOff, key)
+        local btn = CreateFrame("Button", nil, parent)
+        btn:SetSize(stHalf, 16)
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, 0)
+        local bg = btn:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(btn) ; bg:SetColorTexture(0.06, 0.06, 0.10, 1)
+        local tx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tx:SetFont(tx:GetFont(), 8, "OUTLINE")
+        tx:SetAllPoints() ; tx:SetJustifyH("CENTER")
+        tx:SetText(label) ; tx:SetTextColor(0.45, 0.45, 0.55)
+        btn.bg = bg ; btn.tx = tx
+        btn:SetScript("OnClick", function()
+            socialSubTab = key
+            if key == "guild" then
+                if C_GuildInfo then C_GuildInfo.GuildRoster()
+                elseif GuildRoster then GuildRoster() end
+            elseif key == "friends" then
+                if C_FriendList and C_FriendList.ShowFriends then C_FriendList.ShowFriends()
+                elseif ShowFriends then ShowFriends() end
+            end
+            SC_RefreshSocial()
+        end)
+        return btn
+    end
+
+    nitSubGuildBtn   = MakeSocialTab("Guild",   0,       "guild")
+    nitSubFriendsBtn = MakeSocialTab("Friends", stHalf,  "friends")
+
+    local subSep = parent:CreateTexture(nil, "ARTWORK")
+    subSep:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -16)
+    subSep:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -16)
+    subSep:SetHeight(1) ; subSep:SetColorTexture(0.18, 0.18, 0.26, 1)
+
+    -- ── Guild content ─────────────────────────────────────────────────────────
+    local guildContent = CreateFrame("Frame", nil, parent)
+    guildContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
+    guildContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
+    guildContent:Hide()
+    nitGuildContent = guildContent
+
+    local gh = guildContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    gh:SetFont(gh:GetFont(), 10, "OUTLINE")
+    gh:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, 0)
+    gh:SetText("|cffffff99Online Guildies|r")
+    nitGuildHeaderFs = gh
+
+    for i = 1, MAX_NIT_LOCK_ROWS do
+        local yOff = -(18 + (i-1)*18)
+        local row = CreateFrame("Button", nil, guildContent)
+        row:SetSize(W, 17)
+        row:SetPoint("TOPLEFT", guildContent, "TOPLEFT", 0, yOff)
+        row:RegisterForClicks("LeftButtonUp")
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row) ; bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
+        row.bg = bg
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
+        local ly = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ly:SetFont(ly:GetFont(), 9, "OUTLINE")
+        ly:SetPoint("LEFT", row, "LEFT", 2, 0) ; ly:SetJustifyH("CENTER") ; ly:SetWidth(22)
+        row.ly = ly
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 26, 0) ; nm:SetJustifyH("LEFT") ; nm:SetWidth(155)
+        row.nm = nm
+        local zn = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        zn:SetFont(zn:GetFont(), 8, "")
+        zn:SetPoint("RIGHT", row, "RIGHT", -2, 0) ; zn:SetJustifyH("RIGHT") ; zn:SetWidth(W - 26 - 155 - 4)
+        row.zn = zn
+        row:SetScript("OnEnter", function(self)
+            if self._name then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT") ; GameTooltip:SetText(self._name, 1, 1, 1)
+                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5) ; GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:Hide() ; nitGuildRows[i] = row
+    end
+
+    -- ── Friends content ───────────────────────────────────────────────────────
+    local friendsContent = CreateFrame("Frame", nil, parent)
+    friendsContent:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -17)
+    friendsContent:SetSize(W, 18 + MAX_NIT_LOCK_ROWS * 18)
+    friendsContent:Hide()
+    nitFriendsContent = friendsContent
+
+    local fh = friendsContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fh:SetFont(fh:GetFont(), 10, "OUTLINE")
+    fh:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, 0)
+    fh:SetText("|cffffff99Friends|r") ; nitFriendsHeaderFs = fh
+
+    local frRefreshBtn = CreateFrame("Button", nil, friendsContent)
+    frRefreshBtn:SetSize(36, 14) ; frRefreshBtn:SetPoint("TOPRIGHT", friendsContent, "TOPRIGHT", 0, 0)
+    local frRBg = frRefreshBtn:CreateTexture(nil, "BACKGROUND")
+    frRBg:SetAllPoints() ; frRBg:SetColorTexture(0.10, 0.20, 0.35, 0.85)
+    local frRHl = frRefreshBtn:CreateTexture(nil, "HIGHLIGHT")
+    frRHl:SetAllPoints() ; frRHl:SetColorTexture(0.25, 0.50, 0.80, 0.40)
+    local frRTx = frRefreshBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    frRTx:SetFont(frRTx:GetFont(), 8, "OUTLINE")
+    frRTx:SetAllPoints() ; frRTx:SetJustifyH("CENTER") ; frRTx:SetText("|cffaaddffRefresh|r")
+    frRefreshBtn:SetScript("OnClick", function()
+        if C_FriendList and C_FriendList.ShowFriends then C_FriendList.ShowFriends()
+        elseif ShowFriends then ShowFriends() end
+        SC_RefreshNITFriends()
+    end)
+
+    for i = 1, MAX_NIT_LOCK_ROWS do
+        local yOff = -(18 + (i-1)*18)
+        local row = CreateFrame("Button", nil, friendsContent)
+        row:SetSize(W, 17)
+        row:SetPoint("TOPLEFT", friendsContent, "TOPLEFT", 0, yOff)
+        row:RegisterForClicks("LeftButtonUp")
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row) ; bg:SetColorTexture(0.05, 0.05, 0.08, i % 2 == 0 and 0.45 or 0)
+        row.bg = bg
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
+        local dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        dot:SetFont(dot:GetFont(), 10, "OUTLINE")
+        dot:SetPoint("LEFT", row, "LEFT", 2, 0) ; dot:SetWidth(10) ; dot:SetJustifyH("CENTER")
+        row.dot = dot
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 14, 0) ; nm:SetJustifyH("LEFT") ; nm:SetWidth(130)
+        row.nm = nm
+        local lv = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lv:SetFont(lv:GetFont(), 8, "")
+        lv:SetPoint("LEFT", row, "LEFT", 146, 0) ; lv:SetJustifyH("LEFT") ; lv:SetWidth(28)
+        row.lv = lv
+        local ar = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ar:SetFont(ar:GetFont(), 8, "")
+        ar:SetPoint("RIGHT", row, "RIGHT", -2, 0) ; ar:SetJustifyH("RIGHT") ; ar:SetWidth(W - 14 - 130 - 28 - 6)
+        row.ar = ar
+        row:SetScript("OnEnter", function(self)
+            if self._name then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT") ; GameTooltip:SetText(self._name, 1, 1, 1)
+                GameTooltip:AddLine("Click to whisper", 0.5, 0.5, 0.5) ; GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:Hide() ; nitFriendsRows[i] = row
+    end
+end
+
+-- ============================================================
+-- SC_BroadcastLockouts: send all alts' lockouts to chat
+-- ============================================================
+function SC_BroadcastLockouts()
+    local now = time()
+    local chars = {}  -- [{name, locks=[{name,diff,reset}]}]
+
+    local hasNIT = NIT and NIT.db and NIT.db.global
+    if hasNIT then
+        local realm = GetRealmName and GetRealmName() or ""
+        local myChars = NIT.db.global[realm] and NIT.db.global[realm].myChars
+        if myChars then
+            local me = UnitName("player") or ""
+            local names = {}
+            for cn in pairs(myChars) do names[#names+1] = cn end
+            table.sort(names, function(a,b)
+                if a == me then return true end
+                if b == me then return false end
+                return a < b
+            end)
+            for _, cn in ipairs(names) do
+                local saved = myChars[cn] and myChars[cn].savedInstances
+                if saved and next(saved) then
+                    local locks = {}
+                    for _, inst in pairs(saved) do locks[#locks+1] = inst end
+                    table.sort(locks, function(a,b) return (a.resetTime or 0) < (b.resetTime or 0) end)
+                    chars[#chars+1] = {name=cn, locks=locks}
+                end
+            end
+        end
+    end
+
+    if #chars == 0 then
+        local numSaved = GetNumSavedInstances and GetNumSavedInstances() or 0
+        if numSaved > 0 then
+            local me = UnitName("player") or "?"
+            local locks = {}
+            for i = 1, numSaved do
+                local n, _, reset, _, _, _, _, _, _, diffName = GetSavedInstanceInfo(i)
+                if n then locks[#locks+1] = {name=n, difficultyName=diffName, resetTime=reset} end
+            end
+            chars[#chars+1] = {name=me, locks=locks}
+        end
+    end
+
+    if #chars == 0 then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyChar]|r No lockouts to broadcast.")
+        return
+    end
+
+    local channel = "SAY"
+    if IsInRaid and IsInRaid() then channel = "RAID"
+    elseif IsInGroup and IsInGroup() then channel = "PARTY" end
+
+    local function FmtTime(secs)
+        if secs <= 0 then return "exp" end
+        local d = math.floor(secs / 86400)
+        local h = math.floor((secs % 86400) / 3600)
+        local m = math.floor((secs % 3600) / 60)
+        if d > 0 then return d.."d"..h.."h" end
+        if h > 0 then return h.."h"..m.."m" end
+        return m.."m"
+    end
+
+    for _, e in ipairs(chars) do
+        local parts = {}
+        for _, inst in ipairs(e.locks) do
+            local diff = inst.difficultyName or ""
+            local tr   = FmtTime((inst.resetTime or 0) - now)
+            parts[#parts+1] = inst.name .. (diff ~= "" and " ["..diff.."]" or "") .. " "..tr
+        end
+        local msg = "["..e.name.."] " .. table.concat(parts, " | ")
+        if #msg > 250 then msg = msg:sub(1, 247) .. "..." end
+        SendChatMessage(msg, channel)
+    end
+end
+
+-- ============================================================
+-- Macro wing — build and refresh
+-- ============================================================
+local function TryCreateMacro(m)
+    local idx = GetMacroIndexByName(m.name)
+    if idx and idx > 0 then
+        EditMacro(idx, m.name, m.icon, m.body)
+        print("|cff00ccff[SlyChar]|r Updated macro: |cffaadd88" .. m.name .. "|r")
+    else
+        local ok, err = pcall(CreateMacro, m.name, m.icon, m.body)
+        if ok then
+            print("|cff00ccff[SlyChar]|r Created macro: |cffaadd88" .. m.name .. "|r")
+        else
+            print("|cff00ccff[SlyChar]|r Macro slots full or error — |cffff8844" .. tostring(err) .. "|r")
+        end
+    end
+end
+
+local function BuildMacroWing(parent, W)
+    local playerClass = select(2, UnitClass("player")) or "WARRIOR"
+    local SPECS = CLASS_SPECS[playerClass] or { "All" }
+    local tabW  = math.floor(W / #SPECS)
+
+    -- Spec filter strip
+    local specStrip = CreateFrame("Frame", nil, parent)
+    specStrip:SetSize(W, 18)
+    specStrip:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+    FillBg(specStrip, 0.05, 0.05, 0.09, 1)
+
+    for i, spec in ipairs(SPECS) do
+        local btn = CreateFrame("Button", nil, specStrip)
+        btn:SetSize(tabW, 18)
+        btn:SetPoint("TOPLEFT", specStrip, "TOPLEFT", (i-1)*tabW, 0)
+        local bg = btn:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(btn) ; bg:SetColorTexture(0.05, 0.05, 0.09, 1)
+        btn.bg = bg
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(btn) ; hl:SetColorTexture(1, 1, 1, 0.07)
+        local tx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tx:SetFont(tx:GetFont(), 9, "OUTLINE") ; tx:SetAllPoints(btn)
+        tx:SetJustifyH("CENTER") ; tx:SetText(spec) ; tx:SetTextColor(0.50, 0.50, 0.60)
+        btn.tx = tx
+        btn:SetScript("OnClick", function()
+            macroSpecFilter = spec ; macroScrollOff = 0 ; SC_RefreshMacros()
+        end)
+        macroSpecBtns[spec] = btn
+    end
+
+    -- Macro rows
+    local ROW_H     = 17
+    local CREATE_W  = 46
+    local rowsFrame = CreateFrame("Frame", nil, parent)
+    rowsFrame:SetSize(W, MAX_MACRO_ROWS * (ROW_H + 1))
+    rowsFrame:SetPoint("TOPLEFT", specStrip, "BOTTOMLEFT", 0, -2)
+
+    for i = 1, MAX_MACRO_ROWS do
+        local row = CreateFrame("Button", nil, rowsFrame)
+        row:SetSize(W, ROW_H)
+        row:SetPoint("TOPLEFT", rowsFrame, "TOPLEFT", 0, -(i-1)*(ROW_H+1))
+        row:RegisterForClicks("LeftButtonUp")
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(row) ; bg:SetColorTexture(0, 0, 0, i%2==0 and 0.12 or 0)
+        row.bg = bg
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row) ; hl:SetColorTexture(1, 1, 1, 0.07)
+        -- Spec badge
+        local sp = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        sp:SetFont(sp:GetFont(), 7, "OUTLINE")
+        sp:SetPoint("LEFT", row, "LEFT", 2, 0) ; sp:SetWidth(28) ; sp:SetJustifyH("LEFT")
+        row.spec = sp
+        -- Name
+        local nm = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nm:SetFont(nm:GetFont(), 9, "")
+        nm:SetPoint("LEFT", row, "LEFT", 32, 0)
+        nm:SetWidth(W - 32 - CREATE_W - 6) ; nm:SetJustifyH("LEFT")
+        row.nm = nm
+        -- Create button
+        local cb = CreateFrame("Button", nil, row)
+        cb:SetSize(CREATE_W, ROW_H - 2) ; cb:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+        cb:EnableMouse(true)
+        local cbbg = cb:CreateTexture(nil, "BACKGROUND")
+        cbbg:SetAllPoints(cb) ; cbbg:SetColorTexture(0.08, 0.22, 0.08, 0.90)
+        local cbhl = cb:CreateTexture(nil, "HIGHLIGHT")
+        cbhl:SetAllPoints(cb) ; cbhl:SetColorTexture(0.25, 0.60, 0.25, 0.40)
+        local cbtx = cb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        cbtx:SetFont(cbtx:GetFont(), 8, "OUTLINE") ; cbtx:SetAllPoints(cb)
+        cbtx:SetJustifyH("CENTER") ; cbtx:SetText("|cff88ff88Create|r")
+        row.createBtn = cb
+        row:Hide()
+        macroRows[i] = row
+    end
+
+    -- Scroll info
+    local siTx = rowsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    siTx:SetFont(siTx:GetFont(), 8, "")
+    siTx:SetPoint("TOPLEFT", rowsFrame, "BOTTOMLEFT", 0, -2)
+    siTx:SetWidth(W) ; siTx:SetJustifyH("CENTER") ; siTx:SetTextColor(0.45, 0.45, 0.55)
+    macroScrollLabel = siTx
+end
+
+function SC_RefreshMacros()
+    local SPEC_COLORS = {
+        Arms="|cffffaa44", Fury="|cffff6644", Tank="|cff4488ff", PvP="|cffdd44ff",
+    }
+    -- Style spec filter tabs
+    for spec, btn in pairs(macroSpecBtns) do
+        local active = (macroSpecFilter == spec)
+        if active then
+            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1) ; btn.tx:SetTextColor(0.75, 0.88, 1.00)
+        else
+            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1) ; btn.tx:SetTextColor(0.40, 0.40, 0.50)
+        end
+    end
+    -- Filter macro list
+    local playerClass = select(2, UnitClass("player")) or "WARRIOR"
+    local macroList   = (SLYCHAR_CLASS_MACROS and SLYCHAR_CLASS_MACROS[playerClass]) or {}
+    local filtered = {}
+    for _, m in ipairs(macroList) do
+        if macroSpecFilter == "All" or m.spec == macroSpecFilter then
+            filtered[#filtered+1] = m
+        end
+    end
+    local total = #filtered
+    macroScrollOff = math.max(0, math.min(macroScrollOff, math.max(0, total - MAX_MACRO_ROWS)))
+    -- Populate rows
+    for i = 1, MAX_MACRO_ROWS do
+        local row = macroRows[i]
+        if not row then break end
+        local m = filtered[macroScrollOff + i]
+        if not m then row:Hide() else
+            row:Show()
+            local scol = SPEC_COLORS[m.spec] or "|cffaaaaaa"
+            row.spec:SetText(scol .. m.spec:sub(1, 4) .. "|r")
+            row.nm:SetText("|cffdddddd" .. m.name .. "|r")
+            local macro = m
+            row.createBtn:SetScript("OnClick", function() TryCreateMacro(macro) end)
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(macro.name, 1, 0.85, 0.30)
+                GameTooltip:AddLine(macro.tip, 0.80, 0.80, 0.80, true)
+                GameTooltip:AddLine(" ", 1, 1, 1)
+                for line in (macro.body or ""):gmatch("[^\n]+") do
+                    GameTooltip:AddLine("  " .. line, 0.55, 0.90, 0.55)
+                end
+                GameTooltip:AddLine(" ", 1, 1, 1)
+                GameTooltip:AddLine("|cff888888[Create] adds it to your macro book|r", 0.5, 0.5, 0.5)
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            row.bg:SetColorTexture(0, 0, 0, i%2==0 and 0.12 or 0)
+        end
+    end
+    if macroScrollLabel then
+        if total > MAX_MACRO_ROWS then
+            macroScrollLabel:SetText(string.format("%d\xe2\x80\x93%d / %d  \xe2\x87\x95",
+                macroScrollOff+1, math.min(macroScrollOff+MAX_MACRO_ROWS, total), total))
+        else
+            macroScrollLabel:SetText(total .. " macros")
+        end
+    end
 end
 
 local function FormatNITTime(secs)
@@ -3067,24 +3652,14 @@ function SC_RefreshNIT()
             btn.tx:SetTextColor(0.40, 0.40, 0.50)
         end
     end
-    StyleSub(nitSubLockBtn,    nitSubTab == "locks")
-    StyleSub(nitSubGuildBtn,   nitSubTab == "guild")
-    StyleSub(nitSubFriendsBtn, nitSubTab == "friends")
-    StyleSub(nitSubLayerBtn,   nitSubTab == "layer")
+    StyleSub(nitSubLockBtn,  nitSubTab == "locks")
+    StyleSub(nitSubLayerBtn, nitSubTab == "layer")
 
     -- Show / hide content panels
-    if nitLockContent    then nitLockContent:SetShown(nitSubTab == "locks") end
-    if nitGuildContent   then nitGuildContent:SetShown(nitSubTab == "guild") end
-    if nitFriendsContent then nitFriendsContent:SetShown(nitSubTab == "friends") end
-    if nitLayerContent   then nitLayerContent:SetShown(nitSubTab == "layer") end
+    if nitLockContent  then nitLockContent:SetShown(nitSubTab == "locks") end
+    if nitLayerContent then nitLayerContent:SetShown(nitSubTab == "layer") end
 
-    if nitSubTab == "guild" then
-        SC_RefreshNITGuild()
-        return
-    elseif nitSubTab == "friends" then
-        SC_RefreshNITFriends()
-        return
-    elseif nitSubTab == "layer" then
+    if nitSubTab == "layer" then
         SC_UpdateNITLayer("target")
         return
     end
@@ -3200,13 +3775,42 @@ function SC_RefreshNIT()
 end
 
 -- ============================================================
+-- Social wing refresh (Friends + Guild)
+-- ============================================================
+function SC_RefreshSocial()
+    local function StyleSub(btn, active)
+        if not btn then return end
+        if active then
+            btn.bg:SetColorTexture(0.12, 0.18, 0.32, 1)
+            btn.tx:SetTextColor(0.75, 0.88, 1.00)
+        else
+            btn.bg:SetColorTexture(0.05, 0.05, 0.09, 1)
+            btn.tx:SetTextColor(0.40, 0.40, 0.50)
+        end
+    end
+    StyleSub(nitSubGuildBtn,   socialSubTab == "guild")
+    StyleSub(nitSubFriendsBtn, socialSubTab == "friends")
+    if nitGuildContent   then nitGuildContent:SetShown(socialSubTab == "guild")   end
+    if nitFriendsContent then nitFriendsContent:SetShown(socialSubTab == "friends") end
+    if socialSubTab == "guild"   then SC_RefreshNITGuild()   end
+    if socialSubTab == "friends" then SC_RefreshNITFriends() end
+end
+
+-- ============================================================
 -- Tab switching + master refresh
 -- ============================================================
 function SC_SwitchTab(name)
     -- remap removed top-level keys to their new parents
     if name == "bars" then name = "sets" end
     if name == "rep" or name == "skills" then name = "misc" end
-    if name == "nit" then name = "social" end
+    -- social/nit are wings, not tabs — open the wing panel and redirect
+    if name == "nit" then
+        SC_ToggleWing("nit")
+        name = "stats"
+    elseif name == "social" then
+        SC_ToggleWing("social")
+        name = "stats"
+    end
     -- if still unknown, fall back to stats
     if not tabFrames[name] then name = "stats" end
     SC.db.lastTab = name
@@ -3313,9 +3917,69 @@ function SC_RefreshAll()
     if     tab == "stats"  then SC_RefreshStats()
     elseif tab == "sets"   then SC_RefreshSetsSub()
     elseif tab == "misc"   then SC_RefreshMisc()
-    elseif tab == "social" then SC_RefreshNIT()
     elseif tab == "suite"  then SC_RefreshSuite()
     end
+    -- Refresh whichever wing is currently open
+    if wingFrame and wingFrame:IsShown() then
+        if activeWingKey == "nit"    then SC_RefreshNIT()    end
+        if activeWingKey == "social" then SC_RefreshSocial() end
+        if activeWingKey == "macros" then SC_RefreshMacros() end
+    end
+end
+
+function SC_RefreshWhelp()
+    local panel = _G["SlyWhelpPanelFrame"]
+    if not panel then return end
+    local cont = panel._cont
+    if not cont then return end
+
+    for _, r in ipairs(panel._rows) do r:Hide() end
+    if panel._statusMsg then panel._statusMsg:Hide() end
+
+    local function showStatus(text)
+        if panel._statusMsg then
+            panel._statusMsg:SetText(text)
+            panel._statusMsg:Show()
+        end
+        cont:SetHeight(20)
+    end
+
+    if not (Whelp and Whelp.VendorManager and Whelp.Database and Whelp.db) then
+        showStatus("|cffff8844Whelp not loaded.|r")
+        return
+    end
+
+    local vendors = Whelp.VendorManager:GetVendors({}, "rating") or {}
+    if #vendors == 0 then
+        showStatus("|cff888888No vendors yet. Click +Add.|r")
+        return
+    end
+
+    local shown = math.min(#vendors, #panel._rows)
+    for i = 1, shown do
+        local vendor = vendors[i]
+        local row    = panel._rows[i]
+        row._nameFS:SetText("|cffffffff" .. (vendor.name or "Unknown") .. "|r")
+        local avg    = vendor.averageRating or 0
+        local filled = math.min(5, math.max(0, math.floor(avg + 0.5)))
+        local stars  = string.rep("*", filled) .. string.rep("-", 5 - filled)
+        row._ratingFS:SetText(string.format("|cffffd700%s|r |cff888888%.1f (%d)|r",
+            stars, avg, vendor.reviewCount or 0))
+        local vref = vendor
+        row._viewBtn:SetScript("OnClick", function()
+            if Whelp and Whelp.UI and Whelp.UI.MainFrame then
+                local mf = Whelp.UI.MainFrame:Create()
+                Whelp.UI.MainFrame:SelectTab("browse")
+                mf:Show()
+                -- navigate to detail if VendorDetail available
+                if Whelp.UI.VendorDetail then
+                    Whelp.UI.VendorDetail:Show(vref)
+                end
+            end
+        end)
+        row:Show()
+    end
+    cont:SetHeight(math.max(20, shown * 28))
 end
 
 -- ============================================================
@@ -3390,8 +4054,8 @@ local function SC_OpenPanel(addonName, frameGlobal, fallbackFn)
     end
 end
 
--- Wing Panel — kept alive so BuildWingFrame's spellbook pane compiles cleanly;
--- no strip button currently opens it.
+-- Wing Panel — slides out to the right of the main frame.
+-- Keys: "social" (NIT), "spells", "talents"
 -- ============================================================
 function SC_ToggleWing(key)
     if not wingFrame then return end
@@ -3402,9 +4066,17 @@ function SC_ToggleWing(key)
     for k, p in pairs(wingPanes) do
         if k == key then p:Show() else p:Hide() end
     end
-    if wingTitleTx then wingTitleTx:SetText(key) end
+    local macrosTitle = ((UnitClass and UnitClass("player")) or "Class") .. " Macros"
+    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents", macros=macrosTitle, rep="Reputation", skills="Skills", honor="Honor" }
+    if wingTitleTx then wingTitleTx:SetText(WING_TITLES[key] or key) end
     wingFrame:Show()
-    if key == "spells" then SC_RefreshSpells() end
+    if key == "spells"  then SC_RefreshSpells()      end
+    if key == "social"  then SC_RefreshSocial()      end
+    if key == "nit"     then SC_RefreshNIT()         end
+    if key == "macros"  then SC_RefreshMacros()      end
+    if key == "rep"     then SC_RefreshReputation()  end
+    if key == "skills"  then SC_RefreshSkills()      end
+    if key == "honor"   then SC_RefreshHonor()       end
 end
 
 
@@ -3452,19 +4124,18 @@ local function BuildWingFrame(mainFrame)
     f:SetFrameLevel(mainFrame:GetFrameLevel())
     f:Hide()
     wingFrame = f
-    FillBg(f, 0.04, 0.04, 0.07, 1)
+    ThemeFill(f, "sideBg", 0.04, 0.04, 0.07, 1)
 
-    -- Left join border
-    local lbord = f:CreateTexture(nil, "ARTWORK")
+    -- Left join border (uses theme border colour)
+    local lbord = ThemeTex(f, "border", "ARTWORK", 0.25, 0.20, 0.38, 1)
     lbord:SetSize(2, FRAME_H)
     lbord:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    lbord:SetColorTexture(0.25, 0.20, 0.38, 1)
 
     -- Header
     local hdr = CreateFrame("Frame", nil, f)
     hdr:SetSize(WING_W - 2, HDR_H)
     hdr:SetPoint("TOPLEFT", f, "TOPLEFT", 2, 0)
-    FillBg(hdr, 0.07, 0.06, 0.12, 1)
+    ThemeFill(hdr, "headerBg", 0.07, 0.06, 0.12, 1)
 
     local htx = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     htx:SetFont(htx:GetFont(), 12, "OUTLINE")
@@ -3480,16 +4151,15 @@ local function BuildWingFrame(mainFrame)
         f:Hide() ; activeWingKey = nil
     end)
 
-    local hdrSep = f:CreateTexture(nil, "ARTWORK")
+    local hdrSep = ThemeTex(f, "sep", "ARTWORK", 0.25, 0.20, 0.38, 1)
     hdrSep:SetSize(WING_W, 1)
     hdrSep:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -HDR_H)
-    hdrSep:SetColorTexture(0.25, 0.20, 0.38, 1)
 
     -- ---- Talent Pane ----
     local talentPane = CreateFrame("Frame", nil, f)
     talentPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
     talentPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
-    FillBg(talentPane, 0.04, 0.04, 0.07, 1)
+    ThemeFill(talentPane, "sideBg", 0.04, 0.04, 0.07, 1)
     wingPanes["talents"] = talentPane
 
     -- Talent pane is an empty backdrop; the native TalentFrame is reparented
@@ -3500,7 +4170,7 @@ local function BuildWingFrame(mainFrame)
     spellPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
     spellPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
     spellPane:Hide()
-    FillBg(spellPane, 0.04, 0.04, 0.07, 1)
+    ThemeFill(spellPane, "sideBg", 0.04, 0.04, 0.07, 1)
     wingPanes["spells"] = spellPane
 
     local spellScroll = CreateFrame("ScrollFrame", nil, spellPane, "UIPanelScrollFrameTemplate")
@@ -3528,11 +4198,133 @@ local function BuildWingFrame(mainFrame)
         spellRows[i] = {frame=row, lbl=lbl, rank=rank, spellIdx=nil}
     end
 
+    -- ---- NIT Pane (Lockouts + Layer) ----
+    local nitPane = CreateFrame("Frame", nil, f)
+    nitPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    nitPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    nitPane:Hide()
+    ThemeFill(nitPane, "sideBg", 0.04, 0.04, 0.07, 1)
+    wingPanes["nit"] = nitPane
+
+    local nitCont = CreateFrame("Frame", nil, nitPane)
+    nitCont:SetPoint("TOPLEFT", nitPane, "TOPLEFT", PAD, -4)
+    nitCont:SetSize(WING_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)
+    BuildNitRows(nitCont, WING_W - PAD*2)
+
+    nitPane:EnableMouseWheel(true)
+    nitPane:SetScript("OnMouseWheel", function(self, delta)
+        nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
+        SC_RefreshNIT()
+    end)
+
+    -- ---- Social Pane (Friends + Guild) ----
+    local socialPane = CreateFrame("Frame", nil, f)
+    socialPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    socialPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    socialPane:Hide()
+    ThemeFill(socialPane, "sideBg", 0.04, 0.04, 0.07, 1)
+    wingPanes["social"] = socialPane
+
+    local socialCont = CreateFrame("Frame", nil, socialPane)
+    socialCont:SetPoint("TOPLEFT", socialPane, "TOPLEFT", PAD, -4)
+    socialCont:SetSize(WING_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)
+    BuildSocialRows(socialCont, WING_W - PAD*2)
+
+    -- ---- Macros Pane (Warrior macro library) ----
+    local macroPaneF = CreateFrame("Frame", nil, f)
+    macroPaneF:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    macroPaneF:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    macroPaneF:Hide()
+    ThemeFill(macroPaneF, "sideBg", 0.04, 0.04, 0.07, 1)
+    wingPanes["macros"] = macroPaneF
+
+    local macroCont = CreateFrame("Frame", nil, macroPaneF)
+    macroCont:SetPoint("TOPLEFT", macroPaneF, "TOPLEFT", PAD, -4)
+    macroCont:SetSize(WING_W - PAD*2, 18 + MAX_MACRO_ROWS * 18 + 14)
+    BuildMacroWing(macroCont, WING_W - PAD*2)
+
+    macroPaneF:EnableMouseWheel(true)
+    macroPaneF:SetScript("OnMouseWheel", function(self, delta)
+        macroScrollOff = math.max(0, macroScrollOff - delta)
+        SC_RefreshMacros()
+    end)
+
+    -- ---- Rep Pane ----
+    local repPane = CreateFrame("Frame", nil, f)
+    repPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    repPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    repPane:Hide()
+    wingPanes["rep"] = repPane
+
+    local repPaneScroll = CreateFrame("ScrollFrame", nil, repPane, "UIPanelScrollFrameTemplate")
+    repPaneScroll:SetPoint("TOPLEFT",     repPane, "TOPLEFT",      PAD, -4)
+    repPaneScroll:SetPoint("BOTTOMRIGHT", repPane, "BOTTOMRIGHT", -22,   4)
+    local repPaneCont = CreateFrame("Frame", nil, repPaneScroll)
+    repPaneCont:SetSize(WING_W - PAD*2 - 22, MAX_REP_ROWS * 16)
+    repPaneScroll:SetScrollChild(repPaneCont)
+    BuildRepRows(repPaneCont)
+    repPane:EnableMouseWheel(true)
+    repPane:SetScript("OnMouseWheel", function(self, delta)
+        repPaneScroll:SetVerticalScroll(
+            math.max(0, repPaneScroll:GetVerticalScroll() - delta * 20))
+    end)
+
+    -- ---- Skills Pane ----
+    local skillPane = CreateFrame("Frame", nil, f)
+    skillPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    skillPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    skillPane:Hide()
+    wingPanes["skills"] = skillPane
+
+    local skillPaneScroll = CreateFrame("ScrollFrame", nil, skillPane, "UIPanelScrollFrameTemplate")
+    skillPaneScroll:SetPoint("TOPLEFT",     skillPane, "TOPLEFT",      PAD, -4)
+    skillPaneScroll:SetPoint("BOTTOMRIGHT", skillPane, "BOTTOMRIGHT", -22,   4)
+    local skillPaneCont = CreateFrame("Frame", nil, skillPaneScroll)
+    skillPaneCont:SetSize(WING_W - PAD*2 - 22, MAX_SKILL_ROWS * 14)
+    skillPaneScroll:SetScrollChild(skillPaneCont)
+    BuildSkillRows(skillPaneCont)
+    skillPane:EnableMouseWheel(true)
+    skillPane:SetScript("OnMouseWheel", function(self, delta)
+        skillPaneScroll:SetVerticalScroll(
+            math.max(0, skillPaneScroll:GetVerticalScroll() - delta * 16))
+    end)
+
+    -- ---- Honor Pane ----
+    local honorPane = CreateFrame("Frame", nil, f)
+    honorPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    honorPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    honorPane:Hide()
+    wingPanes["honor"] = honorPane
+    miscUI.honorContent = honorPane   -- SC_RefreshHonor guards on IsShown()
+
+    local honorPaneRows = {}
+    for i = 1, 11 do
+        local row = CreateFrame("Frame", nil, honorPane)
+        row:SetPoint("TOPLEFT",  honorPane, "TOPLEFT",   PAD, -((i-1)*14 + 4))
+        row:SetPoint("TOPRIGHT", honorPane, "TOPRIGHT", -PAD, -((i-1)*14 + 4))
+        row:SetHeight(14) ; row:Hide()
+        local rbg = row:CreateTexture(nil, "BACKGROUND")
+        rbg:SetAllPoints() ; rbg:SetColorTexture(0, 0, 0, 0)
+        row.bg = rbg
+        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetFont(lbl:GetFont(), 9, "")
+        lbl:SetPoint("LEFT", row, "LEFT", 0, 0)
+        lbl:SetWidth((WING_W - PAD*2) * 0.52) ; lbl:SetJustifyH("LEFT")
+        row.lbl = lbl
+        local val = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        val:SetFont(val:GetFont(), 9, "")
+        val:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        val:SetWidth((WING_W - PAD*2) * 0.46) ; val:SetJustifyH("RIGHT")
+        row.val = val
+        honorPaneRows[i] = row
+    end
+    miscUI._honorRows = honorPaneRows
+
     -- Wing footer stripe
     local wingFoot = CreateFrame("Frame", nil, f)
     wingFoot:SetSize(WING_W, FOOT_H)
     wingFoot:SetPoint("BOTTOM", f, "BOTTOM", 0, 0)
-    FillBg(wingFoot, 0.07, 0.07, 0.10, 1)
+    ThemeFill(wingFoot, "footBg", 0.07, 0.07, 0.10, 1)
 end
 
 -- ============================================================
@@ -3544,10 +4336,14 @@ function SC_BuildMain()
     local f = CreateFrame("Frame", "SlyCharMainFrame", UIParent)
     f:SetSize(FRAME_W, FRAME_H)
     f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel(100)  -- pre-set above CharacterFrame; avoid level changes in combat
     f:SetMovable(true)
     f:EnableMouse(false)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStart", function(self)
+        -- StartMoving is combat-restricted on frames with secure children.
+        if not InCombatLockdown() then self:StartMoving() end
+    end)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         local pt, _, _, x, y = self:GetPoint()
@@ -3582,10 +4378,24 @@ function SC_BuildMain()
     headerInfo:SetPoint("CENTER", hdr, "CENTER", 0, 0)
     headerInfo:SetTextColor(0.65, 0.65, 0.65)
 
-    local closeBtn = CreateFrame("Button", nil, hdr, "UIPanelCloseButton")
+    -- Plain (non-secure) close button — works in combat, no UIPanelCloseButton template
+    local closeBtn = CreateFrame("Button", nil, hdr)
     closeBtn:SetSize(24, 24)
     closeBtn:SetPoint("RIGHT", hdr, "RIGHT", -2, 0)
+    closeBtn:EnableMouse(true)
+    closeBtn:RegisterForClicks("LeftButtonUp")
+    local closeBg = closeBtn:CreateTexture(nil, "BACKGROUND")
+    closeBg:SetAllPoints() ; closeBg:SetColorTexture(0, 0, 0, 0)
+    local closeHl = closeBtn:CreateTexture(nil, "HIGHLIGHT")
+    closeHl:SetAllPoints() ; closeHl:SetColorTexture(0.9, 0.2, 0.2, 0.35)
+    local closeTx = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    closeTx:SetFont(closeTx:GetFont(), 16, "OUTLINE")
+    closeTx:SetAllPoints() ; closeTx:SetJustifyH("CENTER") ; closeTx:SetJustifyV("MIDDLE")
+    closeTx:SetText("\195\151")  -- UTF-8 × (U+00D7)
+    closeTx:SetTextColor(0.80, 0.30, 0.30)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
+    closeBtn:SetScript("OnEnter", function() closeBg:SetColorTexture(0.7, 0.15, 0.15, 0.40) end)
+    closeBtn:SetScript("OnLeave", function() closeBg:SetColorTexture(0, 0, 0, 0) end)
 
     local resetBtn = CreateFrame("Button", nil, hdr, "UIPanelButtonTemplate")
     resetBtn:SetSize(18, 18)
@@ -3601,10 +4411,49 @@ function SC_BuildMain()
     end)
     resetBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Open native character screen button
+    local chrBtn = CreateFrame("Button", nil, hdr)
+    chrBtn:SetSize(32, 18)
+    chrBtn:SetPoint("RIGHT", resetBtn, "LEFT", -4, 0)
+    chrBtn:EnableMouse(true)
+    chrBtn:RegisterForClicks("LeftButtonUp")
+    local chrBtnBg = chrBtn:CreateTexture(nil, "BACKGROUND")
+    chrBtnBg:SetAllPoints(chrBtn) ; chrBtnBg:SetColorTexture(0.08, 0.14, 0.08, 0.90)
+    local chrBtnHl = chrBtn:CreateTexture(nil, "HIGHLIGHT")
+    chrBtnHl:SetAllPoints(chrBtn) ; chrBtnHl:SetColorTexture(1, 1, 1, 0.12)
+    local chrBtnTx = chrBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    chrBtnTx:SetFont(chrBtnTx:GetFont(), 9, "OUTLINE")
+    chrBtnTx:SetAllPoints(chrBtn) ; chrBtnTx:SetJustifyH("CENTER")
+    chrBtnTx:SetText("|cff88ff88Chr|r")
+    chrBtn:SetScript("OnClick", function()
+        -- Use _skipHook so the CharacterFrame OnShow interceptor ignores this click.
+        SC._skipHook = true
+        if CharacterFrame:IsShown() then
+            CharacterFrame:Hide()
+        else
+            -- Show directly (not via ShowUIPanel/ToggleCharacter) to avoid the
+            -- UISpecialFrames auto-hide that would close SlyChar.
+            CharacterFrame:Show()
+            -- Re-show SlyChar in case WoW triggered any hide side-effect.
+            if SlyCharMainFrame and not SlyCharMainFrame:IsShown() then
+                SlyCharMainFrame:Show()
+            end
+        end
+        SC._skipHook = false
+    end)
+    chrBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText("Toggle paper-doll frame", 1, 1, 1)
+        GameTooltip:AddLine("Opens the default WoW character frame alongside SlyChar", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("Required for enchant scroll targeting", 0.5, 0.5, 0.5)
+        GameTooltip:Show()
+    end)
+    chrBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     -- Theme cycle button
     local themeBtn = CreateFrame("Button", nil, hdr)
     themeBtn:SetSize(56, 18)
-    themeBtn:SetPoint("RIGHT", resetBtn, "LEFT", -4, 0)
+    themeBtn:SetPoint("RIGHT", chrBtn, "LEFT", -4, 0)
     themeBtn:EnableMouse(true)
     themeBtn:RegisterForClicks("LeftButtonUp")
     local themeBtnBg = themeBtn:CreateTexture(nil, "BACKGROUND")
@@ -3629,6 +4478,16 @@ function SC_BuildMain()
     end)
     themeBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     themeRefs.themeBtn = themeBtnTx
+
+    -- Header drag: drag the empty chrome area to move the whole frame
+    hdr:EnableMouse(true)
+    hdr:RegisterForDrag("LeftButton")
+    hdr:SetScript("OnDragStart", function() f:StartMoving() end)
+    hdr:SetScript("OnDragStop", function()
+        f:StopMovingOrSizing()
+        local pt, _, _, x, y = f:GetPoint()
+        SC.db.position = { point = pt or "CENTER", x = x or 0, y = y or 0 }
+    end)
 
     local hdrSep = f:CreateTexture(nil, "ARTWORK")
     hdrSep:SetSize(FRAME_W, 1)
@@ -3663,8 +4522,10 @@ function SC_BuildMain()
             COL_R, SLOT_TOP - (i-1)*(SLOT_S+SLOT_GAP))
     end
     for i, s in ipairs(WEAPON_SLOTS) do
-        BuildSlot(charBody, s.id, s.label,
-            WPN_START + (i-1)*(SLOT_S+WPN_GAP), WPN_Y)
+        if s.id ~= 0 or _classUsesAmmo then
+            BuildSlot(charBody, s.id, s.label,
+                WPN_START + (i-1)*(SLOT_S+WPN_GAP), WPN_Y)
+        end
     end
 
     -- Player model
@@ -3708,13 +4569,12 @@ function SC_BuildMain()
     tabBar:SetPoint("TOPLEFT", side, "TOPLEFT", 0, 0)
     themeRefs.tabBarBg = FillBg(tabBar, 0.07, 0.07, 0.11, 1)
 
-    local tbW = math.floor(SIDE_W / 4)
     local tabDefs = {
         {key="stats",  label="Stats"},
         {key="sets",   label="Sets"},
-        {key="misc",   label="Misc"},
-        {key="social", label="Social"},
+        {key="misc",   label="Apps"},
     }
+    local tbW = math.floor(SIDE_W / #tabDefs)
     for i, td in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, tabBar)
         btn:SetSize(tbW, 24)
@@ -3949,93 +4809,121 @@ function SC_BuildMain()
         setsUI.subTab = "bis" ; SC_RefreshSetsSub()
     end)
 
-    -- Misc tab (Rep + Skills as sub-tabs)
+    -- Apps tab — centralized launcher for all panels & wing flyouts
     local miscTab = CreateFrame("Frame", nil, side)
     miscTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
     miscTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
     miscTab:SetHeight(tcH) ; miscTab:Hide()
     tabFrames["misc"] = miscTab
 
-    -- Sub-tab strip (Rep | Skills) — identical pattern to NIT
-    local mW = SIDE_W
-    local mBW = math.floor(mW / 2)
+    -- Build the apps grid lazily on first show (ensures wingFrame exists)
+    local appsBuilt = false
+    miscTab:SetScript("OnShow", function()
+        if appsBuilt then return end
+        appsBuilt = true
+        local APP_ITEMS = {
+            { tip="Reputation",      desc="Factions & standing",             lbl="Rep", r=0.70, g=0.85, b=1.00,
+              fn=function() SC_ToggleWing("rep")    end },
+            { tip="Skills",          desc="Professions & secondary skills",  lbl="Sk",  r=0.65, g=1.00, b=0.65,
+              fn=function() SC_ToggleWing("skills") end },
+            { tip="Honor",           desc="PvP honor, HKs & arena points",  lbl="Hk",  r=1.00, g=0.45, b=0.45,
+              fn=function() SC_ToggleWing("honor")  end },
+            { tip="Talents",         desc="Talent tree",                     lbl="T",   r=0.75, g=0.50, b=1.00,
+              fn=function() SC_ToggleSidePanel(SC_GetTalentFrame()) end },
+            { tip="Spellbook",       desc="Spells & abilities",              lbl="Sp",  r=0.35, g=0.70, b=1.00,
+              fn=function() SC_OpenPanel("Blizzard_SpellBookUI","SpellBookFrame",ToggleSpellBook) end },
+            { tip="Quest Log",       desc="Active quests",                   lbl="Q",   r=1.00, g=0.78, b=0.15,
+              fn=function() SC_OpenPanel("Blizzard_QuestLog","QuestLogFrame",ToggleQuestLog) end },
+            { tip="World Map",       desc="World map & locations",           lbl="M",   r=0.25, g=0.85, b=0.30,
+              fn=function() SC_OpenPanel("Blizzard_MapCanvas","WorldMapFrame",ToggleWorldMap) end },
+            { tip="Bags",            desc="Bag window",                      lbl="B",   r=0.85, g=0.65, b=0.20,
+              fn=function()
+                  if SlyBagFrame then
+                      if SlyBagFrame:IsShown() then SlyBagFrame:Hide()
+                      else
+                          if SlyBag_Refresh then SlyBag_Refresh() end
+                          SlyBagFrame:ClearAllPoints()
+                          SlyBagFrame:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
+                          SlyBagFrame:Show()
+                      end
+                  end
+              end },
+            { tip="Loot SR",         desc="Soft Res & loot rolls",           lbl="SR",  r=0.20, g=0.90, b=0.50,
+              fn=function()
+                  if SlyLootPanel and SlyLootPanel:IsShown() then SlyLootPanel:Hide() ; return end
+                  if SL_OpenSRTab then SL_OpenSRTab() elseif SL_BuildUI then SL_BuildUI() end
+                  if SlyCharMainFrame and SlyLootPanel and SlyLootPanel:IsShown() then
+                      SlyLootPanel:SetUserPlaced(true)
+                      SlyLootPanel:ClearAllPoints()
+                      SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
+                  end
+              end },
+            { tip="Whelp",           desc="Vendor ratings & reviews",        lbl="Wh",  r=0.20, g=0.78, b=1.00,
+              fn=function()
+                  local wp = _G["SlyWhelpPanelFrame"]
+                  if wp then if wp:IsShown() then wp:Hide() else wp:Show() end end
+              end },
+            { tip="Class Macros",    desc="Macro library for your class",    lbl="Mc",  r=0.95, g=0.70, b=0.20,
+              fn=function() SC_ToggleWing("macros") end },
+            { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.40, g=0.90, b=0.60,
+              fn=function() SC_ToggleWing("social") end },
+            { tip="Lockouts",        desc="Alt lockouts & layer detection",   lbl="NIT", r=0.30, g=0.80, b=1.00,
+              fn=function() SC_ToggleWing("nit")    end },
+        }
+        -- 2-column grid: ceil(13/2)=7 rows × 44px = 322px + 4px top pad = 326px ≤ tcH(329)
+        local ROW_H   = 44
+        local COL_GAP = 4
+        local appW    = SIDE_W - PAD * 2                          -- 314
+        local colW    = math.floor((appW - COL_GAP) / 2)         -- 155
+        for i, item in ipairs(APP_ITEMS) do
+            local col    = (i - 1) % 2                           -- 0 = left, 1 = right
+            local rowIdx = math.floor((i - 1) / 2)              -- 0-based row
+            local xOff   = PAD + col * (colW + COL_GAP)
+            local yOff   = -(rowIdx * (ROW_H + 2) + 4)
 
-    local function MakeMiscSubBtn(label, x)
-        local btn = CreateFrame("Button", nil, miscTab)
-        btn:SetSize(mBW, 16)
-        btn:SetPoint("TOPLEFT", miscTab, "TOPLEFT", x, 0)
-        local bbg = btn:CreateTexture(nil, "BACKGROUND")
-        bbg:SetAllPoints() ; bbg:SetColorTexture(0.05, 0.05, 0.09, 1)
-        btn.bg = bbg
-        local btx = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        btx:SetFont(btx:GetFont(), 9, "") ; btx:SetAllPoints()
-        btx:SetJustifyH("CENTER") ; btx:SetText(label)
-        btx:SetTextColor(0.40, 0.40, 0.50)
-        btn.tx = btx
-        return btn
-    end
-    miscUI.subRepBtn   = MakeMiscSubBtn("Reputation", 0)
-    miscUI.subSkillBtn = MakeMiscSubBtn("Skills",     mBW)
+            local btn = CreateFrame("Button", nil, miscTab)
+            btn:SetSize(colW, ROW_H)
+            btn:SetPoint("TOPLEFT", miscTab, "TOPLEFT", xOff, yOff)
+            btn:EnableMouse(true)
 
-    local miscSep = miscTab:CreateTexture(nil, "ARTWORK")
-    miscSep:SetSize(mW, 1)
-    miscSep:SetPoint("TOPLEFT", miscTab, "TOPLEFT", 0, -16)
-    miscSep:SetColorTexture(0.18, 0.18, 0.25, 1)
+            local rbg = btn:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints(btn)
+            rbg:SetColorTexture(item.r*0.07, item.g*0.07, item.b*0.07, 1)
+            btn._rbg = rbg
 
-    -- Rep content
-    local repContent = CreateFrame("Frame", nil, miscTab)
-    repContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
-    repContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
-    repContent:SetHeight(tcH - 17)
-    miscUI.repContent = repContent
+            local accent = btn:CreateTexture(nil, "ARTWORK")
+            accent:SetSize(3, ROW_H)
+            accent:SetPoint("LEFT", btn, "LEFT", 0, 0)
+            accent:SetColorTexture(item.r, item.g, item.b, 0.85)
 
-    local repScroll = CreateFrame("ScrollFrame", nil, repContent, "UIPanelScrollFrameTemplate")
-    repScroll:SetPoint("TOPLEFT",     repContent, "TOPLEFT",      PAD,  -2)
-    repScroll:SetPoint("BOTTOMRIGHT", repContent, "BOTTOMRIGHT", -22,    2)
-    local repCont = CreateFrame("Frame", nil, repScroll)
-    repCont:SetSize(SIDE_W - PAD*2 - 22, MAX_REP_ROWS * 16)
-    repScroll:SetScrollChild(repCont)
-    BuildRepRows(repCont)
+            local titleLbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            titleLbl:SetFont(titleLbl:GetFont(), 10, "OUTLINE")
+            titleLbl:SetPoint("TOPLEFT", btn, "TOPLEFT", 8, -6)
+            titleLbl:SetWidth(colW - 10) ; titleLbl:SetJustifyH("LEFT")
+            titleLbl:SetText(item.tip)
+            titleLbl:SetTextColor(
+                math.min(item.r * 0.80 + 0.20, 1),
+                math.min(item.g * 0.80 + 0.20, 1),
+                math.min(item.b * 0.80 + 0.20, 1))
 
-    -- Skills content
-    local skillContent = CreateFrame("Frame", nil, miscTab)
-    skillContent:SetPoint("TOPLEFT",  miscTab, "TOPLEFT",  0, -17)
-    skillContent:SetPoint("TOPRIGHT", miscTab, "TOPRIGHT", 0, -17)
-    skillContent:SetHeight(tcH - 17)
-    miscUI.skillContent = skillContent
+            local descLbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            descLbl:SetFont(descLbl:GetFont(), 8, "")
+            descLbl:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 8, 5)
+            descLbl:SetWidth(colW - 10) ; descLbl:SetJustifyH("LEFT")
+            descLbl:SetText(item.desc)
+            descLbl:SetTextColor(0.45, 0.45, 0.55)
 
-    local skillScroll = CreateFrame("ScrollFrame", nil, skillContent, "UIPanelScrollFrameTemplate")
-    skillScroll:SetPoint("TOPLEFT",     skillContent, "TOPLEFT",      PAD,  -2)
-    skillScroll:SetPoint("BOTTOMRIGHT", skillContent, "BOTTOMRIGHT", -22,    2)
-    local skillCont = CreateFrame("Frame", nil, skillScroll)
-    skillCont:SetSize(SIDE_W - PAD*2 - 22, MAX_SKILL_ROWS * 14)
-    skillScroll:SetScrollChild(skillCont)
-    BuildSkillRows(skillCont)
-
-    miscUI.subRepBtn:SetScript("OnClick", function()
-        miscUI.subTab = "rep" ; SC_RefreshMisc()
+            btn:SetScript("OnEnter", function()
+                rbg:SetColorTexture(item.r*0.20, item.g*0.20, item.b*0.20, 1)
+            end)
+            btn:SetScript("OnLeave", function()
+                rbg:SetColorTexture(item.r*0.07, item.g*0.07, item.b*0.07, 1)
+            end)
+            btn:SetScript("OnClick", function() item.fn() end)
+        end
     end)
-    miscUI.subSkillBtn:SetScript("OnClick", function()
-        miscUI.subTab = "skills" ; SC_RefreshMisc()
-    end)
 
-    -- NIT tab
-    local nitTab = CreateFrame("Frame", nil, side)
-    nitTab:SetPoint("TOPLEFT",  side, "TOPLEFT",  0, tcY)
-    nitTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
-    nitTab:SetHeight(tcH) ; nitTab:Hide()
-    tabFrames["social"] = nitTab
-
-    local nitCont = CreateFrame("Frame", nil, nitTab)
-    nitCont:SetPoint("TOPLEFT", nitTab, "TOPLEFT", PAD, -4)
-    nitCont:SetSize(SIDE_W - PAD*2, 17 + 18 + MAX_NIT_LOCK_ROWS * 18)   -- 17px: subtabs(16)+sep(1)
-    BuildNitRows(nitCont)
-
-    nitTab:EnableMouseWheel(true)
-    nitTab:SetScript("OnMouseWheel", function(self, delta)
-        nitLockScrollOffset = math.max(0, nitLockScrollOffset - delta)
-        SC_RefreshNIT()
-    end)
+    -- NIT tab is now a wing flyout; no side-panel tab for social.
 
     -- Quick-launch button strip (right edge)
     local stripDiv = f:CreateTexture(nil, "ARTWORK")
@@ -4046,9 +4934,15 @@ function SC_BuildMain()
     local btnStrip = CreateFrame("Frame", nil, f)
     btnStrip:SetSize(BTN_STRIP_W, FRAME_H - HDR_H - FOOT_H)
     btnStrip:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -HDR_H)
-    FillBg(btnStrip, 0.05, 0.04, 0.08, 1)
+    ThemeFill(btnStrip, "sideBg", 0.05, 0.04, 0.08, 1)
 
     local STRIP_BTNS = {
+        { tip="Reputation",  desc="Factions & standing",           lbl="Rep", r=0.70, g=0.85, b=1.00,
+          fn=function() SC_ToggleWing("rep")    end },
+        { tip="Skills",      desc="Professions & secondary skills", lbl="Sk",  r=0.65, g=1.00, b=0.65,
+          fn=function() SC_ToggleWing("skills") end },
+        { tip="Honor",       desc="PvP honor, HKs & arena points", lbl="Hk",  r=1.00, g=0.45, b=0.45,
+          fn=function() SC_ToggleWing("honor")  end },
         { tip="Talents",   desc="Open Talent frame",          lbl="T",   r=0.75, g=0.50, b=1.00,
           fn=function()
               SC_ToggleSidePanel(SC_GetTalentFrame())
@@ -4064,10 +4958,6 @@ function SC_BuildMain()
         { tip="World Map", desc="Open World Map",             lbl="M",   r=0.25, g=0.85, b=0.30,
           fn=function()
               SC_OpenPanel("Blizzard_MapCanvas", "WorldMapFrame", ToggleWorldMap)
-          end },
-        { tip="Friends",   desc="Open Friends / Social",      lbl="Fr",  r=0.25, g=0.70, b=1.00,
-          fn=function()
-              SC_OpenPanel("Blizzard_SocialUI", "FriendsFrame", ToggleFriendsFrame)
           end },
         { tip="Bag",       desc="Open bag window",               lbl="B",   r=0.85, g=0.65, b=0.20,
           fn=function()
@@ -4104,45 +4994,150 @@ function SC_BuildMain()
                   SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
               end
           end },
+        { tip="Whelp",      desc="Vendor ratings & reviews", lbl="Wh",  r=0.20, g=0.78, b=1.00,
+          fn=function()
+              local wp = _G["SlyWhelpPanelFrame"]
+              if wp then
+                  if wp:IsShown() then wp:Hide()
+                  else wp:Show() end
+              end
+          end },
+        { tip="Class Macros",   desc="Macro library for your class (by spec)",         lbl="Mc", r=0.95, g=0.70, b=0.20,
+          fn=function()
+              SC_ToggleWing("macros")
+          end },
+        { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.40, g=0.90, b=0.60,
+          fn=function()
+              SC_ToggleWing("social")
+          end },
+        { tip="Lockouts & Layer", desc="Alt instance lockouts, layer detection", lbl="NIT", r=0.30, g=0.80, b=1.00,
+          fn=function()
+              SC_ToggleWing("nit")
+          end },
     }
 
     local bSz = BTN_STRIP_W - 6  -- 26px buttons with 3px margin each side
+
+    -- ── Strip flyout menu ──────────────────────────────────────────────────────
+    -- One >> button on the strip opens a popup menu; each row runs its action.
+    local FLYOUT_W   = 152
+    local FLYOUT_RH  = 24
+    local FLYOUT_PAD = 4
+
+    local flyoutMenu = CreateFrame("Frame", "SlyCharStripFlyout", UIParent)
+    flyoutMenu:SetSize(FLYOUT_W, #STRIP_BTNS * FLYOUT_RH + FLYOUT_PAD * 2)
+    flyoutMenu:SetFrameStrata("DIALOG")
+    flyoutMenu:SetFrameLevel(f:GetFrameLevel() + 10)
+    flyoutMenu:Hide()
+
+    local fmBg = flyoutMenu:CreateTexture(nil, "BACKGROUND")
+    fmBg:SetAllPoints() ; fmBg:SetColorTexture(0.04, 0.03, 0.08, 0.97)
+    if flyoutMenu.SetBackdrop then
+        flyoutMenu:SetBackdrop({
+            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile=true, tileSize=16, edgeSize=8,
+            insets={left=2, right=2, top=2, bottom=2},
+        })
+        flyoutMenu:SetBackdropColor(0.04, 0.03, 0.08, 0.97)
+        flyoutMenu:SetBackdropBorderColor(0.25, 0.20, 0.38, 1)
+    end
+
+    flyoutMenu:SetScript("OnShow", function()
+        flyoutMenu:ClearAllPoints()
+        flyoutMenu:SetPoint("TOPLEFT", f, "TOPRIGHT", 2, -HDR_H)
+    end)
+
+    tinsert(UISpecialFrames, "SlyCharStripFlyout")
+
+    local stripFlyoutBtn  -- forward ref
+    flyoutMenu:HookScript("OnHide", function()
+        if stripFlyoutBtn and stripFlyoutBtn._lbl then
+            stripFlyoutBtn._lbl:SetText(">>") end
+    end)
+
     for i, bd in ipairs(STRIP_BTNS) do
-        local b = CreateFrame("Button", nil, btnStrip)
-        b:SetSize(bSz, bSz)
-        b:SetPoint("TOP", btnStrip, "TOP", 0, -4 - (i-1)*(bSz + 3))
-        b:EnableMouse(true)
+        local row = CreateFrame("Button", nil, flyoutMenu)
+        row:SetSize(FLYOUT_W - 4, FLYOUT_RH - 2)
+        row:SetPoint("TOPLEFT", flyoutMenu, "TOPLEFT", 2,
+                     -(FLYOUT_PAD + (i-1)*FLYOUT_RH))
+        row:EnableMouse(true)
 
-        -- border layer (1px colored outline via slightly-larger BACKGROUND texture)
-        local bord = b:CreateTexture(nil, "BACKGROUND")
-        bord:SetAllPoints(b)
-        bord:SetColorTexture(bd.r*0.45, bd.g*0.45, bd.b*0.45, 0.7)
+        local rowBg = row:CreateTexture(nil, "BACKGROUND")
+        rowBg:SetAllPoints(row)
+        rowBg:SetColorTexture(bd.r*0.08, bd.g*0.08, bd.b*0.08, 1)
 
-        -- inner fill (ARTWORK inset 1px to reveal border)
-        local bbg = b:CreateTexture(nil, "ARTWORK")
-        bbg:SetPoint("TOPLEFT",     b, "TOPLEFT",      1, -1)
-        bbg:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -1,  1)
-        bbg:SetColorTexture(bd.r*0.12, bd.g*0.12, bd.b*0.12, 1)
+        local accent = row:CreateTexture(nil, "ARTWORK")
+        accent:SetSize(3, FLYOUT_RH - 2)
+        accent:SetPoint("LEFT", row, "LEFT", 0, 0)
+        accent:SetColorTexture(bd.r, bd.g, bd.b, 0.85)
 
-        local lbl = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        lbl:SetFont(lbl:GetFont(), 8, "OUTLINE")
-        lbl:SetPoint("CENTER", b, "CENTER", 0, 0)
-        lbl:SetText(bd.lbl)
-        lbl:SetTextColor(bd.r, bd.g, bd.b)
+        local rlbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        rlbl:SetFont(rlbl:GetFont(), 9, "OUTLINE")
+        rlbl:SetPoint("LEFT", row, "LEFT", 8, 0)
+        rlbl:SetText(bd.tip)
+        rlbl:SetTextColor(
+            math.min(bd.r * 0.80 + 0.20, 1),
+            math.min(bd.g * 0.80 + 0.20, 1),
+            math.min(bd.b * 0.80 + 0.20, 1))
 
-        b:SetScript("OnEnter", function()
-            bbg:SetColorTexture(bd.r*0.30, bd.g*0.30, bd.b*0.30, 1)
-            GameTooltip:SetOwner(b, "ANCHOR_LEFT")
+        row:SetScript("OnEnter", function()
+            rowBg:SetColorTexture(bd.r*0.25, bd.g*0.25, bd.b*0.25, 1)
+            GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
             GameTooltip:SetText(bd.tip, 1, 1, 1)
             GameTooltip:AddLine(bd.desc, 0.7, 0.7, 0.7)
             GameTooltip:Show()
         end)
-        b:SetScript("OnLeave", function()
-            bbg:SetColorTexture(bd.r*0.12, bd.g*0.12, bd.b*0.12, 1)
+        row:SetScript("OnLeave", function()
+            rowBg:SetColorTexture(bd.r*0.08, bd.g*0.08, bd.b*0.08, 1)
             GameTooltip:Hide()
         end)
-        b:SetScript("OnClick", bd.fn)
+        row:SetScript("OnClick", function()
+            flyoutMenu:Hide()
+            bd.fn()
+        end)
     end
+
+    -- >> toggle button
+    stripFlyoutBtn = CreateFrame("Button", nil, btnStrip)
+    stripFlyoutBtn:SetSize(bSz, bSz)
+    stripFlyoutBtn:SetPoint("TOP", btnStrip, "TOP", 0, 0)
+    stripFlyoutBtn:EnableMouse(true)
+
+    local sfBord = stripFlyoutBtn:CreateTexture(nil, "BACKGROUND")
+    sfBord:SetAllPoints(stripFlyoutBtn)
+    sfBord:SetColorTexture(0.30*0.45, 0.25*0.45, 0.55*0.45, 0.7)
+
+    local sfBg = stripFlyoutBtn:CreateTexture(nil, "ARTWORK")
+    sfBg:SetPoint("TOPLEFT",     stripFlyoutBtn, "TOPLEFT",      1, -1)
+    sfBg:SetPoint("BOTTOMRIGHT", stripFlyoutBtn, "BOTTOMRIGHT", -1,  1)
+    sfBg:SetColorTexture(0.10, 0.08, 0.20, 1)
+
+    local sfLbl = stripFlyoutBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    sfLbl:SetFont(sfLbl:GetFont(), 9, "OUTLINE")
+    sfLbl:SetPoint("CENTER", stripFlyoutBtn, "CENTER", 0, 0)
+    sfLbl:SetText(">>")
+    sfLbl:SetTextColor(0.70, 0.65, 1.00)
+    stripFlyoutBtn._lbl = sfLbl
+
+    stripFlyoutBtn:SetScript("OnEnter", function()
+        sfBg:SetColorTexture(0.22, 0.18, 0.38, 1)
+        GameTooltip:SetOwner(stripFlyoutBtn, "ANCHOR_LEFT")
+        GameTooltip:SetText("Quick Launch", 1, 1, 1)
+        GameTooltip:AddLine("Open panel menu", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end)
+    stripFlyoutBtn:SetScript("OnLeave", function()
+        sfBg:SetColorTexture(0.10, 0.08, 0.20, 1)
+        GameTooltip:Hide()
+    end)
+    stripFlyoutBtn:SetScript("OnClick", function()
+        if flyoutMenu:IsShown() then
+            flyoutMenu:Hide() ; sfLbl:SetText(">>")
+        else
+            flyoutMenu:Show() ; sfLbl:SetText("<<")
+        end
+    end)
 
     -- ── Suite flyout panel (right-hand side panel outside the character sheet) ───
     do
@@ -4221,6 +5216,135 @@ function SC_BuildMain()
         suitePanel:HookScript("OnShow", function() SC_RefreshSuite() end)
     end
 
+    -- ── Whelp flyout panel (right-side) ────────────────────────────────────
+    do
+        local WP_W = 260
+        local WP_H = FRAME_H - HDR_H - FOOT_H
+        local wpanel = CreateFrame("Frame", "SlyWhelpPanelFrame", UIParent)
+        wpanel:SetSize(WP_W, WP_H)
+        wpanel:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, -HDR_H)
+        wpanel:SetFrameStrata("DIALOG")
+        wpanel:SetMovable(true)
+        wpanel:EnableMouse(true)
+        wpanel:RegisterForDrag("LeftButton")
+        wpanel:SetScript("OnDragStart", wpanel.StartMoving)
+        wpanel:SetScript("OnDragStop",  wpanel.StopMovingOrSizing)
+        wpanel:Hide()
+
+        -- Background
+        ThemeFill(wpanel, "frameBg", 0.04, 0.04, 0.08, 0.97)
+        local wpBord = wpanel:CreateTexture(nil, "OVERLAY")
+        wpBord:SetAllPoints(wpanel) ; wpBord:SetColorTexture(0.22, 0.18, 0.32, 1)
+        local wpInner = wpanel:CreateTexture(nil, "BACKGROUND")
+        wpInner:SetPoint("TOPLEFT",     wpanel, "TOPLEFT",      1, -1)
+        wpInner:SetPoint("BOTTOMRIGHT", wpanel, "BOTTOMRIGHT", -1,  1)
+        wpInner:SetColorTexture(0.04, 0.04, 0.08, 0.97)
+
+        -- Header bar
+        local wpHdr = CreateFrame("Frame", nil, wpanel)
+        wpHdr:SetSize(WP_W, HDR_H)
+        wpHdr:SetPoint("TOPLEFT", wpanel, "TOPLEFT", 0, 0)
+        ThemeFill(wpHdr, "headerBg", 0.07, 0.06, 0.13, 1)
+
+        local wpTitle = wpHdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        wpTitle:SetFont(wpTitle:GetFont(), 12, "OUTLINE")
+        wpTitle:SetPoint("LEFT", wpHdr, "LEFT", PAD, 0)
+        wpTitle:SetTextColor(0.40, 0.80, 1.00)
+        wpTitle:SetText("Whelp  |cffaaaaaa Vendor Ratings|r")
+
+        local wpClose = CreateFrame("Button", nil, wpHdr, "UIPanelCloseButton")
+        wpClose:SetSize(22, 22)
+        wpClose:SetPoint("RIGHT", wpHdr, "RIGHT", -2, 0)
+        wpClose:SetScript("OnClick", function() wpanel:Hide() end)
+
+        local wpAddBtn = CreateFrame("Button", nil, wpHdr, "UIPanelButtonTemplate")
+        wpAddBtn:SetSize(50, 18)
+        wpAddBtn:SetPoint("RIGHT", wpClose, "LEFT", -4, 0)
+        wpAddBtn:SetText("+Add")
+        wpAddBtn:SetScript("OnClick", function()
+            if Whelp and Whelp.UI and Whelp.UI.MainFrame then
+                local mf = Whelp.UI.MainFrame:Create()
+                Whelp.UI.MainFrame:SelectTab("addvendor")
+                mf:Show()
+            else
+                DEFAULT_CHAT_FRAME:AddMessage("|cff66d4ff[Whelp]|r Whelp is not loaded.")
+            end
+        end)
+
+        -- Header separator
+        local wpSep = wpanel:CreateTexture(nil, "ARTWORK")
+        wpSep:SetSize(WP_W, 1)
+        wpSep:SetPoint("TOPLEFT", wpanel, "TOPLEFT", 0, -HDR_H)
+        wpSep:SetColorTexture(0.25, 0.20, 0.38, 1)
+
+        -- Browse All button (footer)
+        local wpBrowse = CreateFrame("Button", nil, wpanel, "UIPanelButtonTemplate")
+        wpBrowse:SetSize(WP_W - 12, 18)
+        wpBrowse:SetPoint("BOTTOMLEFT", wpanel, "BOTTOMLEFT", 6, 4)
+        wpBrowse:SetText("Browse All in Whelp")
+        wpBrowse:SetScript("OnClick", function()
+            if Whelp and Whelp.UI and Whelp.UI.MainFrame then
+                local mf = Whelp.UI.MainFrame:Create()
+                mf:Show()
+            end
+        end)
+
+        -- Footer separator
+        local wpFSep = wpanel:CreateTexture(nil, "ARTWORK")
+        wpFSep:SetSize(WP_W, 1)
+        wpFSep:SetPoint("BOTTOMLEFT", wpanel, "BOTTOMLEFT", 0, 26)
+        wpFSep:SetColorTexture(0.18, 0.14, 0.28, 1)
+
+        -- Scroll area for vendor rows
+        local wpScroll = CreateFrame("ScrollFrame", nil, wpanel, "UIPanelScrollFrameTemplate")
+        wpScroll:SetPoint("TOPLEFT",     wpanel, "TOPLEFT",      6,   -(HDR_H + 2))
+        wpScroll:SetPoint("BOTTOMRIGHT", wpanel, "BOTTOMRIGHT", -22,   28)
+        local wpCont = CreateFrame("Frame", nil, wpScroll)
+        wpCont:SetSize(WP_W - 8 - 22, 1)
+        wpScroll:SetScrollChild(wpCont)
+
+        -- Status FontString (empty / error states)
+        local wpStatus = wpCont:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        wpStatus:SetPoint("TOPLEFT", wpCont, "TOPLEFT", 4, -6)
+        wpStatus:SetWidth(WP_W - 8 - 22) ; wpStatus:SetJustifyH("LEFT")
+        wpStatus:Hide()
+        wpanel._statusMsg = wpStatus
+
+        -- Pre-build 20 pooled vendor rows
+        local WRW = WP_W - 8 - 22
+        wpanel._cont = wpCont
+        wpanel._rows = {}
+        for i = 1, 20 do
+            local row = CreateFrame("Frame", nil, wpCont)
+            row:SetSize(WRW, 26)
+            row:SetPoint("TOPLEFT", wpCont, "TOPLEFT", 0, -((i-1)*28) - 2)
+            row:Hide()
+            local rowParity = (i % 2 == 0)
+            local rbg = row:CreateTexture(nil, "BACKGROUND")
+            rbg:SetAllPoints()
+            rbg:SetColorTexture(rowParity and 0.07 or 0.05,
+                                rowParity and 0.06 or 0.04,
+                                rowParity and 0.11 or 0.08, 0.9)
+            local nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            nameFS:SetFont(nameFS:GetFont(), 10, "")
+            nameFS:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -3)
+            nameFS:SetWidth(WRW - 50) ; nameFS:SetJustifyH("LEFT")
+            local ratingFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            ratingFS:SetFont(ratingFS:GetFont(), 9, "")
+            ratingFS:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, 3)
+            local viewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            viewBtn:SetSize(38, 18)
+            viewBtn:SetPoint("TOPRIGHT", row, "TOPRIGHT", -2, -4)
+            viewBtn:SetText("View")
+            row._nameFS   = nameFS
+            row._ratingFS = ratingFS
+            row._viewBtn  = viewBtn
+            wpanel._rows[i] = row
+        end
+
+        wpanel:HookScript("OnShow", function() SC_RefreshWhelp() end)
+    end
+
     -- Suite strip button (S) — toggles suite flyout above X button
     do
         local bS = CreateFrame("Button", nil, btnStrip)
@@ -4260,7 +5384,6 @@ function SC_BuildMain()
 
     -- Close-side-panel button (×) at bottom of strip
     do
-        local numBtns = #STRIP_BTNS
         local bX = CreateFrame("Button", nil, btnStrip)
         bX:SetSize(bSz, bSz)
         bX:SetPoint("BOTTOM", btnStrip, "BOTTOM", 0, 4)
@@ -4301,7 +5424,7 @@ function SC_BuildMain()
     ftxt:SetFont(ftxt:GetFont(), 8, "")
     ftxt:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     ftxt:SetTextColor(0.3, 0.3, 0.38)
-    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  strip: T·Sp·Q·M·Fr·PvP·G·SR·×")
+    ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  >> = panel menu  |  x = close panel")
 
     f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
     f:HookScript("OnHide", function(self)
@@ -4309,11 +5432,15 @@ function SC_BuildMain()
         SC_HidePicker()
         SC_CloseSidePanel()
         if wingFrame then wingFrame:Hide() ; activeWingKey = nil end
+        local fm = _G["SlyCharStripFlyout"]
+        if fm then fm:Hide() end
     end)
 
     BuildWingFrame(f)
     SlyCharMainFrame = f
-    tinsert(UISpecialFrames, "SlyCharMainFrame")
+    -- Do NOT register in UISpecialFrames: that causes CloseAllWindows()
+    -- (fired on TRADE_SHOW and similar events) to destroy our panel.
+    -- Escape handling is intentionally omitted; use C or the × button.
 
     SC_ApplyTheme(SC.db.theme or "shadow")
 end

@@ -1,0 +1,157 @@
+name: Release to CurseForge
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+
+env:
+  CF_API_KEY: ${{ secrets.CF_API_KEY }}
+  CF_PROJECT_ID: ${{ secrets.CF_PROJECT_ID }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  release:
+    name: Release Addon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing version: $VERSION"
+
+      - name: Update TOC version
+        run: |
+          sed -i "s/## Version:.*/## Version: ${{ steps.version.outputs.version }}/" Whelp.toc
+          cat Whelp.toc | grep "## Version"
+
+      - name: Package addon
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+
+          # Create release directory
+          mkdir -p release/Whelp
+
+          # Copy addon files (excluding dev files)
+          cp -r Core/ release/Whelp/
+          cp -r Data/ release/Whelp/
+          cp -r UI/ release/Whelp/
+          cp -r Libs/ release/Whelp/
+          cp Whelp.toc release/Whelp/
+          cp Whelp.lua release/Whelp/
+          cp Bindings.xml release/Whelp/
+
+          # Include docs if available
+          [ -f README.md ] && cp README.md release/Whelp/
+          [ -f LICENSE ] && cp LICENSE release/Whelp/
+          [ -f CHANGELOG.md ] && cp CHANGELOG.md release/Whelp/
+
+          # Create zip
+          cd release
+          zip -r "Whelp-${VERSION}.zip" Whelp/
+
+          echo "Created: Whelp-${VERSION}.zip"
+          ls -la
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Generate changelog from git commits
+          if [ -f CHANGELOG.md ]; then
+            # Extract relevant section from CHANGELOG.md
+            CHANGELOG=$(sed -n "/## \[v${{ steps.version.outputs.version }}\]/,/## \[v/p" CHANGELOG.md | head -n -1)
+          else
+            # Generate from recent commits
+            CHANGELOG=$(git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~10")..HEAD)
+          fi
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- Release version ${{ steps.version.outputs.version }}"
+          fi
+
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Whelp v${{ steps.version.outputs.version }}
+          body: |
+            ## Whelp v${{ steps.version.outputs.version }}
+
+            A Yelp-style vendor rating system for WoW TBC Anniversary 2026.
+
+            ### Changes
+            ${{ steps.changelog.outputs.changelog }}
+
+            ### Installation
+            1. Download `Whelp-${{ steps.version.outputs.version }}.zip`
+            2. Extract to your `World of Warcraft/_classic_/Interface/AddOns/` directory
+            3. Restart WoW or type `/reload`
+
+            ### Usage
+            - Type `/whelp` to open the main interface
+            - Click the minimap button for quick access
+          files: |
+            release/Whelp-${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false
+
+      - name: Upload to CurseForge
+        if: env.CF_API_KEY != ''
+        run: |
+          # Install BigWigsMods packager or use curl directly
+          # CurseForge API v2 upload
+
+          VERSION=${{ steps.version.outputs.version }}
+          PACKAGE_PATH="release/Whelp-${VERSION}.zip"
+
+          # Create metadata JSON
+          cat > metadata.json << EOF
+          {
+            "changelog": "${{ steps.changelog.outputs.changelog }}",
+            "changelogType": "markdown",
+            "displayName": "Whelp v${VERSION}",
+            "gameVersions": [9924],
+            "releaseType": "release"
+          }
+          EOF
+
+          # Note: Game version 9924 is for TBC Classic 2.5.4
+          # You may need to update this for TBC Anniversary 2026
+
+          echo "CurseForge upload configured"
+          echo "In production, uncomment the curl command below:"
+
+          # curl -X POST \
+          #   -H "x-api-token: ${CF_API_KEY}" \
+          #   -F "metadata=@metadata.json" \
+          #   -F "file=@${PACKAGE_PATH}" \
+          #   "https://wow.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file"
+
+          echo "CurseForge upload would be performed here"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whelp-release-${{ steps.version.outputs.version }}
+          path: release/Whelp-*.zip
+          retention-days: 90

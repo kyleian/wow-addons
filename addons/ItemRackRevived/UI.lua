@@ -15,7 +15,7 @@ local RIGHT_W       = FRAME_W - LEFT_W - 1  -- divider 1px
 local MAX_SET_ROWS  = 12    -- max visible set rows in the list
 
 -- References for later updating
-local slotIcons   = {}   -- [slotId] = { button, texture, border } 
+local slotIcons   = {}   -- [slotId] = { button, texture, border, badge }
 local setRowBtns  = {}   -- array of row button frames
 
 local selectedSet = nil  -- currently highlighted set name
@@ -55,6 +55,81 @@ end
 -- -----------------------------------------------------------------
 -- Slot icon button — shows item icon with quality border + tooltip
 -- -----------------------------------------------------------------
+
+-- Map each slot ID to the set of valid inventory types that can fill it.
+-- Used when scanning bags for alternatives to the currently equipped item.
+local SLOT_INVTYPES = {
+    [1]  = { INVTYPE_HEAD=true },
+    [2]  = { INVTYPE_NECK=true },
+    [3]  = { INVTYPE_SHOULDER=true },
+    [4]  = { INVTYPE_BODY=true },
+    [5]  = { INVTYPE_CHEST=true, INVTYPE_ROBE=true },
+    [6]  = { INVTYPE_WAIST=true },
+    [7]  = { INVTYPE_LEGS=true },
+    [8]  = { INVTYPE_FEET=true },
+    [9]  = { INVTYPE_WRIST=true },
+    [10] = { INVTYPE_HANDS=true },
+    [11] = { INVTYPE_FINGER=true },
+    [12] = { INVTYPE_FINGER=true },
+    [13] = { INVTYPE_TRINKET=true },
+    [14] = { INVTYPE_TRINKET=true },
+    [15] = { INVTYPE_CLOAK=true },
+    [16] = { INVTYPE_WEAPON=true, INVTYPE_TWOHWEAPON=true, INVTYPE_MAINHANDWEAPON=true },
+    [17] = { INVTYPE_WEAPON=true, INVTYPE_SHIELD=true, INVTYPE_HOLDABLE=true, INVTYPE_OFFHAND=true },
+    [18] = { INVTYPE_RANGED=true, INVTYPE_RANGEDRIGHT=true, INVTYPE_THROWN=true,
+             INVTYPE_GUN=true, INVTYPE_BOW=true, INVTYPE_CROSSBOW=true, INVTYPE_WAND=true },
+    [19] = { INVTYPE_TABARD=true },
+}
+
+-- Returns a list of { bag, bslot, itemId } for items in bags that can fill slotId.
+-- Shows ALL bag items whose inventory type matches the slot — including identical
+-- itemIDs — because a second copy of the same ring/trinket IS a valid alternative
+-- (e.g. you want to swap which ring is in slot 1 vs slot 2).
+local function GetBagAlternatives(slotId)
+    local validTypes = SLOT_INVTYPES[slotId]
+    if not validTypes then return {} end
+
+    local results = {}
+    local _GetContainerNumSlots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
+    local _GetContainerItemInfo = C_Container and function(b, s)
+        local info = C_Container.GetContainerItemInfo(b, s)
+        return info and info.itemID or nil
+    end or GetContainerItemID
+
+    for bag = 0, 4 do
+        local slots = _GetContainerNumSlots(bag)
+        for bslot = 1, slots do
+            local itemId = _GetContainerItemInfo(bag, bslot)
+            if itemId then
+                local _, _, _, _, _, _, _, _, invType = GetItemInfo(itemId)
+                if invType and validTypes[invType] then
+                    table.insert(results, { bag=bag, bslot=bslot, itemId=itemId })
+                end
+            end
+        end
+    end
+    return results
+end
+
+-- Equip the first bag alternative for slotId (swap with currently equipped item).
+local function CycleSlotAlternative(slotId)
+    if GetCursorInfo() or SpellIsTargeting() then return end
+    local alts = GetBagAlternatives(slotId)
+    if #alts == 0 then return end
+    local a = alts[1]
+    local _Pickup = C_Container and C_Container.PickupContainerItem or PickupContainerItem
+    _Pickup(a.bag, a.bslot)
+    local ok = pcall(PickupInventoryItem, slotId)
+    if not ok then ClearCursor(); return end
+    if GetCursorInfo() then
+        -- Displaced item on cursor — drop back into the vacated bag slot
+        local ok2 = pcall(_Pickup, a.bag, a.bslot)
+        if not ok2 or GetCursorInfo() then ClearCursor() end
+    end
+    -- Refresh after a short delay to let the server confirm the swap
+    C_Timer.After(0.15, IRR_UpdateSlots)
+end
+
 local EMPTY_SLOT_TEXTURES = {
     [1]  = "Interface\\PaperDoll\\UI-PaperDoll-Slot-Head",
     [2]  = "Interface\\PaperDoll\\UI-PaperDoll-Slot-Neck",
@@ -114,13 +189,33 @@ local function CreateSlotIcon(parent, slotDef, col, row)
         if not IRR.db.options.showTooltips then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetInventoryItem("player", slotDef.id)
+        local alts = GetBagAlternatives(slotDef.id)
+        if #alts > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("|cff00ff88" .. #alts .. " alternative" .. (#alts == 1 and "" or "s") .. " in bags — click to swap|r", 1, 1, 1, true)
+        end
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function(self)
         GameTooltip:Hide()
     end)
 
-    slotIcons[slotDef.id] = { btn=btn, tex=tex, border=border }
+    -- Left-click: equip the next bag alternative for this slot
+    btn:RegisterForClicks("LeftButtonUp")
+    btn:SetScript("OnClick", function(self, mouseBtn)
+        if mouseBtn == "LeftButton" then
+            CycleSlotAlternative(slotDef.id)
+        end
+    end)
+
+    -- Small badge in the top-right corner: shown when bag alternatives exist
+    local badge = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    badge:SetFont(badge:GetFont(), 8, "OUTLINE")
+    badge:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 1, 1)
+    badge:SetTextColor(0.2, 1.0, 0.4)
+    badge:Hide()
+
+    slotIcons[slotDef.id] = { btn=btn, tex=tex, border=border, badge=badge }
 end
 
 -- -----------------------------------------------------------------
@@ -157,6 +252,18 @@ local function RefreshSlotIcon(slotDef)
             or "Interface\\PaperDoll\\UI-PaperDoll-Slot-Bag0")
         entry.tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
         entry.border:Hide()
+    end
+
+    -- Badge: show count of bag alternatives when > 0
+    if entry.badge then
+        local alts = GetBagAlternatives(slotDef.id)
+        local n = #alts
+        if n > 0 then
+            entry.badge:SetText("+" .. n)
+            entry.badge:Show()
+        else
+            entry.badge:Hide()
+        end
     end
 end
 

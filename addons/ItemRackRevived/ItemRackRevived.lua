@@ -56,17 +56,23 @@ IRR.QUALITY_COLORS = {
 
 -- -------------------------------------------------------
 -- Default SavedVariables structure
+-- sets/specLinks/setIcons are stored per-character under chars[charKey]
+-- so that Slyw and Slysh (and any future alt) never share gear sets.
 -- -------------------------------------------------------
 local DB_DEFAULTS = {
-    sets      = {},                             -- { [setName] = { [slotId] = itemId, ... } }
-    specLinks = {},                             -- { [setName] = 1 or 2 }  dual-spec link
-    setIcons  = {},                             -- { [setName] = texture path }
+    chars     = {},                             -- { ["CharName"] = { sets={}, specLinks={}, setIcons={} } }
     position  = { point="CENTER", x=0, y=0 },
     options  = {
         showTooltips  = true,
         showQualityBorder = true,
         scale = 1.0,
     },
+}
+
+local CHAR_DEFAULTS = {
+    sets      = {},   -- { [setName] = { [slotId] = itemId, ... } }
+    specLinks = {},   -- { [setName] = 1 or 2 }  dual-spec link
+    setIcons  = {},   -- { [setName] = texture path }
 }
 
 -- Recursively apply defaults without overwriting existing values
@@ -86,20 +92,65 @@ end
 -- -------------------------------------------------------
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_LOGOUT")
 eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("BAG_UPDATE")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local name = ...
         if name == ADDON_NAME then
-            -- Initialize saved variables
+            -- Initialise the global DB.  Per-character data is set up in
+            -- PLAYER_LOGIN once UnitName("player") is available.
             ItemRackRevivedDB = ItemRackRevivedDB or {}
             ApplyDefaults(ItemRackRevivedDB, DB_DEFAULTS)
             IRR.db = ItemRackRevivedDB
-            IRR_Init()
+            IRR.db.chars = IRR.db.chars or {}
         end
+
+    elseif event == "PLAYER_LOGIN" then
+        -- Player data is now available; build the per-character key.
+        if not IRR.db then
+            print("|cffff4444[ItemRack Revived]|r DB not set at PLAYER_LOGIN — ADDON_LOADED may have failed.")
+            return
+        end
+        local realm    = GetRealmName() or "Unknown"
+        local charName = UnitName("player") or "Unknown"
+        local charKey  = realm .. "-" .. charName
+        IRR.charKey = charKey
+        IRR.db.chars[charKey] = IRR.db.chars[charKey] or {}
+        ApplyDefaults(IRR.db.chars[charKey], CHAR_DEFAULTS)
+        IRR.chardata = IRR.db.chars[charKey]
+
+        -- Migration A: old flat DB had sets/specLinks/setIcons at the top level.
+        if IRR.db.sets and next(IRR.db.sets) then
+            for k, v in pairs(IRR.db.sets) do
+                if IRR.chardata.sets[k] == nil then IRR.chardata.sets[k] = v end
+            end
+            IRR.db.sets = nil
+        end
+        if IRR.db.specLinks and next(IRR.db.specLinks) then
+            for k, v in pairs(IRR.db.specLinks) do
+                if IRR.chardata.specLinks[k] == nil then IRR.chardata.specLinks[k] = v end
+            end
+            IRR.db.specLinks = nil
+        end
+        if IRR.db.setIcons and next(IRR.db.setIcons) then
+            for k, v in pairs(IRR.db.setIcons) do
+                if IRR.chardata.setIcons[k] == nil then IRR.chardata.setIcons[k] = v end
+            end
+            IRR.db.setIcons = nil
+        end
+
+        -- Migration B: stale name-only keys (no realm prefix).
+        local staleKey = charName
+        if staleKey ~= charKey and IRR.db.chars[staleKey] then
+            IRR.db.chars[staleKey] = nil
+        end
+
+        IRR_Init()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Refresh slots after loading screen
@@ -110,6 +161,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "UNIT_INVENTORY_CHANGED" then
         local unit = ...
         if unit == "player" and IRRFrame and IRRFrame:IsShown() then
+            IRR_UpdateSlots()
+        end
+
+    elseif event == "BAG_UPDATE" then
+        -- Refresh badges when bag contents change (items moved in/out)
+        if IRRFrame and IRRFrame:IsShown() then
             IRR_UpdateSlots()
         end
 

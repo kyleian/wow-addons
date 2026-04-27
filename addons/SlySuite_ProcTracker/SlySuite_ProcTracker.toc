@@ -1,0 +1,9 @@
+## Interface: 20505
+## Title: Sly Proc Tracker
+## Notes: Tracks Dragonstrike / Mongoose / Dragonspine Trophy procs per fight and per session. Caches boss fight history by instance. /slyptoc
+## Version: 1.5.1
+## Author: Sly
+## OptionalDeps: SlySuite, SlySuite_Style
+## SavedVariables: SlyProcTrackerDB
+
+SlySuite_ProcTracker.lua

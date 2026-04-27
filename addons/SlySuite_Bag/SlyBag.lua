@@ -60,11 +60,12 @@ local function TrackNewItems(bagId)
 end
 
 local DB_DEFAULTS = {
-    position      = { point = "CENTER", x = 0, y = 0 },
-    sortMode      = "BAG",     -- "BAG" | "QUALITY" | "NAME"
-    cols          = 10,
-    showBagBreaks = true,
-    scale         = 1.0,
+    position         = { point = "CENTER", x = 0, y = 0 },
+    sortMode         = "BAG",     -- "BAG" | "QUALITY" | "NAME"
+    cols             = 10,
+    showBagBreaks    = true,
+    scale            = 1.0,
+    collapsedSections = {},       -- [sectionId] = true when collapsed
 }
 
 local function ApplyDefaults(dest, src)

@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyChar.lua  (full rewrite â€” movable character sheet)
 -- â€¢ Intercepts C key: hides CharacterFrame, shows our panel
 -- â€¢ SC_BuildMain() builds a full equipped-gear + model panel
@@ -6,16 +6,23 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "1.0.0"
+SC.version = "1.5.2"
 local ADDON_NAME = "SlySuite_Char"
+
+-- Flags shared with SlyCharUI.lua (same global table, different file)
+SC._skipHook        = false   -- true while Chr button is showing CharacterFrame directly
+SC._pendingHideChar = false   -- true when CharacterFrame was left open in combat
+SC._hiddenByCombat  = false   -- true when we suppressed the panel at combat start
 
 -- --------------------------------------------------------
 -- SavedVariables defaults
 -- --------------------------------------------------------
 local DB_DEFAULTS = {
-    position = nil,     -- {point, x, y} for SlyCharMainFrame
-    lastTab  = "stats",
-    theme    = "shadow",
+    position  = nil,     -- {point, x, y} for SlyCharMainFrame
+    lastTab   = "stats",
+    theme     = "shadow",
+    collapsed = {},      -- {[sectionKey]=true} for collapsed stat sections
+    hidden    = {},      -- {[sectionKey]=true} for fully hidden stat sections
 }
 
 SC.db = {}
@@ -39,7 +46,16 @@ end
 -- --------------------------------------------------------
 function SC_ShowMain()
     if not SlyCharMainFrame then
-        SC_BuildMain()
+        if InCombatLockdown() then
+            -- SC_BuildMain creates secure buttons which is forbidden in combat.
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Open the character sheet once out of combat first.")
+            return
+        end
+        local ok, err = pcall(SC_BuildMain)
+        if not ok then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
+            return
+        end
     end
     local pos = SC.db.position
     if pos and pos.point then
@@ -47,6 +63,7 @@ function SC_ShowMain()
         SlyCharMainFrame:SetPoint(pos.point, UIParent, pos.point, pos.x or 0, pos.y or 0)
     end
     SlyCharMainFrame:Show()
+    SlyCharMainFrame:SetAlpha(1)
     SC_RefreshAll()
 end
 
@@ -59,18 +76,77 @@ function SC_ToggleMain()
 end
 
 -- --------------------------------------------------------
--- Hook CharacterFrame: C key â†’ suppress default, use ours
+-- Hook CharacterFrame: C key -> suppress default, use ours
 -- The C keybinding fires ShowUIPanel(CharacterFrame).
 -- HookScript on OnShow immediately hides it and toggles ours.
 -- Since CharacterFrame is always instantly hidden,
--- ToggleCharacter() always thinks it's closed and calls Show â€”
+-- ToggleCharacter() always thinks it's closed and calls Show --
 -- so we toggle based on our own panel state.
+--
+-- PROBLEM: ShowUIPanel(CharacterFrame) runs the WoW panel manager
+-- BEFORE our OnShow hook fires.  The panel manager displaces other
+-- registered UI panels (TradeFrame, MerchantFrame, etc.) to make
+-- room.  By the time we detect them in OnShow they are already gone.
+--
+-- FIX: wrap ShowUIPanel directly (it is plain Lua in TBC FrameXML)
+-- so our snapshot runs BEFORE the panel manager displaces anything.
 -- --------------------------------------------------------
+local _displacedPanels = {}
+
 local function HookCharacterFrame()
     if not CharacterFrame then return end
+
+    -- True pre-hook: runs before the original ShowUIPanel displaces panels.
+    local _origShowUIPanel = ShowUIPanel
+    ShowUIPanel = function(frame, ...)
+        if frame == CharacterFrame then
+            wipe(_displacedPanels)
+            local candidates = {
+                TradeFrame, MerchantFrame, InspectFrame, SpellBookFrame,
+                GossipFrame, QuestFrame, ItemTextFrame,
+            }
+            for _, f in ipairs(candidates) do
+                if f and f:IsShown() then
+                    table.insert(_displacedPanels, f)
+                end
+            end
+        end
+        return _origShowUIPanel(frame, ...)
+    end
+
     CharacterFrame:HookScript("OnShow", function(self)
-        self:Hide()                 -- suppress the default frame
-        SC_ToggleMain()             -- toggle our panel
+        if SC._skipHook then
+            wipe(_displacedPanels)
+            return
+        end
+
+        -- If any sibling panel was open when ShowUIPanel fired, do not hijack.
+        -- Also restore any that the panel manager displaced.
+        if #_displacedPanels > 0 then
+            self:Hide()
+            for _, f in ipairs(_displacedPanels) do
+                if not f:IsShown() then ShowUIPanel(f) end
+            end
+            wipe(_displacedPanels)
+            return
+        end
+
+        -- Guard: cursor carry (spell/item drag).
+        if GetCursorInfo() then
+            wipe(_displacedPanels)
+            return
+        end
+
+        wipe(_displacedPanels)
+
+        if InCombatLockdown() then
+            CharacterFrame:EnableMouse(false)
+            CharacterFrame:EnableKeyboard(false)
+            SC._pendingHideChar = true
+            return
+        end
+        self:Hide()
+        SC_ToggleMain()
     end)
 end
 
@@ -86,6 +162,10 @@ local function SC_Slash(msg)
             SlyCharMainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         end
         DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Position reset.")
+    elseif msg == "stats reset" then
+        if SC.db then SC.db.hidden = {} ; SC.db.collapsed = {} end
+        if SC_RefreshStats then SC_RefreshStats() end
+        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Stats sections reset.")
     elseif msg == "stats" then
         SC_ShowMain()
         SC_SwitchTab("stats")
@@ -128,6 +208,89 @@ local function SC_Slash(msg)
                       " rank="..tostring(cr).."/"..tostring(mr))
             end
         end
+    elseif msg == "honor" then
+        -- Collect everything into SlyCharDB.honorDebug so the user can read the
+        -- SavedVariables file directly after /reload instead of copying chat output.
+        SlyCharDB = SlyCharDB or {}
+        local dbg = {}
+        SlyCharDB.honorDebug = dbg
+
+        local function rec(label, ...)
+            local parts = {label}
+            local args = {...}
+            if #args == 0 then parts[#parts+1] = "(no return)"
+            else for i = 1, #args do parts[#parts+1] = tostring(args[i]) end end
+            dbg[#dbg+1] = table.concat(parts, "  ")
+        end
+
+        -- 1. Broad scan: every global function with honor/pvp/hk/arena in the name
+        local found = {}
+        for k, v in pairs(_G) do
+            if type(v) == "function" then
+                local lk = k:lower()
+                if lk:find("honor") or lk:find("pvp") or lk:find("hk") or lk:find("arena") then
+                    found[#found+1] = k
+                end
+            end
+        end
+        table.sort(found)
+        rec("=== Global functions (honor/pvp/hk/arena) ===")
+        for _, k in ipairs(found) do rec("  fn: "..k) end
+
+        -- 2. Known candidates — full multi-value return dump
+        rec("=== Known API returns ===")
+        local candidates = {
+            "GetHonorCurrency","GetHonorInfo","GetArenaCurrency",
+            "GetPVPThisWeekStats","GetPVPYesterdayStats",
+            "GetPVPLastWeekStats","GetPVPLifetimeStats",
+            "GetHonorStat","GetHonorAmount","UnitHonor",
+        }
+        for _, name in ipairs(candidates) do
+            local fn = _G[name]
+            if type(fn) == "function" then
+                -- try with "player" arg first, then no-arg
+                local ok, a,b,c,d,e,f,g,h,i,j = pcall(fn, "player")
+                if ok then rec(name.."(player):", a,b,c,d,e,f,g,h,i,j)
+                else
+                    ok,a,b,c,d,e,f,g,h,i,j = pcall(fn)
+                    if ok then rec(name.."():", a,b,c,d,e,f,g,h,i,j) end
+                end
+            else
+                rec(name..": "..type(fn))
+            end
+        end
+
+        -- 3. Extra API calls not in the candidates list
+        rec("=== Extra PVP API calls ===")
+        local extras = { "GetPVPSessionStats", "GetPVPRankProgress", "GetPVPRoles",
+                         "GetPVPTimer", "HonorSystemEnabled" }
+        for _, name in ipairs(extras) do
+            local fn = _G[name]
+            if type(fn) == "function" then
+                local ok, a,b,c,d,e,f = pcall(fn)
+                if ok then rec(name.."():", a,b,c,d,e,f) end
+                ok,a,b,c,d,e,f = pcall(fn, "player")
+                if ok then rec(name.."(player):", a,b,c,d,e,f) end
+            end
+        end
+        -- 4. TBC currency list API (index-based, not ID-based)
+        rec("=== TBC Currency list (GetNumCurrencies / GetCurrencyListInfo) ===")
+        rec("GetNumCurrencies type: "..type(GetNumCurrencies))
+        rec("GetCurrencyListInfo type: "..type(GetCurrencyListInfo))
+        if GetNumCurrencies then
+            local n = GetNumCurrencies()
+            rec("  count: "..tostring(n))
+            for i = 1, (n or 0) do
+                local ok, nm, isHeader, isExpanded, isUnused, isWatched, count, icon, maximum =
+                    pcall(GetCurrencyListInfo, i)
+                if ok and nm then
+                    rec("  ["..i.."] "..tostring(nm).." isHeader="..tostring(isHeader)
+                        .." count="..tostring(count).." max="..tostring(maximum))
+                end
+            end
+        end
+
+        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SC]|r Honor debug saved. /reload then open WTF/.../SavedVariables/SlySuite_Char.lua and search for honorDebug")
     else
         SC_ToggleMain()
     end
@@ -139,6 +302,9 @@ end
 local evFrame = CreateFrame("Frame", "SlyCharEventFrame", UIParent)
 evFrame:RegisterEvent("ADDON_LOADED")
 evFrame:RegisterEvent("PLAYER_LOGOUT")
+evFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+evFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+evFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 evFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 evFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 evFrame:RegisterEvent("CHARACTER_POINTS_CHANGED")
@@ -157,6 +323,21 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             SlyCharDB = SlyCharDB or {}
             ApplyDefaults(SlyCharDB, DB_DEFAULTS)
             SC.db = SlyCharDB
+
+            -- Wrap key refresh functions with error guard so failures are
+            -- logged to SlyErrorDB (visible via /slyerror) rather than silently
+            -- breaking the UI.
+            if SlyError and SlyError.guard then
+                SC_RefreshStats  = SlyError.guard(SC_RefreshStats,  "SlyChar:RefreshStats")
+                SC_RefreshSlots  = SlyError.guard(SC_RefreshSlots,  "SlyChar:RefreshSlots")
+                SC_RefreshSets   = SlyError.guard(SC_RefreshSets,   "SlyChar:RefreshSets")
+                if SC_RefreshMisc then
+                    SC_RefreshMisc = SlyError.guard(SC_RefreshMisc, "SlyChar:RefreshMisc")
+                end
+                if SC_RefreshAll then
+                    SC_RefreshAll  = SlyError.guard(SC_RefreshAll,  "SlyChar:RefreshAll")
+                end
+            end
 
             HookCharacterFrame()
 
@@ -230,6 +411,56 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
         if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
             if SC_RefreshAll then SC_RefreshAll() end
+        end
+
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Pre-build the main frame now, while we are guaranteed to be outside
+        -- combat lockdown. This ensures SlyCharMainFrame always exists by the
+        -- time the player presses C, even if they never opened it manually.
+        if not SlyCharMainFrame and SC.db and not InCombatLockdown() then
+            local ok, err = pcall(SC_BuildMain)
+            if not ok then
+                DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
+            elseif SlyCharMainFrame then
+                SlyCharMainFrame:Hide()
+            end
+        end
+
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        -- Combat started: close the character sheet.
+        -- Frames with SecureActionButtonTemplate children cannot always be
+        -- hidden via :Hide() during lockdown — disable mouse and zero alpha
+        -- first so it cannot block the screen even if Hide() silently fails.
+        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+            SlyCharMainFrame:EnableMouse(false)
+            SlyCharMainFrame:SetAlpha(0)
+            SC._hiddenByCombat = true
+            pcall(function() SlyCharMainFrame:Hide() end)
+        end
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Combat ended.
+        if SC._hiddenByCombat then
+            SC._hiddenByCombat = false
+            if SlyCharMainFrame then
+                -- If Hide() failed during combat the frame is still "shown"
+                -- but invisible — fully hide it now lockdown is lifted.
+                if SlyCharMainFrame:IsShown() then
+                    SlyCharMainFrame:Hide()
+                else
+                    -- Restore alpha in case user re-opens manually next time.
+                    SlyCharMainFrame:SetAlpha(1)
+                end
+            end
+        end
+        -- Hide the native CharacterFrame we couldn't suppress earlier.
+        if SC._pendingHideChar then
+            SC._pendingHideChar = false
+            if CharacterFrame and CharacterFrame:IsShown() then
+                CharacterFrame:EnableMouse(true)
+                CharacterFrame:EnableKeyboard(true)
+                CharacterFrame:Hide()
+            end
         end
     end
 end)

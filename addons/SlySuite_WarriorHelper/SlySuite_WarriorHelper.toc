@@ -1,0 +1,9 @@
+## Interface: 20505
+## Title: SlySuite_WarriorHelper
+## Notes: Warrior rotation advisor — Fury/Arms DPS and Protection Tank
+## Author: SlySuite
+## Version: 1.1.0
+## DefaultState: enabled
+## OptionalDeps: SlySuite, SlyStyle, SlySuiteDataFrame
+## SavedVariables: SlyWarriorHelperDB
+SlySuite_WarriorHelper.lua

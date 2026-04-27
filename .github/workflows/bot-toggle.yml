@@ -1,0 +1,82 @@
+name: Toggle Bot (Start / Stop)
+
+# Convenience workflow to start or stop the bot (scale ECS service to 1 or 0)
+# without rebuilding the Docker image.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Start or stop the bot"
+        required: true
+        type: choice
+        options:
+          - start
+          - stop
+      stack:
+        description: "Pulumi stack"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  toggle:
+    name: "${{ inputs.action == 'start' && 'Start' || 'Stop' }} the bot"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GithubActions-DiscordBot-Toggle
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v5
+
+      - name: Install Pulumi Python dependencies
+        working-directory: discord-bot/infra
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Set running config
+        working-directory: discord-bot/infra
+        run: |
+          pulumi stack select ${{ inputs.stack }}
+          pulumi config set running "${{ inputs.action == 'start' && 'true' || 'false' }}"
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Apply change
+        working-directory: discord-bot/infra
+        run: |
+          source venv/bin/activate
+          pulumi up --yes --skip-preview
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Confirm
+        run: |
+          echo "Bot ${{ inputs.action }}ed successfully on stack ${{ inputs.stack }}"

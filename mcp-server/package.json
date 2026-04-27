@@ -1,0 +1,16 @@
+{
+  "name": "wow-addons-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for the wow-addons repository — deploy, diff, grep, error reading, git helpers.",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "wow-addons-mcp": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0"
+  }
+}

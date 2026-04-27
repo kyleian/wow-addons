@@ -1,0 +1,44 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Build artifacts
+release/
+dist/
+*.zip
+
+# Test output
+test-results/
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Local development
+.env
+.env.local
+secrets.*
+
+# Package managers
+node_modules/
+
+# Lua specific
+*.luac
+luac.out

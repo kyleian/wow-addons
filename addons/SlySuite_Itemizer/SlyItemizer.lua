@@ -57,6 +57,14 @@ SI.STAT_LABELS = {
 local scanTip = CreateFrame("GameTooltip", "SlyItemizerScanTip", nil, "GameTooltipTemplate")
 scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
 
+-- Scan-result cache keyed by item link. Flushed on zone change so enchant/gem
+-- upgrades are picked up after a reload. Eliminates repeated hidden-tooltip
+-- renders when Blizzard refreshes all 4 tooltip frames on Shift key change.
+local _scanCache = {}
+local _cacheFlushFrame = CreateFrame("Frame")
+_cacheFlushFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+_cacheFlushFrame:SetScript("OnEvent", function() _scanCache = {} end)
+
 -- Regex patterns:  { statKey, pattern (captures number) }
 -- TBC tooltip lines are English-only server-side for stat numbers.
 local PATTERNS = {
@@ -107,6 +115,10 @@ local PATTERNS = {
 function SI:ScanLink(itemLink)
     if not itemLink then return nil end
 
+    -- Return cached result if available (avoids re-rendering hidden tooltip
+    -- on every Shift-key refresh which fires OnTooltipSetItem on all 4 frames)
+    if _scanCache[itemLink] then return _scanCache[itemLink] end
+
     local stats = {}
     scanTip:ClearLines()
 
@@ -123,6 +135,13 @@ function SI:ScanLink(itemLink)
         if right and right:GetText() then texts[#texts+1] = right:GetText() end
 
         for _, text in ipairs(texts) do
+            -- Strip WoW color/texture/hyperlink escapes so patterns match plain text.
+            -- |cXXXXXXXX = open color (8 hex digits), |r = close color,
+            -- |T...|t = inline texture, |H...|h...|h = hyperlink.
+            text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+                       :gsub("|r", "")
+                       :gsub("|T[^|]*|t", "")
+                       :gsub("|H[^|]*|h([^|]*)|h", "%1")
             for _, pat in ipairs(PATTERNS) do
                 local key, regex = pat[1], pat[2]
                 local val = text:match(regex)
@@ -138,9 +157,13 @@ function SI:ScanLink(itemLink)
     local iLvlLine = _G["SlyItemizerScanTipTextLeft2"]
     if iLvlLine then
         local il = iLvlLine:GetText()
-        if il then stats.ilevel = tonumber(il:match("Item Level (%d+)")) end
+        if il then
+            il = il:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            stats.ilevel = tonumber(il:match("Item Level (%d+)"))
+        end
     end
 
+    _scanCache[itemLink] = stats
     return stats
 end
 

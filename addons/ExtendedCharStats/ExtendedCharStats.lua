@@ -44,12 +44,105 @@ local SPELL_SCHOOLS = {
 }
 
 -- -------------------------------------------------------
--- Stat retrieval helpers (all return formatted strings)
+-- TBC spell school IDs used for per-school hit breakdown.
+local ALL_SPELL_SCHOOLS = { 2, 3, 4, 5, 6, 7 }   -- Holy/Fire/Nature/Frost/Shadow/Arcane
+local SCHOOL_NAMES = {
+    [2]="Holy", [3]="Fire", [4]="Nature", [5]="Frost", [6]="Shadow", [7]="Arcane"
+}
+
+-- TBC hit-granting talents (enUS/enGB locale, 2.4.x)
+-- Format: { pct_per_rank, affects_melee, affects_ranged, spell_schools }
+--   spell_schools: nil      = no spell hit
+--                 "all"    = every TBC spell school (2-7)
+--                 {id,...} = specific school IDs only
 -- -------------------------------------------------------
+local HIT_TALENTS = {
+    -- ---- WARRIOR (Arms) / ROGUE (Combat) ------------------------
+    -- Precision: melee hit only (3 ranks Warrior / 5 ranks Rogue, 1%/rank)
+    ["precision"]           = { 1, true,  false, nil       },
+
+    -- ---- HUNTER -------------------------------------------------
+    -- Survival: Surefooted (3 ranks, +1% melee AND ranged hit/rank)
+    ["surefooted"]          = { 1, true,  true,  nil       },
+    -- Marksmanship: Focused Aim (3 ranks, +1% ranged hit/rank)
+    ["focused aim"]         = { 1, false, true,  nil       },
+
+    -- ---- MAGE ---------------------------------------------------
+    -- Arcane: Arcane Focus (5 ranks, +2%/rank — Arcane school ONLY)
+    ["arcane focus"]        = { 2, false, false, {7}       },
+    -- Arcane: Elemental Precision (3 ranks, +1%/rank — Fire, Frost, Arcane)
+    ["elemental precision"] = { 1, false, false, {3,5,7}  },
+
+    -- ---- WARLOCK ------------------------------------------------
+    -- Affliction: Suppression (5 ranks, +1%/rank — all spell schools)
+    ["suppression"]         = { 1, false, false, "all"    },
+
+    -- ---- PRIEST -------------------------------------------------
+    -- Shadow: Shadow Focus (5 ranks, +2%/rank — Shadow school ONLY)
+    ["shadow focus"]        = { 2, false, false, {6}       },
+
+    -- ---- DRUID --------------------------------------------------
+    -- Balance: Balance of Power (2 ranks, +2%/rank — all spell schools)
+    ["balance of power"]    = { 2, false, false, "all"    },
+
+    -- ---- SHAMAN / PALADIN / DEATH KNIGHT ------------------------
+    -- No direct hit talent in TBC
+}
+
+-- Walk all talent trees for hit contributions.
+-- Returns:
+--   melee         (number, flat % hit bonus)
+--   ranged        (number, flat % hit bonus)
+--   spellBySchool (table [schoolId]=%, all schools initialised to 0)
+--   meleeSrc      (list of { name=string, pct=number })
+--   rangedSrc     (list of { name=string, pct=number })
+local function ScanTalentHit()
+    local melee, ranged = 0, 0
+    local spellBySchool = {}
+    for _, sid in ipairs(ALL_SPELL_SCHOOLS) do spellBySchool[sid] = 0 end
+    local meleeSrc, rangedSrc = {}, {}
+
+    local ok0, numTabs = pcall(GetNumTalentTabs)
+    numTabs = ok0 and (numTabs or 0) or 0
+    for tab = 1, numTabs do
+        local okT, numT = pcall(GetNumTalents, tab)
+        numT = okT and (numT or 0) or 0
+        for i = 1, numT do
+            local ok, name, _, _, _, rank = pcall(GetTalentInfo, tab, i)
+            if ok and name and rank and rank > 0 then
+                local t = HIT_TALENTS[name:lower()]
+                if t then
+                    local pct  = t[1] * rank
+                    local disp = name:sub(1,1):upper() .. name:sub(2)
+                    if t[2] then
+                        melee = melee + pct
+                        meleeSrc[#meleeSrc+1] = { name=disp, pct=pct }
+                    end
+                    if t[3] then
+                        ranged = ranged + pct
+                        rangedSrc[#rangedSrc+1] = { name=disp, pct=pct }
+                    end
+                    local schools = t[4]
+                    if schools then
+                        if schools == "all" then schools = ALL_SPELL_SCHOOLS end
+                        for _, sid in ipairs(schools) do
+                            spellBySchool[sid] = (spellBySchool[sid] or 0) + pct
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return melee, ranged, spellBySchool, meleeSrc, rangedSrc
+end
+
 
 local function safe(fn, ...)
-    local ok, v1, v2, v3 = pcall(fn, ...)
-    if ok then return v1, v2, v3 end
+    -- Use select/table.pack pattern to preserve ALL return values.
+    -- WoW API functions can return up to ~8 values; explicit capture covers
+    -- every case used in this file without needing a table.
+    local ok, v1, v2, v3, v4, v5, v6, v7, v8 = pcall(fn, ...)
+    if ok then return v1, v2, v3, v4, v5, v6, v7, v8 end
     return nil
 end
 
@@ -59,6 +152,23 @@ local function fmt(n, decimals)
         return string.format("%." .. decimals .. "f%%", n)
     end
     return string.format("%d", math.floor(n + 0.5))
+end
+
+-- Insert a stat total row plus one indented sub-row per source.
+-- sources = list of {label=string, val=number}.
+-- Sub-rows are only emitted when 2+ sources are non-zero (otherwise the
+-- total is self-evident).  Label is indented with "  " to show hierarchy.
+local function addStat(stats, label, total, sources)
+    table.insert(stats, { label=label, value=string.format("%.2f%%", total) })
+    local nonzero = {}
+    for _, s in ipairs(sources) do
+        if s.val and s.val > 0.005 then nonzero[#nonzero+1] = s end
+    end
+    if #nonzero >= 2 then
+        for _, s in ipairs(nonzero) do
+            table.insert(stats, { label="  "..s.label, value=string.format("%.2f%%", s.val) })
+        end
+    end
 end
 
 -- Returns a stat table for the current player to populate the panel
@@ -71,11 +181,52 @@ function ECS_GetStats()
     local apTotal = (apBase or 0) + (apPos or 0) - (apNeg or 0)
     table.insert(stats, { section="OFFENSE", label="Attack Power",   value=fmt(apTotal) })
 
-    local meleeHit = GetCombatRatingBonus(CR.HIT_MELEE) or 0
-    table.insert(stats, { label="Melee Hit",      value=string.format("%.2f%%", meleeHit or 0) })
+    -- Scan all talents once for hit contributions across all three damage types.
+    local scanMeleeHit, scanRangedHit, spellBySchool, meleeSrc, rangedSrc = ScanTalentHit()
 
-    local meleeCrit = safe(GetCritChance) or 0
-    table.insert(stats, { label="Melee Crit",     value=string.format("%.2f%%", meleeCrit) })
+    -- Heroic Presence: Draenei racial aura (+1% all hit types).
+    -- GetHitModifier / GetSpellHitModifier should include this but TBC Anniversary
+    -- omits it from the spell API.  math.max(API, scan+heroic) prevents double-count.
+    local heroicBonus = 0
+    local _, playerRace = UnitRace("player")
+    if playerRace == "Draenei" then
+        heroicBonus = 1
+    else
+        for i = 1, 4 do
+            local _, race = UnitRace("party" .. i)
+            if race == "Draenei" then heroicBonus = 1 ; break end
+        end
+    end
+
+    -- MELEE HIT
+    -- Total = Rating + max(GetHitModifier API, talent scan + Heroic Presence).
+    -- Sub-rows show each contributing talent by name.
+    local mHitRating    = GetCombatRatingBonus(CR.HIT_MELEE) or 0
+    local mHitRatingPts = GetCombatRating(CR.HIT_MELEE) or 0
+    local mHitAPI    = safe(GetHitModifier) or 0
+    local mHitTalent = math.max(mHitAPI, scanMeleeHit + heroicBonus)
+    table.insert(stats, { label="Melee Hit", value=string.format("%.2f%%", mHitRating + mHitTalent) })
+    if mHitRating > 0.005 then
+        table.insert(stats, { label="  Rating", value=string.format("%d pts (%.2f%%)", mHitRatingPts, mHitRating) })
+    end
+    for _, s in ipairs(meleeSrc) do
+        table.insert(stats, { label="  "..s.name, value=string.format("+%d%%", s.pct) })
+    end
+    if heroicBonus > 0 then
+        table.insert(stats, { label="  Heroic Presence", value="+1%" })
+    end
+
+    -- MELEE CRIT sources:
+    --   Rating      = GetCombatRatingBonus(CR.CRIT_MELEE)  — gear crit rating
+    --   Agi+Talent  = GetCritChance() total minus rating    — agility + flat talent crit
+    --   (TBC has no API to separate agi from talent crit)
+    local mCritRating = GetCombatRatingBonus(CR.CRIT_MELEE) or 0
+    local mCritTotal  = safe(GetCritChance) or mCritRating
+    local mCritOther  = math.max(0, mCritTotal - mCritRating)
+    addStat(stats, "Melee Crit", mCritTotal, {
+        { label="Rating",     val=mCritRating },
+        { label="Agi+Talent", val=mCritOther  },
+    })
 
     local hasteM = GetCombatRatingBonus(CR.HASTE_MELEE)
     table.insert(stats, { label="Melee Haste",    value=string.format("%.2f%%", hasteM or 0) })
@@ -94,11 +245,33 @@ function ECS_GetStats()
     local rapTotal = (rapBase or 0) + (rapPos or 0) - (rapNeg or 0)
     table.insert(stats, { section="RANGED", label="Ranged AP",     value=fmt(rapTotal) })
 
-    local rangedHit = GetCombatRatingBonus(CR.HIT_RANGED)
-    table.insert(stats, { label="Ranged Hit",     value=string.format("%.2f%%", rangedHit or 0) })
+    -- RANGED HIT
+    -- Total = Rating + max(GetRangedHitModifier API, talent scan + Heroic Presence).
+    local rHitRating    = GetCombatRatingBonus(CR.HIT_RANGED) or 0
+    local rHitRatingPts = GetCombatRating(CR.HIT_RANGED) or 0
+    local rHitAPI    = safe(GetRangedHitModifier) or 0
+    local rHitTalent = math.max(rHitAPI, scanRangedHit + heroicBonus)
+    table.insert(stats, { label="Ranged Hit", value=string.format("%.2f%%", rHitRating + rHitTalent) })
+    if rHitRating > 0.005 then
+        table.insert(stats, { label="  Rating", value=string.format("%d pts (%.2f%%)", rHitRatingPts, rHitRating) })
+    end
+    for _, s in ipairs(rangedSrc) do
+        table.insert(stats, { label="  "..s.name, value=string.format("+%d%%", s.pct) })
+    end
+    if heroicBonus > 0 then
+        table.insert(stats, { label="  Heroic Presence", value="+1%" })
+    end
 
-    local rangedCrit = safe(GetRangedCritChance) or 0
-    table.insert(stats, { label="Ranged Crit",    value=string.format("%.2f%%", rangedCrit) })
+    -- RANGED CRIT sources:
+    --   Rating      = GetCombatRatingBonus(CR.CRIT_RANGED)
+    --   Agi+Talent  = GetRangedCritChance() total minus rating
+    local rCritRating = GetCombatRatingBonus(CR.CRIT_RANGED) or 0
+    local rCritTotal  = safe(GetRangedCritChance) or rCritRating
+    local rCritOther  = math.max(0, rCritTotal - rCritRating)
+    addStat(stats, "Ranged Crit", rCritTotal, {
+        { label="Rating",     val=rCritRating },
+        { label="Agi+Talent", val=rCritOther  },
+    })
 
     -- Spell
     -- Spell power: highest value across valid TBC schools (2-7); school 0 is invalid in TBC.
@@ -119,33 +292,97 @@ function ECS_GetStats()
     local healPower = safe(GetSpellBonusHealing) or spellPowerBase
     table.insert(stats, { label="Heal Power",     value=fmt(healPower) })
 
-    local spellHit = GetCombatRatingBonus(CR.HIT_SPELL) or 0
+    -- SPELL HIT per school
+    -- GetSpellHitModifier() = non-rating hit the engine reports globally (floor).
+    -- School-specific talents (Arcane Focus, Elem. Precision, Shadow Focus) add on
+    -- top for specific schools.
+    --
+    -- Per-school total (non-rating) = max(API, schoolScan + heroicBonus)
+    --   * If the API already captured the school talent → max picks the API value  (no double-count)
+    --   * If the API missed it (or school scan is higher) → scan value wins
+    --
+    -- Display: header = best school total.  Sub-row for each school that has a
+    -- non-zero school-specific talent bonus from the scan (always show them so the
+    -- player can see which schools are boosted regardless of API behaviour).
+    local sHitRating    = GetCombatRatingBonus(CR.HIT_SPELL) or 0
+    local sHitRatingPts = GetCombatRating(CR.HIT_SPELL) or 0
+    local sHitAPI    = safe(GetSpellHitModifier) or 0
 
-    -- Heroic Presence (Draenei racial): +1% hit (melee, ranged, spell) to all
-    -- party members within 30 yards.  GetCombatRatingBonus only covers ratings,
-    -- so we must add the flat 1% ourselves.
-    local heroicPresence = 0
-    local _, playerRace  = UnitRace("player")
-    if playerRace == "Draenei" then
-        heroicPresence = 1
-    else
-        for i = 1, 4 do
-            local _, race = UnitRace("party" .. i)
-            if race == "Draenei" then
-                heroicPresence = 1
-                break
-            end
+    -- Per-school non-rating hit (the higher of: API floor OR school scan + heroic)
+    local schoolHitFlat = {}
+    for _, sid in ipairs(ALL_SPELL_SCHOOLS) do
+        local scanPct = (spellBySchool[sid] or 0) + heroicBonus
+        schoolHitFlat[sid] = math.max(sHitAPI, scanPct)
+    end
+
+    -- Header = best school total
+    local bestSpellHit = 0
+    for _, sid in ipairs(ALL_SPELL_SCHOOLS) do
+        local tot = sHitRating + schoolHitFlat[sid]
+        if tot > bestSpellHit then bestSpellHit = tot end
+    end
+
+    table.insert(stats, { label="Spell Hit", value=string.format("%.2f%%", bestSpellHit) })
+    if sHitRating > 0.005 then
+        table.insert(stats, { label="  Rating", value=string.format("%d pts (%.2f%%)", sHitRatingPts, sHitRating) })
+    end
+    if sHitAPI > 0.005 then
+        table.insert(stats, { label="  Talent/Aura (all)", value=string.format("%.2f%%", sHitAPI) })
+    end
+    if heroicBonus > 0 then
+        table.insert(stats, { label="  Heroic Presence", value="+1% (all)" })
+    end
+    -- Per-school rows: show every school that has a scan-based bonus
+    for _, sid in ipairs(ALL_SPELL_SCHOOLS) do
+        local scanPct = spellBySchool[sid] or 0
+        if scanPct > 0.005 then
+            local schoolTotal = sHitRating + schoolHitFlat[sid]
+            table.insert(stats, {
+                label = "  " .. SCHOOL_NAMES[sid],
+                value = string.format("%.2f%% (+%d%% talent)", schoolTotal, scanPct)
+            })
         end
     end
-    spellHit = spellHit + heroicPresence
 
-    local hitLabel = heroicPresence > 0
-        and string.format("%.2f%% |cff88aaff(+1 Heroic Presence)|r", spellHit)
-        or  string.format("%.2f%%", spellHit)
-    table.insert(stats, { label="Spell Hit",      value=hitLabel })
-
-    local spellCrit = safe(GetSpellCritChance) or 0
-    table.insert(stats, { label="Spell Crit",     value=string.format("%.2f%%", spellCrit) })
+    -- SPELL CRIT sources:
+    --   Rating     = GetCombatRatingBonus(CR.CRIT_SPELL)
+    --   Int+Talent = base school crit minus rating  (int conversion + flat talent crit)
+    --   +School    = per-school bonus above the base (school-specific talents like Pyromaniac)
+    --
+    -- GetSpellCritChance(school) varies per school when school-specific talents exist.
+    -- The minimum across all schools = the "base" value every school shares.
+    -- Any school above the minimum has a school-specific talent bonus.
+    --
+    -- BUG NOTE: GetSpellCritChance() with NO args returns 0 (not nil) in TBC —
+    -- always pass a school id.
+    local sCritBySchool = {}
+    local sCritMin, sCritMax = math.huge, 0
+    for _, school in ipairs(SPELL_SCHOOLS) do
+        local sc = safe(GetSpellCritChance, school.id) or 0
+        sCritBySchool[school.label] = sc
+        if sc < sCritMin then sCritMin = sc end
+        if sc > sCritMax then sCritMax = sc end
+    end
+    if sCritMin == math.huge then sCritMin = 0 end
+    local sCritRating  = GetCombatRatingBonus(CR.CRIT_SPELL) or 0
+    local sCritIntTal  = math.max(0, sCritMin - sCritRating)  -- int + flat talent, all schools
+    -- Header row = max crit (best school)
+    addStat(stats, "Spell Crit", sCritMax, {
+        { label="Rating",     val=sCritRating },
+        { label="Int+Talent", val=sCritIntTal },
+    })
+    -- Per-school rows: show all schools when any school differs from the min
+    local schoolsDiffer = (sCritMax - sCritMin) > 0.005
+    if schoolsDiffer then
+        for _, school in ipairs(SPELL_SCHOOLS) do
+            local sc  = sCritBySchool[school.label] or 0
+            local bonus = sc - sCritMin
+            local bonusStr = bonus > 0.005
+                and string.format("%.2f%%  |cff88dd88(+%.2f%% talent)|r", sc, bonus)
+                or  string.format("%.2f%%", sc)
+            table.insert(stats, { label="  "..school.label, value=bonusStr })
+        end
+    end
 
     local hasteSpell = safe(UnitSpellHaste, "player") or GetCombatRatingBonus(CR.HASTE_SPELL)
     table.insert(stats, { label="Spell Haste",    value=string.format("%.2f%%", hasteSpell or 0) })
@@ -182,41 +419,133 @@ function ECS_GetStats()
     table.insert(stats, { label="Resilience",
         value=string.format("%d (%.2f%%)", resRating or 0, resPct or 0) })
 
+    -- ---- Feral Druid detection (for defense cap adjustment) ----
+    -- Survival of the Fittest (Feral, 3 ranks): 1% reduced crit chance/rank.
+    -- At 3/3, SotF covers 3% of the 5.6% boss crit, so only 2.6% must come from
+    -- defense skill (65 points above 350), giving a 415 cap instead of 490.
+    -- Bears are also crush-immune (no shield mechanic in bear form).
+    local _, playerClassFile = UnitClass("player")
+    local sotfRanks = 0
+    if playerClassFile == "DRUID" then
+        local ok0, numTabs = pcall(GetNumTalentTabs)
+        numTabs = ok0 and (numTabs or 0) or 0
+        for tab = 1, numTabs do
+            local okT, numT = pcall(GetNumTalents, tab)
+            numT = okT and (numT or 0) or 0
+            for i = 1, numT do
+                local ok, name, _, _, _, rank = pcall(GetTalentInfo, tab, i)
+                if ok and name and rank and rank > 0 then
+                    if name:lower() == "survival of the fittest" then
+                        sotfRanks = rank
+                    end
+                end
+            end
+        end
+    end
+    -- SotF equiv: each rank = 1% crit red = 25 def-equivalent (1% / 0.04 per def = 25)
+    local sotfDefEquiv   = sotfRanks * 25
+    local isFeralBear    = playerClassFile == "DRUID" and sotfRanks > 0
+    -- Effective cap: 490 minus whatever SotF already covers
+    local CRIT_IMMUNE_DEF = 490 - sotfDefEquiv
+
     -- ---- CRUSH CAP (tank, vs level 73 boss) ----
-    -- Uncrushable = Miss + Dodge + Parry + Block >= 102.4%
-    -- Miss vs a level 73 boss: 5% base + (defSkill - 350) * 0.04% per point above 350
-    -- Crit immune: need totalDef >= 490 (= 5.6% crit reduction at 0.04%/point above 350)
+    -- Bears in bear form are mechanically crush-immune (no shield = no block,
+    -- but Blizzard exempts druids from crushing blow mechanics entirely).
+    -- Other tanks: Miss + Dodge + Parry + Block >= 102.4%
     local CRUSH_THRESHOLD = 102.4
-    local CRIT_IMMUNE_DEF = 490
-
-    local crushMiss = 5.0 + math.max(0, totalDef - 350) * 0.04
-    local crushDodge = safe(GetDodgeChance) or 0
-    local crushParry = safe(GetParryChance) or 0
-    local crushBlock = safe(GetBlockChance) or 0
-    local crushTotal = crushMiss + crushDodge + crushParry + crushBlock
-    local crushNeeded = CRUSH_THRESHOLD - crushTotal
-    local critDefNeeded = math.max(0, CRIT_IMMUNE_DEF - totalDef)
-
-    local crushColor = crushNeeded <= 0 and "|cff00ff00" or "|cffff4444"
-    local critColor  = critDefNeeded == 0 and "|cff00ff00" or "|cffff4444"
 
     table.insert(stats, { section="CRUSH CAP" })
-    table.insert(stats, { label="  Miss (vs boss)",  value=string.format("%.2f%%", crushMiss) })
-    table.insert(stats, { label="  Dodge",           value=string.format("%.2f%%", crushDodge) })
-    table.insert(stats, { label="  Parry",           value=string.format("%.2f%%", crushParry) })
-    table.insert(stats, { label="  Block",           value=string.format("%.2f%%", crushBlock) })
-    table.insert(stats, { label="  Total / Need 102.4",
-        value=crushColor .. string.format("%.2f%%|r", crushTotal) })
-    if crushNeeded > 0 then
-        table.insert(stats, { label="  Still need",
-            value="|cffff4444" .. string.format("%.2f%%|r", crushNeeded) })
-    else
+    if isFeralBear then
         table.insert(stats, { label="  Status",
-            value="|cff00ff00UNCRUSHABLE|r" })
+            value="|cff00ff00IMMUNE|r  |cff888888(Bear form)|r" })
+    else
+        local crushMiss  = 5.0 + math.max(0, totalDef - 350) * 0.04
+        local crushDodge = safe(GetDodgeChance) or 0
+        local crushParry = safe(GetParryChance) or 0
+        local crushBlock = safe(GetBlockChance) or 0
+        local crushTotal  = crushMiss + crushDodge + crushParry + crushBlock
+        local crushNeeded = CRUSH_THRESHOLD - crushTotal
+        local crushColor  = crushNeeded <= 0 and "|cff00ff00" or "|cffff4444"
+
+        table.insert(stats, { label="  Miss (vs boss)",       value=string.format("%.2f%%", crushMiss) })
+        table.insert(stats, { label="  Dodge",                value=string.format("%.2f%%", crushDodge) })
+        table.insert(stats, { label="  Parry",                value=string.format("%.2f%%", crushParry) })
+        table.insert(stats, { label="  Block",                value=string.format("%.2f%%", crushBlock) })
+        table.insert(stats, { label="  Total / Need 102.4",
+            value=crushColor .. string.format("%.2f%%|r", crushTotal) })
+        if crushNeeded > 0 then
+            table.insert(stats, { label="  Still need",
+                value="|cffff4444" .. string.format("%.2f%%|r", crushNeeded) })
+        else
+            table.insert(stats, { label="  Status",          value="|cff00ff00UNCRUSHABLE|r" })
+        end
     end
-    table.insert(stats, { label="  Crit immune (490)",
-        value=critColor .. (critDefNeeded == 0 and "YES|r"
-            or string.format("need %d more|r", critDefNeeded)) })
+
+    -- ---- CRIT CAP ----
+    -- Each defense skill above 350 = 0.04% crit reduction vs boss.
+    -- Resilience contributes identical crit reduction: resPct / 0.04 = def-equiv.
+    -- Feral druids: Survival of the Fittest reduces crit chance by 1%/rank (max 3).
+    --   SotF 3/3 = 3% covered, so effective cap drops from 490 → 415.
+    -- All sources combined must reach CRIT_IMMUNE_DEF effective defense.
+    local resDefEquiv   = math.floor((resPct or 0) / 0.04)
+    local effectiveDef  = totalDef + resDefEquiv + sotfDefEquiv
+    local critDefNeeded = math.max(0, CRIT_IMMUNE_DEF - totalDef - resDefEquiv)
+    local critColor     = critDefNeeded == 0 and "|cff00ff00" or "|cffff4444"
+    local defDispColor  = (totalDef + resDefEquiv) >= CRIT_IMMUNE_DEF and "|cff00ff00"
+                          or (totalDef >= (CRIT_IMMUNE_DEF - 40) and "|cffffcc00" or "|cffff4444")
+    local capLabel      = string.format("CRIT CAP (%d)", CRIT_IMMUNE_DEF)
+
+    table.insert(stats, { section=capLabel })
+    table.insert(stats, { label="  Defense skill",
+        value=string.format("%s%d / %d|r", defDispColor, totalDef, CRIT_IMMUNE_DEF) })
+    if sotfRanks > 0 then
+        table.insert(stats, { label="  + SotF (" .. sotfRanks .. "/3)",
+            value=string.format("|cff88ff88+%d equiv|r  (%d%% crit red)",
+                sotfDefEquiv, sotfRanks) })
+    end
+    if resDefEquiv > 0 then
+        table.insert(stats, { label="  + Resilience equiv",
+            value=string.format("|cff88ccff+%d|r  (%.2f%% crit red)",
+                resDefEquiv, resPct or 0) })
+    end
+    if sotfRanks > 0 or resDefEquiv > 0 then
+        local totalEquiv = totalDef + sotfDefEquiv + resDefEquiv
+        table.insert(stats, { label="  = Effective def",
+            value=string.format("|cffbbbbff%d / 490|r", totalEquiv) })
+    end
+    table.insert(stats, { label="  Crit immune",
+        value=critColor .. (critDefNeeded == 0
+            and "YES — IMMUNE|r"
+            or string.format("NO  — need %d more|r", critDefNeeded)) })
+
+    -- ---- RESISTANCES ----
+    -- UnitResistance(unit, school): resistance school indices are 1-6, NOT spell school IDs 2-7.
+    --   1=Holy, 2=Fire, 3=Nature, 4=Frost, 5=Shadow, 6=Arcane
+    -- Returns: base (gear/race/talent), pos (temp buffs), neg (debuffs).
+    local RES_SCHOOLS = {
+        {1,"Holy","ffffff"}, {2,"Fire","ff7700"}, {3,"Nature","00ff44"},
+        {4,"Frost","88ddff"}, {5,"Shadow","cc66ff"}, {6,"Arcane","9988ff"},
+    }
+    table.insert(stats, { section="RESISTANCES" })
+    for _, s in ipairs(RES_SCHOOLS) do
+        local school, name, hex = s[1], s[2], s[3]
+        local base, pos, neg = safe(UnitResistance, "player", school)
+        base = base or 0 ; pos = pos or 0 ; neg = neg or 0
+        local total = base + pos + neg
+        local col = "|cff" .. hex
+        table.insert(stats, { label="  " .. name, value=string.format("%s%d|r", col, total) })
+        if total > 0 then
+            if base ~= 0 then
+                table.insert(stats, { label="    Gear", value=tostring(base) })
+            end
+            if pos ~= 0 then
+                table.insert(stats, { label="    Buffs", value=string.format("+%d", pos) })
+            end
+            if neg ~= 0 then
+                table.insert(stats, { label="    Debuffs", value=tostring(neg) })
+            end
+        end
+    end
 
     return stats
 end

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "wow-addons": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/mcp-server/index.js"]
+    }
+  }
+}
