@@ -8,6 +8,8 @@ on:
       - "discord-bot/**"
       - ".github/workflows/deploy-discord-bot.yml"
       - ".github/workflows/discord-bot-ci.yml"
+    tags:
+      - 'v*'   # shared release tag — deploys bot to prod alongside addon release
 
   workflow_dispatch:
     inputs:
@@ -35,7 +37,8 @@ permissions:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  PULUMI_STACK: ${{ inputs.stack || 'dev' }}
+  # Tag pushes (releases) always deploy to prod; workflow_dispatch input wins if set.
+  PULUMI_STACK: ${{ inputs.stack || (github.ref_type == 'tag' && 'prod' || 'dev') }}
   PYTHON_VERSION: "3.12"
 
 jobs:
@@ -79,7 +82,10 @@ jobs:
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-8)
           echo "image_tag=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "Image tag: ${SHORT_SHA}"
+          # Use the git tag (e.g. v1.8.0) as a second image tag on releases,
+          # otherwise fall back to the ref name (branch name).
+          echo "ref_tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          echo "Image tag: ${SHORT_SHA} / ref: ${{ github.ref_name }}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -109,6 +115,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.ecr-url.outputs.repo_url }}:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.ecr-url.outputs.repo_url }}:${{ steps.meta.outputs.ref_tag }}
             ${{ steps.ecr-url.outputs.repo_url }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
