@@ -5439,17 +5439,15 @@ function SC_BuildMain()
         local fm = _G["SlyCharStripFlyout"]
         if fm then fm:Hide() end
     end)
-    -- Escape key: close us instead of opening the game menu.
-    -- We intentionally stay OUT of UISpecialFrames because InitiateTrade()
-    -- calls CloseAllWindows() which would close SlyChar mid-session.
-    --
-    -- SetPropagateKeyboardInput(true) for all other keys so C, bindings, etc.
-    -- still reach the game's keybinding system normally.
-    -- For Escape: consume it (false) so the game doesn't also react to it
-    -- while we're handling it. Once hidden (EnableKeyboard=false), the next
-    -- Escape goes straight to the game → opens the main menu as expected.
+    -- C key: consume it and close ourselves directly.  Do NOT propagate to
+    -- the game's keybinding system — if ToggleCharacter fired while we are
+    -- visible it would call ShowUIPanel(CharacterFrame) which re-triggers our
+    -- hook and immediately re-opens us, making C feel like "open only".
+    -- Escape: handled by UISpecialFrames below (canonical WoW mechanism).
+    --   When our frame is shown → WoW hides it (no GameMenu).
+    --   When our frame is hidden → WoW opens the GameMenu as normal.
     f:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
+        if key == "C" or key == "ESCAPE" then
             self:SetPropagateKeyboardInput(false)
             self:Hide()
         else
@@ -5459,7 +5457,11 @@ function SC_BuildMain()
 
     BuildWingFrame(f)
     SlyCharMainFrame = f
-    -- NOT in UISpecialFrames — see OnKeyDown above for Escape handling.
+    -- UISpecialFrames: Escape closes our panel; if nothing was closed the game
+    -- opens GameMenuFrame as expected.  "CloseAllWindows closes SlyChar" is fine —
+    -- the sibling-panel guard prevents C from re-opening us while trade/merchant
+    -- is active.
+    tinsert(UISpecialFrames, "SlyCharMainFrame")
 
     SC_ApplyTheme(SC.db.theme or "shadow")
 end
