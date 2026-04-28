@@ -1,0 +1,20 @@
+## Interface: 20505
+## Title: SlyRotate
+## Notes: Standalone rotation advisor for TBC Anniversary — all classes. Per-class/spec toggles, combat-only mode, spotlight box. /slyrotate
+## X-Curse-Project-ID: 1528155
+## Version: 1.1.0
+## Author: Sly
+## DefaultState: enabled
+## OptionalDeps: SlySuite, SlySuite_Style
+## SavedVariables: SlyRotateDB
+
+SlyRotate.lua
+SlyRotate_Warrior.lua
+SlyRotate_FeralDruid.lua
+SlyRotate_Shaman.lua
+SlyRotate_Warlock.lua
+SlyRotate_Mage.lua
+SlyRotate_Hunter.lua
+SlyRotate_Rogue.lua
+SlyRotate_Paladin.lua
+SlyRotate_Priest.lua

@@ -84,6 +84,13 @@ jobs:
           fail_on_unmatched_files: false
           generate_release_notes: false
 
+      - name: Upload individual addons to CurseForge (per-project)
+        continue-on-error: true
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CF_API_KEY }}
+        run: |
+          python scripts/curseforge_publish.py dist "${{ steps.ver.outputs.VERSION }}"
+
       - name: Upload combined bundle to CurseForge
         continue-on-error: true
         env:

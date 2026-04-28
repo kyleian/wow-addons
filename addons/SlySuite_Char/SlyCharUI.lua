@@ -5426,21 +5426,40 @@ function SC_BuildMain()
     ftxt:SetTextColor(0.3, 0.3, 0.38)
     ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  >> = panel menu  |  x = close panel")
 
-    f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
+    f:HookScript("OnShow", function(self)
+        self:EnableMouse(true)
+        self:EnableKeyboard(true)
+    end)
     f:HookScript("OnHide", function(self)
         self:EnableMouse(false)
+        self:EnableKeyboard(false)
         SC_HidePicker()
         SC_CloseSidePanel()
         if wingFrame then wingFrame:Hide() ; activeWingKey = nil end
         local fm = _G["SlyCharStripFlyout"]
         if fm then fm:Hide() end
     end)
+    -- Escape key: close us instead of opening the game menu.
+    -- We intentionally stay OUT of UISpecialFrames because InitiateTrade()
+    -- calls CloseAllWindows() which would close SlyChar mid-session.
+    --
+    -- SetPropagateKeyboardInput(true) for all other keys so C, bindings, etc.
+    -- still reach the game's keybinding system normally.
+    -- For Escape: consume it (false) so the game doesn't also react to it
+    -- while we're handling it. Once hidden (EnableKeyboard=false), the next
+    -- Escape goes straight to the game → opens the main menu as expected.
+    f:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false)
+            self:Hide()
+        else
+            self:SetPropagateKeyboardInput(true)
+        end
+    end)
 
     BuildWingFrame(f)
     SlyCharMainFrame = f
-    -- Do NOT register in UISpecialFrames: that causes CloseAllWindows()
-    -- (fired on TRADE_SHOW and similar events) to destroy our panel.
-    -- Escape handling is intentionally omitted; use C or the × button.
+    -- NOT in UISpecialFrames — see OnKeyDown above for Escape handling.
 
     SC_ApplyTheme(SC.db.theme or "shadow")
 end
