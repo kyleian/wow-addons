@@ -232,6 +232,14 @@ function SR.SetModeLabel(text)
     if modeLabel then modeLabel:SetText(text or "") end
 end
 
+-- Resize the main frame to fit exactly `n` rows. Called by modules when their
+-- active spec changes so the frame height tracks content instead of padding.
+function SR.ResizeBody(n)
+    local h = math.max(1, n) * (ROW_H + 1)
+    if SR.bodyFrame  then SR.bodyFrame:SetHeight(h) end
+    if SR.mainFrame  then SR.mainFrame:SetHeight(HDR_H + 2 + h + 4) end
+end
+
 -- ─── Main frame ──────────────────────────────────────────────
 local function BuildMainFrame()
     if mainFrame then return end
@@ -309,7 +317,9 @@ local function BuildMainFrame()
         SR.db.position = { point = pt or "CENTER", x = x or 0, y = y or 0 }
     end)
 
-    mainFrame = f
+    mainFrame  = f
+    SR.mainFrame = f
+    SR.bodyFrame = body
     if not SR.db.shown then f:Hide() end
 
     if SlyStyle and SlyStyle.OnThemeChange then

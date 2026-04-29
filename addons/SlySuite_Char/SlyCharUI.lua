@@ -5428,32 +5428,25 @@ function SC_BuildMain()
 
     f:HookScript("OnShow", function(self)
         self:EnableMouse(true)
-        self:EnableKeyboard(true)
     end)
     f:HookScript("OnHide", function(self)
         self:EnableMouse(false)
-        self:EnableKeyboard(false)
         SC_HidePicker()
         SC_CloseSidePanel()
         if wingFrame then wingFrame:Hide() ; activeWingKey = nil end
         local fm = _G["SlyCharStripFlyout"]
         if fm then fm:Hide() end
     end)
-    -- C key: consume it and close ourselves directly.  Do NOT propagate to
-    -- the game's keybinding system — if ToggleCharacter fired while we are
-    -- visible it would call ShowUIPanel(CharacterFrame) which re-triggers our
-    -- hook and immediately re-opens us, making C feel like "open only".
-    -- Escape: handled by UISpecialFrames below (canonical WoW mechanism).
-    --   When our frame is shown → WoW hides it (no GameMenu).
-    --   When our frame is hidden → WoW opens the GameMenu as normal.
-    f:SetScript("OnKeyDown", function(self, key)
-        if key == "C" or key == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false)
-            self:Hide()
-        else
-            self:SetPropagateKeyboardInput(true)
-        end
-    end)
+    -- C key: toggle is handled by the CharacterFrame:HookScript("OnShow") in
+    -- SlyChar.lua, which calls SC_ToggleMain().  Do NOT intercept C here with
+    -- SetPropagateKeyboardInput — that only blocks parent-frame propagation, not
+    -- the WoW binding system, so the binding fires anyway and SC_ToggleMain then
+    -- sees the frame is already hidden → re-opens it (the "C only opens" bug).
+    --
+    -- Escape: handled exclusively by UISpecialFrames below.  Intercepting Escape
+    -- in OnKeyDown hides the frame BEFORE UISpecialFrames checks it; UISpecialFrames
+    -- then finds nothing shown, declares nothing was closed, and opens GameMenu —
+    -- which is wrong when the user just wanted to close our panel.
 
     BuildWingFrame(f)
     SlyCharMainFrame = f

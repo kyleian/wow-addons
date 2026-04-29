@@ -21,7 +21,7 @@ local ICO = {
     SLAM       = "Interface\\Icons\\Ability_Warrior_Decimate",
     SS         = "Interface\\Icons\\Ability_Warrior_ShieldSlam",
     REVENGE    = "Interface\\Icons\\Ability_Warrior_Revenge",
-    DEVASTATE  = "Interface\\Icons\\Inv_Stone_15",
+    DEVASTATE  = "Interface\\Icons\\Ability_Warrior_Devastate",
     EXECUTE    = "Interface\\Icons\\Inv_Sword_48",
     HS         = "Interface\\Icons\\Ability_Warrior_HeroicStrike",
     SUNDER     = "Interface\\Icons\\Ability_Warrior_Sunder",
@@ -166,9 +166,17 @@ function W:RefreshSunderRows()
                 row.num:SetText(Col("444455", tostring(vis)))
             end
         end
+        return vis
     end
-    relayout(furyRowFrames)
-    relayout(armsRowFrames)
+    local furyVis = relayout(furyRowFrames)
+    local armsVis = relayout(armsRowFrames)
+    -- Resize the main frame to the currently-visible spec's row count.
+    local spec = (SR.db and SR.db.classes.WARRIOR and SR.db.classes.WARRIOR.specOverride)
+        or (furyContainer and furyContainer:IsShown() and "FURY")
+        or (armsContainer and armsContainer:IsShown() and "ARMS")
+        or (protContainer and protContainer:IsShown() and "PROT")
+    if spec == "FURY" and SR.ResizeBody then SR.ResizeBody(furyVis)
+    elseif spec == "ARMS" and SR.ResizeBody then SR.ResizeBody(armsVis) end
 end
 
 -- ─── Spec detection ──────────────────────────────────────────
@@ -668,20 +676,25 @@ function W:Update(now, db)
         return
     end
 
+    local showSunder = not (SR.db and SR.db.classes.WARRIOR and
+                            SR.db.classes.WARRIOR.showSunder == false)
     if spec == "FURY" then
         if furyContainer  then furyContainer:Show()  end
         if armsContainer  then armsContainer:Hide()  end
         if protContainer  then protContainer:Hide()  end
+        if SR.ResizeBody  then SR.ResizeBody(#FURY_ROWS - (showSunder and 0 or 1)) end
         UpdateFury(db, now)
     elseif spec == "ARMS" then
         if furyContainer  then furyContainer:Hide()  end
         if armsContainer  then armsContainer:Show()  end
         if protContainer  then protContainer:Hide()  end
+        if SR.ResizeBody  then SR.ResizeBody(#ARMS_ROWS - (showSunder and 0 or 1)) end
         UpdateArms(db, now)
     else
         if furyContainer  then furyContainer:Hide()  end
         if armsContainer  then armsContainer:Hide()  end
         if protContainer  then protContainer:Show()  end
+        if SR.ResizeBody  then SR.ResizeBody(#PROT_ROWS) end
         UpdateProt(db, now)
     end
 end
