@@ -232,14 +232,6 @@ function SR.SetModeLabel(text)
     if modeLabel then modeLabel:SetText(text or "") end
 end
 
--- Resize the main frame to fit exactly `n` rows. Called by modules when their
--- active spec changes so the frame height tracks content instead of padding.
-function SR.ResizeBody(n)
-    local h = math.max(1, n) * (ROW_H + 1)
-    if SR.bodyFrame  then SR.bodyFrame:SetHeight(h) end
-    if SR.mainFrame  then SR.mainFrame:SetHeight(HDR_H + 2 + h + 4) end
-end
-
 -- ─── Main frame ──────────────────────────────────────────────
 local function BuildMainFrame()
     if mainFrame then return end
@@ -317,9 +309,7 @@ local function BuildMainFrame()
         SR.db.position = { point = pt or "CENTER", x = x or 0, y = y or 0 }
     end)
 
-    mainFrame  = f
-    SR.mainFrame = f
-    SR.bodyFrame = body
+    mainFrame = f
     if not SR.db.shown then f:Hide() end
 
     if SlyStyle and SlyStyle.OnThemeChange then
@@ -812,6 +802,10 @@ local function Init()
 
     if SR._active.RegisterEvents then SR._active:RegisterEvents() end
 
+    -- ScanAll must run first so spec-dependent modules know their spec
+    -- before GetBodyHeight() and Build() are called by BuildMainFrame().
+    if SR._active.ScanAll then SR._active:ScanAll() end
+
     BuildMainFrame()
     BuildSpotlight()
 
@@ -819,8 +813,6 @@ local function Init()
         if mainFrame then mainFrame:Hide() end
         if spotFrame then spotFrame:Hide() end
     end
-
-    if SR._active.ScanAll then SR._active:ScanAll() end
 
     DEFAULT_CHAT_FRAME:AddMessage(
         Col("88ff88", "[SlyRotate]") .. " v" .. VERSION ..

@@ -2528,8 +2528,10 @@ function SC_RefreshSets()
             GameTooltip:SetOwner(w.row, "ANCHOR_RIGHT")
             GameTooltip:SetText(name, 1, 0.84, 0)
             for _, itemId in pairs(IRR.chardata.sets[name]) do
-                local n2 = GetItemInfo(itemId)
-                if n2 then GameTooltip:AddLine(n2, 0.8, 0.8, 0.8) end
+                if itemId then
+                    local n2 = GetItemInfo(itemId)
+                    if n2 then GameTooltip:AddLine(n2, 0.8, 0.8, 0.8) end
+                end
             end
             GameTooltip:Show()
         end)
@@ -5426,9 +5428,7 @@ function SC_BuildMain()
     ftxt:SetTextColor(0.3, 0.3, 0.38)
     ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  >> = panel menu  |  x = close panel")
 
-    f:HookScript("OnShow", function(self)
-        self:EnableMouse(true)
-    end)
+    f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
     f:HookScript("OnHide", function(self)
         self:EnableMouse(false)
         SC_HidePicker()
@@ -5437,24 +5437,12 @@ function SC_BuildMain()
         local fm = _G["SlyCharStripFlyout"]
         if fm then fm:Hide() end
     end)
-    -- C key: toggle is handled by the CharacterFrame:HookScript("OnShow") in
-    -- SlyChar.lua, which calls SC_ToggleMain().  Do NOT intercept C here with
-    -- SetPropagateKeyboardInput — that only blocks parent-frame propagation, not
-    -- the WoW binding system, so the binding fires anyway and SC_ToggleMain then
-    -- sees the frame is already hidden → re-opens it (the "C only opens" bug).
-    --
-    -- Escape: handled exclusively by UISpecialFrames below.  Intercepting Escape
-    -- in OnKeyDown hides the frame BEFORE UISpecialFrames checks it; UISpecialFrames
-    -- then finds nothing shown, declares nothing was closed, and opens GameMenu —
-    -- which is wrong when the user just wanted to close our panel.
 
     BuildWingFrame(f)
     SlyCharMainFrame = f
-    -- UISpecialFrames: Escape closes our panel; if nothing was closed the game
-    -- opens GameMenuFrame as expected.  "CloseAllWindows closes SlyChar" is fine —
-    -- the sibling-panel guard prevents C from re-opening us while trade/merchant
-    -- is active.
-    tinsert(UISpecialFrames, "SlyCharMainFrame")
+    -- Do NOT register in UISpecialFrames: that causes CloseAllWindows()
+    -- (fired on TRADE_SHOW and similar events) to destroy our panel.
+    -- Escape handling is intentionally omitted; use C or the × button.
 
     SC_ApplyTheme(SC.db.theme or "shadow")
 end

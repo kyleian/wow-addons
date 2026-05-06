@@ -38,7 +38,7 @@ local function CopperToString(copper)
     local parts = {}
     if g > 0 then parts[#parts+1] = "|cffd4af37" .. g .. "g|r" end
     if s > 0 then parts[#parts+1] = "|cffc0c0c0" .. s .. "s|r" end
-    if c > 0 or #parts == 0 then parts[#parts+1] = "|ffb87333" .. c .. "c|r" end
+    if c > 0 or #parts == 0 then parts[#parts+1] = "|cffb87333" .. c .. "c|r" end
     return table.concat(parts, " ")
 end
 

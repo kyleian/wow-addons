@@ -166,17 +166,9 @@ function W:RefreshSunderRows()
                 row.num:SetText(Col("444455", tostring(vis)))
             end
         end
-        return vis
     end
-    local furyVis = relayout(furyRowFrames)
-    local armsVis = relayout(armsRowFrames)
-    -- Resize the main frame to the currently-visible spec's row count.
-    local spec = (SR.db and SR.db.classes.WARRIOR and SR.db.classes.WARRIOR.specOverride)
-        or (furyContainer and furyContainer:IsShown() and "FURY")
-        or (armsContainer and armsContainer:IsShown() and "ARMS")
-        or (protContainer and protContainer:IsShown() and "PROT")
-    if spec == "FURY" and SR.ResizeBody then SR.ResizeBody(furyVis)
-    elseif spec == "ARMS" and SR.ResizeBody then SR.ResizeBody(armsVis) end
+    relayout(furyRowFrames)
+    relayout(armsRowFrames)
 end
 
 -- ─── Spec detection ──────────────────────────────────────────
@@ -184,10 +176,20 @@ local function DetectSpec(db)
     if db and db.classes.WARRIOR and db.classes.WARRIOR.specOverride then
         return db.classes.WARRIOR.specOverride
     end
-    if GetSpellInfo("Bloodthirst")   then return "FURY" end
-    if GetSpellInfo("Mortal Strike") then return "ARMS" end
-    if GetSpellInfo("Devastate")     then return "PROT" end
-    return "FURY"
+    -- GetSpellInfo checks the game DB, not the player's spellbook — unreliable.
+    -- Use talent point counts instead: highest tree wins.
+    local best, bestPts = "FURY", -1
+    local specMap = { Arms = "ARMS", Fury = "FURY", Protection = "PROT" }
+    if GetNumTalentTabs then
+        for t = 1, GetNumTalentTabs() do
+            local tabName, _, pts = GetTalentTabInfo(t)
+            if tabName and pts and specMap[tabName] and pts > bestPts then
+                best    = specMap[tabName]
+                bestPts = pts
+            end
+        end
+    end
+    return best
 end
 
 -- ─── Debuff / buff scanners ──────────────────────────────────
@@ -676,25 +678,20 @@ function W:Update(now, db)
         return
     end
 
-    local showSunder = not (SR.db and SR.db.classes.WARRIOR and
-                            SR.db.classes.WARRIOR.showSunder == false)
     if spec == "FURY" then
         if furyContainer  then furyContainer:Show()  end
         if armsContainer  then armsContainer:Hide()  end
         if protContainer  then protContainer:Hide()  end
-        if SR.ResizeBody  then SR.ResizeBody(#FURY_ROWS - (showSunder and 0 or 1)) end
         UpdateFury(db, now)
     elseif spec == "ARMS" then
         if furyContainer  then furyContainer:Hide()  end
         if armsContainer  then armsContainer:Show()  end
         if protContainer  then protContainer:Hide()  end
-        if SR.ResizeBody  then SR.ResizeBody(#ARMS_ROWS - (showSunder and 0 or 1)) end
         UpdateArms(db, now)
     else
         if furyContainer  then furyContainer:Hide()  end
         if armsContainer  then armsContainer:Hide()  end
         if protContainer  then protContainer:Show()  end
-        if SR.ResizeBody  then SR.ResizeBody(#PROT_ROWS) end
         UpdateProt(db, now)
     end
 end

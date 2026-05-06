@@ -83,35 +83,61 @@ end
 -- ToggleCharacter() always thinks it's closed and calls Show --
 -- so we toggle based on our own panel state.
 --
--- Sibling panel tracking: we cannot snapshot panels inside the OnShow
--- hook because the panel manager displaces them BEFORE OnShow fires.
--- Overriding ShowUIPanel directly causes taint and breaks combat.
--- Safe solution: track panel open/close state via WoW events, then
--- restore the displaced panel from our OnShow hook.
+-- PROBLEM: ShowUIPanel(CharacterFrame) runs the WoW panel manager
+-- BEFORE our OnShow hook fires.  The panel manager displaces other
+-- registered UI panels (TradeFrame, MerchantFrame, etc.) to make
+-- room.  By the time we detect them in OnShow they are already gone.
+--
+-- FIX: wrap ShowUIPanel directly (it is plain Lua in TBC FrameXML)
+-- so our snapshot runs BEFORE the panel manager displaces anything.
 -- --------------------------------------------------------
-
--- Keyed by global frame name; true = currently open.
-local _siblingOpen = {}
+local _displacedPanels = {}
 
 local function HookCharacterFrame()
     if not CharacterFrame then return end
 
-    CharacterFrame:HookScript("OnShow", function(self)
-        if SC._skipHook then return end
-
-        -- If a sibling UI panel was open (tracked via events), don't hijack.
-        -- Hide CharacterFrame and re-show the displaced panel.
-        for frameName, isOpen in pairs(_siblingOpen) do
-            if isOpen then
-                self:Hide()
-                local f = _G[frameName]
-                if f and not f:IsShown() then ShowUIPanel(f) end
-                return
+    -- True pre-hook: runs before the original ShowUIPanel displaces panels.
+    local _origShowUIPanel = ShowUIPanel
+    ShowUIPanel = function(frame, ...)
+        if frame == CharacterFrame then
+            wipe(_displacedPanels)
+            local candidates = {
+                TradeFrame, MerchantFrame, InspectFrame, SpellBookFrame,
+                GossipFrame, QuestFrame, ItemTextFrame,
+            }
+            for _, f in ipairs(candidates) do
+                if f and f:IsShown() then
+                    table.insert(_displacedPanels, f)
+                end
             end
+        end
+        return _origShowUIPanel(frame, ...)
+    end
+
+    CharacterFrame:HookScript("OnShow", function(self)
+        if SC._skipHook then
+            wipe(_displacedPanels)
+            return
+        end
+
+        -- If any sibling panel was open when ShowUIPanel fired, do not hijack.
+        -- Also restore any that the panel manager displaced.
+        if #_displacedPanels > 0 then
+            self:Hide()
+            for _, f in ipairs(_displacedPanels) do
+                if not f:IsShown() then ShowUIPanel(f) end
+            end
+            wipe(_displacedPanels)
+            return
         end
 
         -- Guard: cursor carry (spell/item drag).
-        if GetCursorInfo() then return end
+        if GetCursorInfo() then
+            wipe(_displacedPanels)
+            return
+        end
+
+        wipe(_displacedPanels)
 
         if InCombatLockdown() then
             CharacterFrame:EnableMouse(false)
@@ -289,12 +315,6 @@ evFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 evFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
 evFrame:RegisterEvent("FRIENDLIST_UPDATE")
 evFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
--- Sibling panel tracking (so C key during trade doesn't displace it)
-evFrame:RegisterEvent("TRADE_SHOW")         ; evFrame:RegisterEvent("TRADE_CLOSED")
-evFrame:RegisterEvent("MERCHANT_SHOW")      ; evFrame:RegisterEvent("MERCHANT_CLOSED")
-evFrame:RegisterEvent("GOSSIP_SHOW")        ; evFrame:RegisterEvent("GOSSIP_CLOSED")
-evFrame:RegisterEvent("QUEST_GREETING")     ; evFrame:RegisterEvent("QUEST_FINISHED")
-evFrame:RegisterEvent("INSPECT_READY")
 
 evFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -393,19 +413,7 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             if SC_RefreshAll then SC_RefreshAll() end
         end
 
-    -- Sibling panel open/close tracking
-    elseif event == "TRADE_SHOW"    then _siblingOpen["TradeFrame"]    = true
-    elseif event == "TRADE_CLOSED"  then _siblingOpen["TradeFrame"]    = false
-    elseif event == "MERCHANT_SHOW" then _siblingOpen["MerchantFrame"] = true
-    elseif event == "MERCHANT_CLOSED" then _siblingOpen["MerchantFrame"] = false
-    elseif event == "GOSSIP_SHOW"   then _siblingOpen["GossipFrame"]   = true
-    elseif event == "GOSSIP_CLOSED" then _siblingOpen["GossipFrame"]   = false
-    elseif event == "QUEST_GREETING" then _siblingOpen["QuestFrame"]   = true
-    elseif event == "QUEST_FINISHED" then _siblingOpen["QuestFrame"]   = false
-    elseif event == "INSPECT_READY" then _siblingOpen["InspectFrame"]  = true
-
     elseif event == "PLAYER_ENTERING_WORLD" then
-        _siblingOpen = {}  -- reset on world load (panels all closed)
         -- Pre-build the main frame now, while we are guaranteed to be outside
         -- combat lockdown. This ensures SlyCharMainFrame always exists by the
         -- time the player presses C, even if they never opened it manually.
