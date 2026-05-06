@@ -177,18 +177,34 @@ end
 local function ScanTotemState()
     -- Air slot (4): WFT or GoA — whichever is currently active
     local haveAir, airName, airStart, airDur = GetTotemInfo(4)
-    if haveAir and airStart and airDur and airDur > 0 then
+    local airActive = haveAir and airStart and airDur and airDur > 0
+    if airActive then
         local exp = airStart + airDur
         if airName == "Grace of Air Totem" then
-            goaExpiry = math.max(goaExpiry, exp)
+            goaExpiry = exp
+            wftExpiry = 0
+            wftCastTime = 0
         elseif airName == "Windfury Totem" then
-            wftExpiry = math.max(wftExpiry, exp)
+            wftExpiry = exp
+            goaExpiry = 0     -- WFT is active; GoA will be cast next to complete the twist
+            goaCastTime = 0
+        else
+            -- some other air totem; clear both
+            wftExpiry = 0; goaExpiry = 0
+            wftCastTime = 0; goaCastTime = 0
         end
+    else
+        -- air slot empty: both totems gone
+        wftExpiry = 0; goaExpiry = 0
+        wftCastTime = 0; goaCastTime = 0
     end
     -- Fire slot (1): Searing Totem / Fire Elemental / Magma Totem
     local haveFire, _, fireStart, fireDur = GetTotemInfo(1)
-    if haveFire and fireStart and fireDur and fireDur > 0 then
-        searingExpiry = math.max(searingExpiry, fireStart + fireDur)
+    local fireActive = haveFire and fireStart and fireDur and fireDur > 0
+    if fireActive then
+        searingExpiry = fireStart + fireDur
+    else
+        searingExpiry = 0
     end
 end
 
@@ -484,29 +500,27 @@ function S:OnEvent(event, arg1)
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then ScanPlayerBuffs()    end
         if arg1 == "target"  then ScanTargetDebuffs() end
+    elseif event == "PLAYER_TOTEM_UPDATE" then
+        -- Authoritative: read live slot state whenever any totem changes
+        ScanTotemState()
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
+        -- Track cast timestamps for twist window detection
         local _, subEvent, _, srcGUID, _, _, _, _, _, _, spellName =
             CombatLogGetCurrentEventInfo()
         if subEvent == "SPELL_CAST_SUCCESS" and srcGUID == UnitGUID("player") then
             local t = GetTime()
             if spellName == "Windfury Totem" then
                 wftCastTime = t
-                wftExpiry   = t + 120
+                -- expiry will be confirmed by PLAYER_TOTEM_UPDATE shortly after
             elseif spellName == "Grace of Air Totem" then
                 goaCastTime = t
-                goaExpiry   = t + 120
-            elseif spellName == "Searing Totem" then
-                searingExpiry = t + 60
-            elseif spellName == "Fire Elemental Totem" then
-                searingExpiry = t + 120   -- Fire Elemental lasts 2 min
-            elseif spellName == "Magma Totem" then
-                searingExpiry = t + 20
             end
         end
     end
 end
 
 function S:RegisterEvents()
+    SR.RegisterEvent("PLAYER_TOTEM_UPDATE")
     SR.RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 end
 
