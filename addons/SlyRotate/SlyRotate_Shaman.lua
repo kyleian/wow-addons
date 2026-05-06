@@ -46,7 +46,7 @@ local ENHANCE_ROWS = {
     { key="SS",     label="Stormstrike",                  icon=ICO.SS,   color={0.38,0.84,1.00} },
     { key="FS",     label="Flame Shock  (DoT)",           icon=ICO.FS,   color={1.00,0.48,0.12} },
     { key="ES",     label="Earth Shock",                  icon=ICO.ES,   color={0.55,0.88,0.55} },
-    { key="SEARING",label="Searing Totem",                icon=ICO.SEAR, color={0.90,0.35,0.10} },
+    { key="SEARING",label="Fire Totem",                  icon=ICO.SEAR, color={0.90,0.35,0.10} },
     { key="SR",     label="Shamanic Rage  (CD)",          icon=ICO.SR,   color={0.60,0.25,0.90} },
     { key="WF_PROC",label="Windfury Proc!",               icon=ICO.PROC, color={1.00,0.95,0.20} },
 }
@@ -72,20 +72,26 @@ local playerMaxMana   = 1
 local playerHP        = 1.0
 
 -- Enhancement state
-local flameshockExpiry  = 0   -- on target
-local srExpiry          = 0   -- Shamanistic Rage buff on player
-local nsExpiry          = 0   -- Nature's Swiftness buff on player (if consumed → 0)
-local wfProcExpiry      = 0   -- Windfury Attack proc window (~1.5s estimate)
+local flameshockExpiry  = 0
+local srExpiry          = 0
+local nsExpiry          = 0
+local wfProcExpiry      = 0
 
--- Totem twist state (tracked via SPELL_CAST_SUCCESS)
-local wftCastTime   = 0   -- when WFT was last cast (for immediate GoA prompt)
-local wftExpiry     = 0   -- Windfury Totem expires (cast time + 120s)
-local goaCastTime   = 0   -- when GoA was last cast
-local goaExpiry     = 0   -- Grace of Air Totem expires
-local searingExpiry = 0   -- Fire totem slot expires
+-- Totem twist state (10-second WFT aura cycle — mirrors SlySuite_TotemTwist logic)
+-- WFT totem pulses a 10-second "Windfury Totem" aura on nearby melee.
+-- Twist: drop WFT → ~8s normal rotation → drop GoA → IMMEDIATELY re-drop WFT.
+local WFT_AURA_DUR    = 10.0   -- WFT aura lasts 10s on party melee
+local TWIST_URGENT_AT = 2.0    -- flag GoA/WFT drop when < 2s of aura remain
+local twistState      = "idle" -- idle | armed | urgent | expired
+local wftDropTime     = 0      -- GetTime() when WFT last successfully cast
+local goatDropTime    = 0      -- GetTime() when GoA last successfully cast
+
+-- Fire totem state (slot 1: Searing, Magma, Fire Nova, Fire Elemental)
+local fireTotemName    = nil
+local fireTotemExpiry  = 0
 
 -- Elemental state
-local emExpiry          = 0   -- Elemental Mastery buff on player (instant next)
+local emExpiry          = 0   -- Elemental Mastery buff on player (instant next cast)
 -- (Flame shock / NS shared with enhance locals above)
 
 -- ─── Frame references ────────────────────────────────────────
@@ -174,44 +180,21 @@ local function ScanPlayerBuffs()
     end
 end
 
-local function ScanTotemState()
-    -- Air slot (4): WFT or GoA — whichever is currently active
-    local haveAir, airName, airStart, airDur = GetTotemInfo(4)
-    local airActive = haveAir and airStart and airDur and airDur > 0
-    if airActive then
-        local exp = airStart + airDur
-        if airName == "Grace of Air Totem" then
-            goaExpiry = exp
-            wftExpiry = 0
-            wftCastTime = 0
-        elseif airName == "Windfury Totem" then
-            wftExpiry = exp
-            goaExpiry = 0     -- WFT is active; GoA will be cast next to complete the twist
-            goaCastTime = 0
-        else
-            -- some other air totem; clear both
-            wftExpiry = 0; goaExpiry = 0
-            wftCastTime = 0; goaCastTime = 0
-        end
+local function ScanFireTotem()
+    local haveFire, fireName, fireStart, fireDur = GetTotemInfo(1)
+    if haveFire and fireName and fireName ~= "" and fireStart and fireDur and fireDur > 0 then
+        fireTotemName   = fireName
+        fireTotemExpiry = fireStart + fireDur
     else
-        -- air slot empty: both totems gone
-        wftExpiry = 0; goaExpiry = 0
-        wftCastTime = 0; goaCastTime = 0
-    end
-    -- Fire slot (1): Searing Totem / Fire Elemental / Magma Totem
-    local haveFire, _, fireStart, fireDur = GetTotemInfo(1)
-    local fireActive = haveFire and fireStart and fireDur and fireDur > 0
-    if fireActive then
-        searingExpiry = fireStart + fireDur
-    else
-        searingExpiry = 0
+        fireTotemName   = nil
+        fireTotemExpiry = 0
     end
 end
 
 function S:ScanAll()
     ScanTargetDebuffs()
     ScanPlayerBuffs()
-    ScanTotemState()
+    ScanFireTotem()
 end
 
 -- ─── Enhancement update ──────────────────────────────────────
@@ -227,49 +210,52 @@ local function UpdateEnhance(now)
     local srCD    = SpellCD("Shamanistic Rage")
     local wfL     = wfProcExpiry > 0 and math.max(0, wfProcExpiry - now) or 0
 
-    -- ── Totem twist state ──
-    local wftL = wftExpiry > 0 and math.max(0, wftExpiry - now) or 0
-    local goaL = goaExpiry > 0 and math.max(0, goaExpiry - now) or 0
+    -- ── Twist state machine (10-second WFT aura cycle) ──
+    -- WFT is cast → "armed" (aura ticking down from 10s)
+    -- When aura nears expiry (<2s) → urgent to drop GoA
+    -- GoA is cast while armed → "urgent" (aura burning, re-drop WFT immediately)
+    -- WFT re-cast while urgent → back to "armed" (cycle continues)
+    -- Aura expires without GoA → "expired" (missed window, restart)
+    local wftAuraLeft = 0
+    if twistState == "armed" or twistState == "urgent" then
+        wftAuraLeft = math.max(0, WFT_AURA_DUR - (now - wftDropTime))
+        if wftAuraLeft <= 0 then
+            twistState  = "expired"
+            wftAuraLeft = 0
+        end
+    end
 
-    -- needsGoaNow: WFT was cast within the last 3.5s and GoA hasn't been cast since
-    local sinceWFT    = wftCastTime > 0 and (now - wftCastTime) or math.huge
-    local sinceGoA    = goaCastTime > 0 and (now - goaCastTime) or math.huge
-    local needsGoaNow = sinceWFT < 3.5 and sinceGoA > sinceWFT
+    local twistIsBest =
+        twistState == "idle"    or
+        twistState == "expired" or
+        twistState == "urgent"  or
+        (twistState == "armed" and wftAuraLeft <= TWIST_URGENT_AT)
 
-    -- After a completed twist, GoA replaced WFT in the air slot (wftExpiry always 0).
-    -- Twist is due again when GoA is missing (not yet placed, or expired) or <15s left.
-    -- While WFT is briefly active before GoA is dropped, needsGoaNow handles it above.
-    local twistDue = (not needsGoaNow) and (goaExpiry == 0 or goaL < 15)
-
-    -- ── Searing Totem ──
-    local searingL = searingExpiry > 0 and math.max(0, searingExpiry - now) or 0
+    -- ── Fire totem ──
+    local fireL = fireTotemExpiry > 0 and math.max(0, fireTotemExpiry - now) or 0
+    local isMagma    = fireTotemName and fireTotemName:find("Magma",     1, true)
+    local isFireNova = fireTotemName and fireTotemName:find("Fire Nova", 1, true)
+    local isElem     = fireTotemName and fireTotemName:find("Elemental", 1, true)
+    -- Searing: refresh at <10s; Magma: refresh at <5s; Fire Nova: instant use, very short
+    local fireDue = (not fireTotemName) or
+                    (isMagma    and fireL < 5)  or
+                    (not isMagma and not isFireNova and not isElem and fireL < 8)
 
     -- ── Priority ──
-    -- 1. Complete the twist: GoA immediately after WFT
-    -- 2. Twist due (either totem missing or <15s remaining)
-    -- 3. Stormstrike (highest GCD)
-    -- 4. Earth Shock if FS is safe (>2s remaining)
-    -- 5. Flame Shock if expiring (<2s) -- refresh before ES to avoid clipping DoT
-    -- 6. Earth Shock (FS freshly applied)
-    -- 7. Flame Shock if completely missing
-    -- 8. Searing Totem (<5s remaining)
-    -- 9. Next-approaching CD (SS vs ES countdown)
     local best
-    if needsGoaNow then
-        best = "TWIST"
-    elseif twistDue then
+    if twistIsBest then
         best = "TWIST"
     elseif ssCD <= 0 then
         best = "SS"
     elseif esCD <= 0 and fsL > 2 then
-        best = "ES"      -- ES ready; FS safe, no clipping risk
+        best = "ES"
     elseif fsL > 0 and fsL < 2 then
-        best = "FS"      -- FS about to expire -- refresh before ES
+        best = "FS"
     elseif esCD <= 0 then
         best = "ES"
     elseif fsL == 0 then
-        best = "FS"      -- FS completely missing
-    elseif searingL < 5 then
+        best = "FS"
+    elseif fireDue then
         best = "SEARING"
     elseif ssCD <= esCD then
         best = "SS"
@@ -285,22 +271,26 @@ local function UpdateEnhance(now)
         local s = ""
 
         if k == "TWIST" then
-            if needsGoaNow then
-                s = Col("ffee00","-> GoA NOW!  ") .. Col("888888","complete twist")
-            elseif goaExpiry == 0 then
-                s = Col("ff4444","DROP WFT -> GoA  ") .. Col("888888","start cycle")
-            elseif goaL < 15 then
-                s = Col("ff8844","SOON!  ") ..
-                    Col("888888","GoA: ") .. Col("44ff88", Fmt(goaL))
-            else
-                s = Col("44aa44", Fmt(goaL)) .. Col("888888","  GoA up")
+            if twistState == "idle" then
+                s = Col("ff4444","START TWIST  ") .. Col("888888","drop WFT + GoA")
+            elseif twistState == "expired" then
+                s = Col("ff3333","EXPIRED!  ") .. Col("ff8844","drop WFT now")
+            elseif twistState == "urgent" then
+                s = Col("ff2222","WFT NOW!  ") .. Col("ffcc44", string.format("%.1fs", wftAuraLeft))
+            elseif twistState == "armed" then
+                if wftAuraLeft <= TWIST_URGENT_AT then
+                    s = Col("ff8800","GoA NOW!  ") .. Col("ffcc44", string.format("%.1fs", wftAuraLeft))
+                else
+                    local goaIn = math.max(0, wftAuraLeft - TWIST_URGENT_AT)
+                    s = Col("44cc44", string.format("%.1fs", wftAuraLeft)) ..
+                        Col("888888","  GoA in " .. string.format("%.1fs", goaIn))
+                end
             end
+
         elseif k == "SS" then
-            if ssCD <= 0 then
-                s = Col("44ff44","CAST NOW")
-            else
-                s = Col("ff8844", Fmt(ssCD))
-            end
+            if ssCD <= 0 then s = Col("44ff44","CAST NOW")
+            else               s = Col("ff8844", Fmt(ssCD)) end
+
         elseif k == "FS" then
             if fsL == 0 then
                 s = Col("ff4444","MISSING!")
@@ -311,22 +301,38 @@ local function UpdateEnhance(now)
             else
                 s = Col("44aa44", Fmt(fsL))
             end
+
         elseif k == "ES" then
             if esCD <= 0 then
                 s = Col("44ff44","CAST NOW  ") ..
                     Col("888888", ssCD > 0 and ("SS " .. Fmt(ssCD)) or "SS READY")
             else
-                local seqStr = ssCD > 0 and ("  >> SS " .. Fmt(ssCD)) or "  >> SS READY"
-                s = Col("ff8844", Fmt(esCD)) .. Col("555566", seqStr)
+                s = Col("ff8844", Fmt(esCD)) ..
+                    Col("555566", ssCD > 0 and ("  >> SS " .. Fmt(ssCD)) or "  >> SS READY")
             end
+
         elseif k == "SEARING" then
-            if searingL == 0 then
-                s = Col("ff4444","DROP NOW!")
-            elseif searingL < 10 then
-                s = Col("ff8844","SOON  ") .. Col("ffcc44", Fmt(searingL))
+            if not fireTotemName then
+                s = Col("ff4444","DROP SEARING  ") .. Col("888888","fire totem missing")
+            elseif isElem then
+                s = Col("ff8833","FE  ") .. Col("44cc44", Fmt(fireL))
+            elseif isMagma then
+                if fireL < 5 then
+                    s = Col("ff6622","MAGMA SOON  ") .. Col("ffcc44", Fmt(fireL))
+                else
+                    s = Col("ff8844","Magma  ") .. Col("44aa44", Fmt(fireL))
+                end
+            elseif isFireNova then
+                s = Col("ff4400","FNT  ") .. Col("ffcc44", Fmt(fireL))
             else
-                s = Col("44aa44", Fmt(searingL))
+                -- Searing Totem
+                if fireL < 8 then
+                    s = Col("ff8844","SEARING SOON  ") .. Col("ffcc44", Fmt(fireL))
+                else
+                    s = Col("44aa44", Fmt(fireL))
+                end
             end
+
         elseif k == "SR" then
             if srL > 0 then
                 s = Col("cc44ff","ACTIVE  ") .. Col("aaaaaa", Fmt(srL))
@@ -335,13 +341,12 @@ local function UpdateEnhance(now)
             else
                 s = Col("555566","CD  ") .. Col("888888", Fmt(srCD))
             end
+
         elseif k == "WF_PROC" then
-            if wfActive then
-                s = Col("ffee00","PROC!  ") .. Col("888888", Fmt(wfL))
-            else
-                s = Col("333344","--")
-            end
+            if wfActive then s = Col("ffee00","PROC!  ") .. Col("888888", Fmt(wfL))
+            else              s = Col("333344","--") end
         end
+
         SR.SetRowState(row, active, s)
     end
 
@@ -352,14 +357,21 @@ local function UpdateEnhance(now)
 
     local spotSt
     if best == "TWIST" then
-        spotSt = needsGoaNow and "GoA NOW!" or
-                 (goaExpiry > 0 and Fmt(goaL) or "START TWIST")
+        if twistState == "urgent" then
+            spotSt = "WFT NOW!"
+        elseif twistState == "armed" and wftAuraLeft <= TWIST_URGENT_AT then
+            spotSt = "GoA NOW!"
+        elseif twistState == "armed" then
+            spotSt = string.format("%.1fs", wftAuraLeft)
+        else
+            spotSt = "START"
+        end
     elseif best == "SS" then
         spotSt = ssCD <= 0 and "CAST" or Fmt(ssCD)
     elseif best == "FS" then
         spotSt = fsL > 0 and Fmt(fsL) or "MISSING"
     elseif best == "SEARING" then
-        spotSt = searingL > 0 and Fmt(searingL) or "DROP"
+        spotSt = fireL > 0 and Fmt(fireL) or "DROP"
     else
         spotSt = esCD <= 0 and "CAST" or Fmt(esCD)
     end
@@ -488,34 +500,47 @@ function S:Update(now, db)
 end
 
 -- ─── Events ──────────────────────────────────────────────────
-function S:OnEvent(event, arg1)
+function S:OnEvent(event, arg1, arg2, arg3)
     if event == "PLAYER_TARGET_CHANGED" then
         ScanTargetDebuffs()
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then ScanPlayerBuffs()    end
         if arg1 == "target"  then ScanTargetDebuffs() end
     elseif event == "PLAYER_TOTEM_UPDATE" then
-        -- Authoritative: read live slot state whenever any totem changes
-        ScanTotemState()
-    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        -- Track cast timestamps for twist window detection
-        local _, subEvent, _, srcGUID, _, _, _, _, _, _, spellName =
-            CombatLogGetCurrentEventInfo()
-        if subEvent == "SPELL_CAST_SUCCESS" and srcGUID == UnitGUID("player") then
-            local t = GetTime()
-            if spellName == "Windfury Totem" then
-                wftCastTime = t
-                -- expiry will be confirmed by PLAYER_TOTEM_UPDATE shortly after
-            elseif spellName == "Grace of Air Totem" then
-                goaCastTime = t
+        ScanFireTotem()
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        -- arg1=unit, arg2=castGUID, arg3=spellID  (TBC 2.5.x API)
+        if arg1 ~= "player" then return end
+        local spellName = arg3 and GetSpellInfo(arg3)
+        if not spellName then return end
+
+        if spellName == "Windfury Totem" then
+            -- Arm the 10-second WFT aura window (mirrors TotemTwist addon logic)
+            twistState  = "armed"
+            wftDropTime = GetTime()
+
+        elseif spellName == "Grace of Air Totem" then
+            -- GoA dropped while armed → urgent countdown to re-drop WFT
+            if twistState == "armed" then
+                twistState   = "urgent"
+                goatDropTime = GetTime()
             end
+
+        elseif spellName == "Searing Totem"       or
+               spellName == "Magma Totem"          or
+               spellName == "Fire Nova Totem"      or
+               spellName == "Fire Elemental Totem" then
+            -- Fire totem cast — GetTotemInfo will update on the next PLAYER_TOTEM_UPDATE,
+            -- but eagerly set the name so the row updates within this tick.
+            fireTotemName = spellName
+            -- expiry set by ScanFireTotem via PLAYER_TOTEM_UPDATE
         end
     end
 end
 
 function S:RegisterEvents()
     SR.RegisterEvent("PLAYER_TOTEM_UPDATE")
-    SR.RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    SR.RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 end
 
 -- ─── Register ────────────────────────────────────────────────
