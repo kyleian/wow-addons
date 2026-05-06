@@ -28,24 +28,27 @@ local ICO = {
     EM        = "Interface\\Icons\\Spell_Nature_elementalshields",
     PROC      = "Interface\\Icons\\Spell_Nature_TauntOther",   -- Windfury proc indicator
     LOCAL_DEF = "Interface\\Icons\\Spell_Nature_ThunderClap",
+    WFT       = "Interface\\Icons\\Spell_Nature_WinFury",      -- Windfury Totem
+    SEAR      = "Interface\\Icons\\Spell_Fire_SearingTotem",   -- Searing Totem
 }
 
 -- ─── Enhancement priority row definitions ────────────────────
 -- TBC Enhancement loop (weapon MH = Windfury, OH = Flametongue):
---   1. Stormstrike on CD       (12s CD)
---   2. Earth Shock on CD       (6s CD; purges targets' windfury if needed)
---   3. Flame Shock if expired  (DoT filler, renew ~12s)
--- Off-GCD indicators:
---   4. Shamanistic Rage        (big CD, passive indicator)
---   5. Nature's Swiftness      (utility CD indicator)
---   6. Windfury proc window    (tracked from combat log)
+--   1. WFT+GoA totem twist     (drop WFT then GoA immediately; refresh ~120s)
+--   2. Stormstrike on CD       (12s CD)
+--   3. Flame Shock             (DoT uptime — apply/refresh before Earth Shock)
+--   4. Earth Shock on CD       (6s CD)
+--   5. Searing Totem           (fire totem for DPS, 60s)
+--   6. Shamanistic Rage        (big CD, passive indicator)
+--   7. Windfury proc window    (tracked from combat log)
 local ENHANCE_ROWS = {
-    { key="SS",     label="Stormstrike",          icon=ICO.SS,   color={0.38,0.84,1.00} },
-    { key="ES",     label="Earth Shock",          icon=ICO.ES,   color={0.55,0.88,0.55} },
-    { key="FS",     label="Flame Shock  (DoT)",   icon=ICO.FS,   color={1.00,0.48,0.12} },
-    { key="SR",     label="Shamanic Rage  (CD)",  icon=ICO.SR,   color={0.60,0.25,0.90} },
-    { key="NS",     label="Nature's Swiftness",   icon=ICO.NS,   color={0.45,1.00,0.45} },
-    { key="WF_PROC",label="Windfury Proc!",       icon=ICO.PROC, color={1.00,0.95,0.20} },
+    { key="TWIST",  label="WFT + GoA  (twist)",           icon=ICO.WFT,  color={1.00,0.82,0.22} },
+    { key="SS",     label="Stormstrike",                  icon=ICO.SS,   color={0.38,0.84,1.00} },
+    { key="FS",     label="Flame Shock  (DoT)",           icon=ICO.FS,   color={1.00,0.48,0.12} },
+    { key="ES",     label="Earth Shock",                  icon=ICO.ES,   color={0.55,0.88,0.55} },
+    { key="SEARING",label="Searing Totem",                icon=ICO.SEAR, color={0.90,0.35,0.10} },
+    { key="SR",     label="Shamanic Rage  (CD)",          icon=ICO.SR,   color={0.60,0.25,0.90} },
+    { key="WF_PROC",label="Windfury Proc!",               icon=ICO.PROC, color={1.00,0.95,0.20} },
 }
 
 -- ─── Elemental priority row definitions ──────────────────────
@@ -73,6 +76,13 @@ local flameshockExpiry  = 0   -- on target
 local srExpiry          = 0   -- Shamanistic Rage buff on player
 local nsExpiry          = 0   -- Nature's Swiftness buff on player (if consumed → 0)
 local wfProcExpiry      = 0   -- Windfury Attack proc window (~1.5s estimate)
+
+-- Totem twist state (tracked via SPELL_CAST_SUCCESS)
+local wftCastTime   = 0   -- when WFT was last cast (for immediate GoA prompt)
+local wftExpiry     = 0   -- Windfury Totem expires (cast time + 120s)
+local goaCastTime   = 0   -- when GoA was last cast
+local goaExpiry     = 0   -- Grace of Air Totem expires
+local searingExpiry = 0   -- Fire totem slot expires
 
 -- Elemental state
 local emExpiry          = 0   -- Elemental Mastery buff on player (instant next)
@@ -164,9 +174,28 @@ local function ScanPlayerBuffs()
     end
 end
 
+local function ScanTotemState()
+    -- Air slot (4): WFT or GoA — whichever is currently active
+    local haveAir, airName, airStart, airDur = GetTotemInfo(4)
+    if haveAir and airStart and airDur and airDur > 0 then
+        local exp = airStart + airDur
+        if airName == "Grace of Air Totem" then
+            goaExpiry = math.max(goaExpiry, exp)
+        elseif airName == "Windfury Totem" then
+            wftExpiry = math.max(wftExpiry, exp)
+        end
+    end
+    -- Fire slot (1): Searing Totem / Fire Elemental / Magma Totem
+    local haveFire, _, fireStart, fireDur = GetTotemInfo(1)
+    if haveFire and fireStart and fireDur and fireDur > 0 then
+        searingExpiry = math.max(searingExpiry, fireStart + fireDur)
+    end
+end
+
 function S:ScanAll()
     ScanTargetDebuffs()
     ScanPlayerBuffs()
+    ScanTotemState()
 end
 
 -- ─── Enhancement update ──────────────────────────────────────
@@ -180,19 +209,54 @@ local function UpdateEnhance(now)
     local fsL     = flameshockExpiry > 0 and math.max(0, flameshockExpiry - now) or 0
     local srL     = srExpiry > 0 and math.max(0, srExpiry - now) or 0
     local srCD    = SpellCD("Shamanistic Rage")
-    local nsReady = nsExpiry == 0 and SpellCD("Nature's Swiftness") <= 0  -- ready but not consumed
     local wfL     = wfProcExpiry > 0 and math.max(0, wfProcExpiry - now) or 0
 
-    -- Priority: Stormstrike → Earth Shock → Flame Shock refresh
+    -- ── Totem twist state ──
+    local wftL = wftExpiry > 0 and math.max(0, wftExpiry - now) or 0
+    local goaL = goaExpiry > 0 and math.max(0, goaExpiry - now) or 0
+
+    -- needsGoaNow: WFT was cast within the last 3.5s and GoA hasn't been cast since
+    local sinceWFT    = wftCastTime > 0 and (now - wftCastTime) or math.huge
+    local sinceGoA    = goaCastTime > 0 and (now - goaCastTime) or math.huge
+    local needsGoaNow = sinceWFT < 3.5 and sinceGoA > sinceWFT
+
+    -- twistL: time until the first of the two totems expires
+    local twistExpiry = math.huge
+    if wftExpiry > 0 then twistExpiry = math.min(twistExpiry, wftExpiry) end
+    if goaExpiry > 0 then twistExpiry = math.min(twistExpiry, goaExpiry) end
+    local twistL  = twistExpiry < math.huge and math.max(0, twistExpiry - now) or 0
+    local twistDue = (wftExpiry == 0 or goaExpiry == 0 or twistL < 15) and not needsGoaNow
+
+    -- ── Searing Totem ──
+    local searingL = searingExpiry > 0 and math.max(0, searingExpiry - now) or 0
+
+    -- ── Priority ──
+    -- 1. Complete the twist: GoA immediately after WFT
+    -- 2. Twist due (either totem missing or <15s remaining)
+    -- 3. Stormstrike (highest GCD)
+    -- 4. Earth Shock if FS is safe (>2s remaining)
+    -- 5. Flame Shock if expiring (<2s) -- refresh before ES to avoid clipping DoT
+    -- 6. Earth Shock (FS freshly applied)
+    -- 7. Flame Shock if completely missing
+    -- 8. Searing Totem (<5s remaining)
+    -- 9. Next-approaching CD (SS vs ES countdown)
     local best
-    if ssCD <= 0 then
+    if needsGoaNow then
+        best = "TWIST"
+    elseif twistDue then
+        best = "TWIST"
+    elseif ssCD <= 0 then
         best = "SS"
+    elseif esCD <= 0 and fsL > 2 then
+        best = "ES"      -- ES ready; FS safe, no clipping risk
+    elseif fsL > 0 and fsL < 2 then
+        best = "FS"      -- FS about to expire -- refresh before ES
     elseif esCD <= 0 then
         best = "ES"
     elseif fsL == 0 then
-        best = "FS"       -- apply or reapply DoT
-    elseif fsL < 3 then
-        best = "FS"       -- refresh before it falls off
+        best = "FS"      -- FS completely missing
+    elseif searingL < 5 then
+        best = "SEARING"
     elseif ssCD <= esCD then
         best = "SS"
     else
@@ -206,28 +270,52 @@ local function UpdateEnhance(now)
         local active = (k == best) or (k == "WF_PROC" and wfActive)
         local s = ""
 
-        if k == "SS" then
+        if k == "TWIST" then
+            if needsGoaNow then
+                s = Col("ffee00","-> GoA NOW!  ") .. Col("888888","complete twist")
+            elseif wftExpiry == 0 and goaExpiry == 0 then
+                s = Col("ff4444","DROP WFT+GoA  ") .. Col("888888","both missing")
+            elseif twistL < 15 then
+                local wStr = wftL > 0 and Fmt(wftL) or "GONE"
+                local gStr = goaL > 0 and Fmt(goaL) or "GONE"
+                s = Col("ff8844","SOON!  ") ..
+                    Col("888888","WFT:") .. Col(wftL > 0 and "44aaff" or "ff4444", wStr) ..
+                    Col("555566"," GoA:") .. Col(goaL > 0 and "44ff88" or "ff4444", gStr)
+            else
+                s = Col("888888","WFT ") .. Col("44aaff", wftL > 0 and Fmt(wftL) or "gone") ..
+                    Col("555566"," | GoA ") .. Col("44ff88", goaL > 0 and Fmt(goaL) or "gone")
+            end
+        elseif k == "SS" then
             if ssCD <= 0 then
                 s = Col("44ff44","CAST NOW")
             else
                 s = Col("ff8844", Fmt(ssCD))
             end
+        elseif k == "FS" then
+            if fsL == 0 then
+                s = Col("ff4444","MISSING!")
+            elseif fsL < 2 then
+                s = Col("ff6622","REFRESH!  ") .. Col("ffcc44", Fmt(fsL))
+            elseif fsL < 5 then
+                s = Col("ffcc44", Fmt(fsL) .. "  ") .. Col("888888","refresh soon")
+            else
+                s = Col("44aa44", Fmt(fsL))
+            end
         elseif k == "ES" then
             if esCD <= 0 then
-                s = Col("44ff44","CAST NOW")
+                s = Col("44ff44","CAST NOW  ") ..
+                    Col("888888", ssCD > 0 and ("SS " .. Fmt(ssCD)) or "SS READY")
             else
                 local seqStr = ssCD > 0 and ("  >> SS " .. Fmt(ssCD)) or "  >> SS READY"
                 s = Col("ff8844", Fmt(esCD)) .. Col("555566", seqStr)
             end
-        elseif k == "FS" then
-            if fsL == 0 then
-                s = Col("ff4444","MISSING!")
-            elseif fsL < 3 then
-                s = Col("ff6622","REFRESH!  ") .. Col("ffcc44", Fmt(fsL))
-            elseif fsL < 6 then
-                s = Col("ffcc44", Fmt(fsL) .. "  ") .. Col("888888","refresh soon")
+        elseif k == "SEARING" then
+            if searingL == 0 then
+                s = Col("ff4444","DROP NOW!")
+            elseif searingL < 10 then
+                s = Col("ff8844","SOON  ") .. Col("ffcc44", Fmt(searingL))
             else
-                s = Col("44aa44", Fmt(fsL))
+                s = Col("44aa44", Fmt(searingL))
             end
         elseif k == "SR" then
             if srL > 0 then
@@ -237,25 +325,11 @@ local function UpdateEnhance(now)
             else
                 s = Col("555566","CD  ") .. Col("888888", Fmt(srCD))
             end
-        elseif k == "NS" then
-            if nsReady then
-                s = Col("44ff44","READY  ") .. Col("888888","instant CL on pull")
-            elseif nsExpiry > 0 then
-                local nsL = math.max(0, nsExpiry - now)
-                s = Col("ccff88","ACTIVE  ") .. Col("aaaaaa", Fmt(nsL))
-            else
-                local nsCD = SpellCD("Nature's Swiftness")
-                if nsCD > 0 then
-                    s = Col("555566","CD  ") .. Col("888888", Fmt(nsCD))
-                else
-                    s = Col("44ff44","READY")
-                end
-            end
         elseif k == "WF_PROC" then
             if wfActive then
                 s = Col("ffee00","PROC!  ") .. Col("888888", Fmt(wfL))
             else
-                s = Col("333344","—")
+                s = Col("333344","--")
             end
         end
         SR.SetRowState(row, active, s)
@@ -266,7 +340,19 @@ local function UpdateEnhance(now)
         Col("88ccff","ENHA") .. "  " ..
         Col(manaCol, string.format("%.0f%%", manaP * 100) .. "M"))
 
-    local spotSt = ssCD <= 0 and "CAST" or Fmt(ssCD)
+    local spotSt
+    if best == "TWIST" then
+        spotSt = needsGoaNow and "GoA NOW!" or
+                 (twistL > 0 and Fmt(twistL) or "DROP TOTEMS")
+    elseif best == "SS" then
+        spotSt = ssCD <= 0 and "CAST" or Fmt(ssCD)
+    elseif best == "FS" then
+        spotSt = fsL > 0 and Fmt(fsL) or "MISSING"
+    elseif best == "SEARING" then
+        spotSt = searingL > 0 and Fmt(searingL) or "DROP"
+    else
+        spotSt = esCD <= 0 and "CAST" or Fmt(esCD)
+    end
     SR.UpdateSpotlight(ENHANCE_ROWS, best, spotSt)
 end
 
@@ -312,7 +398,7 @@ local function UpdateElemental(now)
 
         if k == "EM" then
             if emL > 0 then
-                s = Col("ffdd44","ACTIVE  ") .. Col("888888","→ instant LB/CL")
+                s = Col("ffdd44","ACTIVE  ") .. Col("888888","-> instant LB/CL")
             elseif emCD <= 0 then
                 s = Col("44ff44","READY  ") .. Col("888888","use on pull")
             else
@@ -398,12 +484,30 @@ function S:OnEvent(event, arg1)
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then ScanPlayerBuffs()    end
         if arg1 == "target"  then ScanTargetDebuffs() end
+    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
+        local _, subEvent, _, srcGUID, _, _, _, _, _, _, spellName =
+            CombatLogGetCurrentEventInfo()
+        if subEvent == "SPELL_CAST_SUCCESS" and srcGUID == UnitGUID("player") then
+            local t = GetTime()
+            if spellName == "Windfury Totem" then
+                wftCastTime = t
+                wftExpiry   = t + 120
+            elseif spellName == "Grace of Air Totem" then
+                goaCastTime = t
+                goaExpiry   = t + 120
+            elseif spellName == "Searing Totem" then
+                searingExpiry = t + 60
+            elseif spellName == "Fire Elemental Totem" then
+                searingExpiry = t + 120   -- Fire Elemental lasts 2 min
+            elseif spellName == "Magma Totem" then
+                searingExpiry = t + 20
+            end
+        end
     end
 end
 
 function S:RegisterEvents()
-    -- Core events (TARGET_CHANGED, UNIT_AURA) already registered by SlyRotate.lua
-    -- No additional events needed for Shaman
+    SR.RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 end
 
 -- ─── Register ────────────────────────────────────────────────
