@@ -236,12 +236,10 @@ local function UpdateEnhance(now)
     local sinceGoA    = goaCastTime > 0 and (now - goaCastTime) or math.huge
     local needsGoaNow = sinceWFT < 3.5 and sinceGoA > sinceWFT
 
-    -- twistL: time until the first of the two totems expires
-    local twistExpiry = math.huge
-    if wftExpiry > 0 then twistExpiry = math.min(twistExpiry, wftExpiry) end
-    if goaExpiry > 0 then twistExpiry = math.min(twistExpiry, goaExpiry) end
-    local twistL  = twistExpiry < math.huge and math.max(0, twistExpiry - now) or 0
-    local twistDue = (wftExpiry == 0 or goaExpiry == 0 or twistL < 15) and not needsGoaNow
+    -- After a completed twist, GoA replaced WFT in the air slot (wftExpiry always 0).
+    -- Twist is due again when GoA is missing (not yet placed, or expired) or <15s left.
+    -- While WFT is briefly active before GoA is dropped, needsGoaNow handles it above.
+    local twistDue = (not needsGoaNow) and (goaExpiry == 0 or goaL < 15)
 
     -- ── Searing Totem ──
     local searingL = searingExpiry > 0 and math.max(0, searingExpiry - now) or 0
@@ -289,17 +287,13 @@ local function UpdateEnhance(now)
         if k == "TWIST" then
             if needsGoaNow then
                 s = Col("ffee00","-> GoA NOW!  ") .. Col("888888","complete twist")
-            elseif wftExpiry == 0 and goaExpiry == 0 then
-                s = Col("ff4444","DROP WFT+GoA  ") .. Col("888888","both missing")
-            elseif twistL < 15 then
-                local wStr = wftL > 0 and Fmt(wftL) or "GONE"
-                local gStr = goaL > 0 and Fmt(goaL) or "GONE"
+            elseif goaExpiry == 0 then
+                s = Col("ff4444","DROP WFT -> GoA  ") .. Col("888888","start cycle")
+            elseif goaL < 15 then
                 s = Col("ff8844","SOON!  ") ..
-                    Col("888888","WFT:") .. Col(wftL > 0 and "44aaff" or "ff4444", wStr) ..
-                    Col("555566"," GoA:") .. Col(goaL > 0 and "44ff88" or "ff4444", gStr)
+                    Col("888888","GoA: ") .. Col("44ff88", Fmt(goaL))
             else
-                s = Col("888888","WFT ") .. Col("44aaff", wftL > 0 and Fmt(wftL) or "gone") ..
-                    Col("555566"," | GoA ") .. Col("44ff88", goaL > 0 and Fmt(goaL) or "gone")
+                s = Col("44aa44", Fmt(goaL)) .. Col("888888","  GoA up")
             end
         elseif k == "SS" then
             if ssCD <= 0 then
@@ -359,7 +353,7 @@ local function UpdateEnhance(now)
     local spotSt
     if best == "TWIST" then
         spotSt = needsGoaNow and "GoA NOW!" or
-                 (twistL > 0 and Fmt(twistL) or "DROP TOTEMS")
+                 (goaExpiry > 0 and Fmt(goaL) or "START TWIST")
     elseif best == "SS" then
         spotSt = ssCD <= 0 and "CAST" or Fmt(ssCD)
     elseif best == "FS" then
