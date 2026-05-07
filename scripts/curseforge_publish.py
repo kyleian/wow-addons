@@ -100,18 +100,16 @@ def main():
 
     # Resolve TBC Classic game version IDs from CurseForge
     print(f"Fetching CurseForge game versions (typeID={GAME_VERSION_TYPE_ID})...")
+    tbc_ids = []
     try:
         all_versions = cf_request("/game/versions", token)
+        tbc_ids = [v["id"] for v in all_versions
+                   if v.get("gameVersionTypeID") == GAME_VERSION_TYPE_ID]
+        print(f"Found {len(tbc_ids)} TBC Classic version ID(s): {tbc_ids[:5]}")
+        if not tbc_ids:
+            print(f"WARNING: No game versions found for typeID {GAME_VERSION_TYPE_ID}.")
     except RuntimeError as e:
-        print(f"ERROR fetching game versions: {e}")
-        sys.exit(1)
-
-    tbc_ids = [v["id"] for v in all_versions
-               if v.get("gameVersionTypeID") == GAME_VERSION_TYPE_ID]
-    print(f"Found {len(tbc_ids)} TBC Classic version ID(s): {tbc_ids[:5]}")
-
-    if not tbc_ids:
-        print(f"WARNING: No game versions found for typeID {GAME_VERSION_TYPE_ID}.")
+        print(f"WARNING: Could not fetch game versions ({e}) — uploading without gameVersions tag.")
 
     errors = 0
     skipped = 0
@@ -121,8 +119,14 @@ def main():
         name     = addon["name"]
         curse_id = str(addon.get("curseProjectId", "")).strip()
 
-        # Per-addon mode: skip everything except the target addon
+        # Per-addon mode: only process the target addon
         if addon_filter and name != addon_filter:
+            continue
+
+        # Suite mode: skip addons with their own standalone per-addon release workflow
+        if not addon_filter and addon.get("standaloneRelease"):
+            print(f"SKIP  {name:<22} — standaloneRelease=true (has its own addon-release tag)")
+            skipped += 1
             continue
 
         if not curse_id:

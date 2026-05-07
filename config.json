@@ -199,7 +199,8 @@
                        "enabled":  true,
                        "description":  "Standalone rotation advisor suite for TBC Anniversary — all classes (Warrior/Druid/Shaman/Warlock/Mage/Hunter/Rogue/Paladin/Priest). Per-class/spec toggles, combat-only mode, spotlight box. /slyrotate",
                        "sourceDir":  "addons\\SlyRotate",
-                       "version":  "1.2.1",
+                       "version":  "1.2.2",
+                       "standaloneRelease":  true,
                        "curseProjectId":  "1528155"
                    }
                ],
