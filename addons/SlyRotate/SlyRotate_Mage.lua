@@ -56,7 +56,7 @@ local ROWS_FROST = {
     { key="PROC",    label="Brain Freeze!",   icon=ICO.FrostfireBolt, color={1.0, 0.9, 0.5} },
     { key="FBOLT",   label="Frostbolt (spam)",icon=ICO.Frostbolt,     color={0.4, 0.7, 0.9} },
 }
-
+M.specRows = { ARCANE = ROWS_ARCANE, FIRE = ROWS_FIRE, FROST = ROWS_FROST }
 -- ─── Module state ─────────────────────────────────────────────
 local spec        = nil
 local currentRows = nil
@@ -133,8 +133,8 @@ function M:Build(body)
         local r = SR.BuildRow(body, rd, i)
         r.key = rd.key
         rows[i] = r
-    end
-end
+    end    M.specRowFrames = { [spec] = rows }
+    M.currentSpec = specend
 
 -- ─── Mana forecast helper ──────────────────────────────────────
 -- Estimates mana% at the end of the fight based on current burn rate.

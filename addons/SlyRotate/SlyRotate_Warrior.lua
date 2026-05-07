@@ -66,6 +66,9 @@ local PROT_ROWS = {
     { key="HS",           label="+ Heroic Strike  (dump)",  icon=ICO.HS,         color={1.00,0.82,0.22} },
 }
 
+-- Expose row definitions for the admin panel (after all ROWS tables)
+W.specRows = { FURY = FURY_ROWS, ARMS = ARMS_ROWS, PROT = PROT_ROWS }
+
 -- ─── Combat state ────────────────────────────────────────────
 local playerRage         = 0
 local playerHP           = 1.0
@@ -145,6 +148,8 @@ function W:Build(body)
         rd._idx = i
         protRowFrames[i] = SR.BuildRow(protContainer, rd, i)
     end
+
+    W.specRowFrames = { FURY = furyRowFrames, ARMS = armsRowFrames, PROT = protRowFrames }
 end
 
 -- ─── Sunder row visibility ───────────────────────────────────
@@ -667,6 +672,7 @@ function W:Update(now, db)
     end
 
     local spec = DetectSpec(db)
+    W.currentSpec = spec
 
     -- Enforce per-spec toggle
     if specEnabled[spec] == false then

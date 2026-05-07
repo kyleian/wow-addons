@@ -56,7 +56,7 @@ local ROWS_SUBTLETY = {
     { key="EVIS",   label="Eviscerate (5CP)", icon=ICO.Eviscerate,     color={0.9, 0.6, 0.2} },
     { key="HEMOR",  label="Hemorrhage",       icon=ICO.Hemorrhage,     color={0.7, 0.2, 0.2} },
 }
-
+M.specRows = { COMBAT = ROWS_COMBAT, ASSASSINATION = ROWS_ASSASSINATION, SUBTLETY = ROWS_SUBTLETY }
 -- ─── Module state ─────────────────────────────────────────────
 local spec        = nil
 local currentRows = nil
@@ -106,8 +106,8 @@ function M:Build(body)
         local r = SR.BuildRow(body, rd, i)
         r.key = rd.key
         rows[i] = r
-    end
-end
+    end    M.specRowFrames = { [spec] = rows }
+    M.currentSpec = specend
 
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)

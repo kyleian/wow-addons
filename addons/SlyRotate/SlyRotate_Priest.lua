@@ -63,6 +63,8 @@ local ROWS_DISCIPLINE = {
     { key="GH",     label="Greater Heal",     icon=ICO.GreaterHeal,    color={0.8, 0.8, 0.5} },
 }
 
+M.specRows = { SHADOW = ROWS_SHADOW, HOLY = ROWS_HOLY, DISCIPLINE = ROWS_DISCIPLINE }
+
 -- ─── Module state ─────────────────────────────────────────────
 local spec        = nil
 local currentRows = nil
@@ -113,8 +115,8 @@ function M:Build(body)
         local r = SR.BuildRow(body, rd, i)
         r.key = rd.key
         rows[i] = r
-    end
-end
+    end    M.specRowFrames = { [spec] = rows }
+    M.currentSpec = specend
 
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)

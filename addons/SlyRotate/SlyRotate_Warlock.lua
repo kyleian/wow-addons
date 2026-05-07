@@ -58,6 +58,8 @@ local ROWS_DEMONOLOGY = {
     { key="LIFETAP",  label="Life Tap (mana)",       icon=ICO.LifeTap,         color={0.9, 0.4, 0.4} },
 }
 
+M.specRows = { AFFLICTION = ROWS_AFFLICTION, DESTRUCTION = ROWS_DESTRUCTION, DEMONOLOGY = ROWS_DEMONOLOGY }
+
 -- ─── Module state ─────────────────────────────────────────────
 local spec         = nil   -- "AFFLICTION" | "DESTRUCTION" | "DEMONOLOGY"
 local currentRows  = nil
@@ -121,8 +123,8 @@ function M:Build(body)
         local r = SR.BuildRow(body, rd, i)
         r.key = rd.key
         rows[i] = r
-    end
-end
+    end    M.specRowFrames = { [spec] = rows }
+    M.currentSpec = specend
 
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)

@@ -34,20 +34,19 @@ local ICO = {
 
 -- ─── Enhancement priority row definitions ────────────────────
 -- TBC Enhancement loop (weapon MH = Windfury, OH = Flametongue):
---   1. WFT+GoA totem twist     (drop WFT then GoA immediately; refresh ~120s)
---   2. Stormstrike on CD       (12s CD)
---   3. Flame Shock             (DoT uptime — apply/refresh before Earth Shock)
---   4. Earth Shock on CD       (6s CD)
---   5. Searing Totem           (fire totem for DPS, 60s)
---   6. Shamanistic Rage        (big CD, passive indicator)
---   7. Windfury proc window    (tracked from combat log)
+--   1. Stormstrike on CD       (12s CD)
+--   2. Flame Shock             (DoT uptime — MUST be up before Earth Shock)
+--   3. Earth Shock on CD       (6s CD — only when FS DoT is healthy)
+--   4. Searing Totem           (fire totem for DPS, 60s)
+--   5. Shamanistic Rage        (use when mana low or on CD — mana recovery)
+--   6. Windfury proc window    (tracked from combat log)
+-- NOTE: Totem twist handled by SlySuite_TotemTwist (shown below this frame)
 local ENHANCE_ROWS = {
-    { key="TWIST",  label="WFT + GoA  (twist)",           icon=ICO.WFT,  color={1.00,0.82,0.22} },
     { key="SS",     label="Stormstrike",                  icon=ICO.SS,   color={0.38,0.84,1.00} },
     { key="FS",     label="Flame Shock  (DoT)",           icon=ICO.FS,   color={1.00,0.48,0.12} },
     { key="ES",     label="Earth Shock",                  icon=ICO.ES,   color={0.55,0.88,0.55} },
-    { key="SEARING",label="Fire Totem",                  icon=ICO.SEAR, color={0.90,0.35,0.10} },
-    { key="SR",     label="Shamanic Rage  (CD)",          icon=ICO.SR,   color={0.60,0.25,0.90} },
+    { key="SEARING",label="Fire Totem",                   icon=ICO.SEAR, color={0.90,0.35,0.10} },
+    { key="SR",     label="Shamanic Rage  (mana)",        icon=ICO.SR,   color={0.60,0.25,0.90} },
     { key="WF_PROC",label="Windfury Proc!",               icon=ICO.PROC, color={1.00,0.95,0.20} },
 }
 
@@ -66,6 +65,9 @@ local ELEMENTAL_ROWS = {
     { key="LB",  label="Lightning Bolt  (spam)",   icon=ICO.LB, color={0.80,0.80,1.00} },
 }
 
+-- Expose row definitions for the admin panel (must be after both tables)
+S.specRows = { ENHANCE = ENHANCE_ROWS, ELEMENTAL = ELEMENTAL_ROWS }
+
 -- ─── Combat state ────────────────────────────────────────────
 local playerMana      = 0
 local playerMaxMana   = 1
@@ -77,18 +79,12 @@ local srExpiry          = 0
 local nsExpiry          = 0
 local wfProcExpiry      = 0
 
--- Totem twist state (10-second WFT aura cycle — mirrors SlySuite_TotemTwist logic)
--- WFT totem pulses a 10-second "Windfury Totem" aura on nearby melee.
--- Twist: drop WFT → ~8s normal rotation → drop GoA → IMMEDIATELY re-drop WFT.
-local WFT_AURA_DUR    = 10.0   -- WFT aura lasts 10s on party melee
-local TWIST_URGENT_AT = 2.0    -- flag GoA/WFT drop when < 2s of aura remain
-local twistState      = "idle" -- idle | armed | urgent | expired
-local wftDropTime     = 0      -- GetTime() when WFT last successfully cast
-local goatDropTime    = 0      -- GetTime() when GoA last successfully cast
-
 -- Fire totem state (slot 1: Searing, Magma, Fire Nova, Fire Elemental)
 local fireTotemName    = nil
 local fireTotemExpiry  = 0
+
+-- One-time snap flag: anchor TotemTwist below SlyRotate on first Enhancement load
+local ttSnapped = false
 
 -- Elemental state
 local emExpiry          = 0   -- Elemental Mastery buff on player (instant next cast)
@@ -134,6 +130,8 @@ function S:Build(body)
         rd._idx = i
         elemRowFrames[i] = SR.BuildRow(elemContainer, rd, i)
     end
+
+    S.specRowFrames = { ENHANCE = enhRowFrames, ELEMENTAL = elemRowFrames }
 end
 
 -- ─── Spec detection ──────────────────────────────────────────
@@ -210,53 +208,39 @@ local function UpdateEnhance(now)
     local srCD    = SpellCD("Shamanistic Rage")
     local wfL     = wfProcExpiry > 0 and math.max(0, wfProcExpiry - now) or 0
 
-    -- ── Twist state machine (10-second WFT aura cycle) ──
-    -- WFT is cast → "armed" (aura ticking down from 10s)
-    -- When aura nears expiry (<2s) → urgent to drop GoA
-    -- GoA is cast while armed → "urgent" (aura burning, re-drop WFT immediately)
-    -- WFT re-cast while urgent → back to "armed" (cycle continues)
-    -- Aura expires without GoA → "expired" (missed window, restart)
-    local wftAuraLeft = 0
-    if twistState == "armed" or twistState == "urgent" then
-        wftAuraLeft = math.max(0, WFT_AURA_DUR - (now - wftDropTime))
-        if wftAuraLeft <= 0 then
-            twistState  = "expired"
-            wftAuraLeft = 0
-        end
-    end
-
-    local twistIsBest =
-        twistState == "idle"    or
-        twistState == "expired" or
-        twistState == "urgent"  or
-        (twistState == "armed" and wftAuraLeft <= TWIST_URGENT_AT)
-
     -- ── Fire totem ──
-    local fireL = fireTotemExpiry > 0 and math.max(0, fireTotemExpiry - now) or 0
+    local fireL      = fireTotemExpiry > 0 and math.max(0, fireTotemExpiry - now) or 0
     local isMagma    = fireTotemName and fireTotemName:find("Magma",     1, true)
     local isFireNova = fireTotemName and fireTotemName:find("Fire Nova", 1, true)
     local isElem     = fireTotemName and fireTotemName:find("Elemental", 1, true)
-    -- Searing: refresh at <10s; Magma: refresh at <5s; Fire Nova: instant use, very short
+    -- Searing Totem: 60s duration, refresh when <10s left
+    -- Magma Totem:   20s duration, refresh when <5s left
+    -- Fire Nova Totem: 4s then explodes — just show countdown, no refresh needed
+    -- Fire Elemental: 60s summon, 600s (10min) CD — just show remaining, don't interrupt
     local fireDue = (not fireTotemName) or
                     (isMagma    and fireL < 5)  or
-                    (not isMagma and not isFireNova and not isElem and fireL < 8)
+                    (not isMagma and not isFireNova and not isElem and fireL < 10)
 
     -- ── Priority ──
+    -- Correct Enhancement priority:
+    --   SS → FS (missing or expiring <3s) → ES (only if FS up with ≥3s) → Fire totem → SR (mana) → wait
+    -- SR bumps to top when mana is critical and it's off CD
+    local manaCritical = manaP < 0.25 and srCD <= 0 and srL <= 0
     local best
-    if twistIsBest then
-        best = "TWIST"
+    if manaCritical then
+        best = "SR"
     elseif ssCD <= 0 then
         best = "SS"
-    elseif esCD <= 0 and fsL > 2 then
-        best = "ES"
-    elseif fsL > 0 and fsL < 2 then
-        best = "FS"
-    elseif esCD <= 0 then
-        best = "ES"
     elseif fsL == 0 then
-        best = "FS"
+        best = "FS"           -- DoT missing: apply immediately
+    elseif fsL < 3 then
+        best = "FS"           -- DoT expiring: refresh before casting ES
+    elseif esCD <= 0 then
+        best = "ES"           -- FS is healthy: cast Earth Shock
     elseif fireDue then
-        best = "SEARING"
+        best = "SEARING"      -- fire totem needs refreshing
+    elseif srCD <= 0 and srL <= 0 and manaP < 0.50 then
+        best = "SR"           -- SR available and mana below 50%: use it
     elseif ssCD <= esCD then
         best = "SS"
     else
@@ -270,40 +254,26 @@ local function UpdateEnhance(now)
         local active = (k == best) or (k == "WF_PROC" and wfActive)
         local s = ""
 
-        if k == "TWIST" then
-            if twistState == "idle" then
-                s = Col("ff4444","START TWIST  ") .. Col("888888","drop WFT + GoA")
-            elseif twistState == "expired" then
-                s = Col("ff3333","EXPIRED!  ") .. Col("ff8844","drop WFT now")
-            elseif twistState == "urgent" then
-                s = Col("ff2222","WFT NOW!  ") .. Col("ffcc44", string.format("%.1fs", wftAuraLeft))
-            elseif twistState == "armed" then
-                if wftAuraLeft <= TWIST_URGENT_AT then
-                    s = Col("ff8800","GoA NOW!  ") .. Col("ffcc44", string.format("%.1fs", wftAuraLeft))
-                else
-                    local goaIn = math.max(0, wftAuraLeft - TWIST_URGENT_AT)
-                    s = Col("44cc44", string.format("%.1fs", wftAuraLeft)) ..
-                        Col("888888","  GoA in " .. string.format("%.1fs", goaIn))
-                end
-            end
-
-        elseif k == "SS" then
+        if k == "SS" then
             if ssCD <= 0 then s = Col("44ff44","CAST NOW")
             else               s = Col("ff8844", Fmt(ssCD)) end
 
         elseif k == "FS" then
             if fsL == 0 then
                 s = Col("ff4444","MISSING!")
-            elseif fsL < 2 then
+            elseif fsL < 3 then
                 s = Col("ff6622","REFRESH!  ") .. Col("ffcc44", Fmt(fsL))
-            elseif fsL < 5 then
+            elseif fsL < 6 then
                 s = Col("ffcc44", Fmt(fsL) .. "  ") .. Col("888888","refresh soon")
             else
                 s = Col("44aa44", Fmt(fsL))
             end
 
         elseif k == "ES" then
-            if esCD <= 0 then
+            if fsL < 3 then
+                -- ES blocked: FS must be applied/refreshed first
+                s = Col("555566","wait — ") .. Col("ff8844","FS first!")
+            elseif esCD <= 0 then
                 s = Col("44ff44","CAST NOW  ") ..
                     Col("888888", ssCD > 0 and ("SS " .. Fmt(ssCD)) or "SS READY")
             else
@@ -313,23 +283,39 @@ local function UpdateEnhance(now)
 
         elseif k == "SEARING" then
             if not fireTotemName then
-                s = Col("ff4444","DROP SEARING  ") .. Col("888888","fire totem missing")
+                s = Col("ff4444","DROP FIRE TOTEM  ") .. Col("888888","slot empty")
             elseif isElem then
-                s = Col("ff8833","FE  ") .. Col("44cc44", Fmt(fireL))
+                -- Fire Elemental: 60s active, 10min CD — just track it, don't redrop
+                if fireL > 0 then
+                    s = Col("ff6600","FIRE ELEM  ") .. Col("44cc44", Fmt(fireL))
+                else
+                    local feCD = SpellCD("Fire Elemental Totem")
+                    if feCD <= 0 then
+                        s = Col("ff6600","FIRE ELEM  ") .. Col("44ff44","READY")
+                    else
+                        s = Col("ff6600","FIRE ELEM  ") .. Col("888888","CD " .. Fmt(feCD))
+                    end
+                end
             elseif isMagma then
+                -- Magma Totem: 20s duration, AoE damage — refresh at <5s
                 if fireL < 5 then
-                    s = Col("ff6622","MAGMA SOON  ") .. Col("ffcc44", Fmt(fireL))
+                    s = Col("ff6622","MAGMA  ") .. Col("ffcc44","REFRESH! " .. Fmt(fireL))
+                elseif fireL < 8 then
+                    s = Col("ff8844","Magma  ") .. Col("ffcc44", Fmt(fireL) .. "  soon")
                 else
                     s = Col("ff8844","Magma  ") .. Col("44aa44", Fmt(fireL))
                 end
             elseif isFireNova then
-                s = Col("ff4400","FNT  ") .. Col("ffcc44", Fmt(fireL))
+                -- Fire Nova Totem: 4s fuse then detonates — just watch it burn
+                s = Col("ff4400","FIRE NOVA  ") .. Col("ffcc44","det in " .. Fmt(fireL))
             else
-                -- Searing Totem
-                if fireL < 8 then
-                    s = Col("ff8844","SEARING SOON  ") .. Col("ffcc44", Fmt(fireL))
+                -- Searing Totem: 60s duration, single-target DPS — refresh at <10s
+                if fireL < 10 then
+                    s = Col("ff8844","SEARING  ") .. Col("ffcc44","REFRESH! " .. Fmt(fireL))
+                elseif fireL < 20 then
+                    s = Col("ff8844","Searing  ") .. Col("ffcc44", Fmt(fireL) .. "  soon")
                 else
-                    s = Col("44aa44", Fmt(fireL))
+                    s = Col("44aa44","Searing  ") .. Col("44cc44", Fmt(fireL))
                 end
             end
 
@@ -337,7 +323,13 @@ local function UpdateEnhance(now)
             if srL > 0 then
                 s = Col("cc44ff","ACTIVE  ") .. Col("aaaaaa", Fmt(srL))
             elseif srCD <= 0 then
-                s = Col("aa44ff","READY  ") .. Col("888888","use now")
+                if manaP < 0.25 then
+                    s = Col("ff44ff","USE NOW!  ") .. Col("ffcc44", string.format("%.0f%% mana", manaP * 100))
+                elseif manaP < 0.50 then
+                    s = Col("aa44ff","READY  ") .. Col("888888", string.format("%.0f%% mana — use it", manaP * 100))
+                else
+                    s = Col("aa44ff","READY  ") .. Col("555566","mana ok")
+                end
             else
                 s = Col("555566","CD  ") .. Col("888888", Fmt(srCD))
             end
@@ -356,24 +348,18 @@ local function UpdateEnhance(now)
         Col(manaCol, string.format("%.0f%%", manaP * 100) .. "M"))
 
     local spotSt
-    if best == "TWIST" then
-        if twistState == "urgent" then
-            spotSt = "WFT NOW!"
-        elseif twistState == "armed" and wftAuraLeft <= TWIST_URGENT_AT then
-            spotSt = "GoA NOW!"
-        elseif twistState == "armed" then
-            spotSt = string.format("%.1fs", wftAuraLeft)
-        else
-            spotSt = "START"
-        end
-    elseif best == "SS" then
+    if best == "SS" then
         spotSt = ssCD <= 0 and "CAST" or Fmt(ssCD)
     elseif best == "FS" then
         spotSt = fsL > 0 and Fmt(fsL) or "MISSING"
+    elseif best == "ES" then
+        spotSt = esCD <= 0 and "CAST" or Fmt(esCD)
     elseif best == "SEARING" then
         spotSt = fireL > 0 and Fmt(fireL) or "DROP"
+    elseif best == "SR" then
+        spotSt = "MANA!"
     else
-        spotSt = esCD <= 0 and "CAST" or Fmt(esCD)
+        spotSt = "WAIT"
     end
     SR.UpdateSpotlight(ENHANCE_ROWS, best, spotSt)
 end
@@ -479,6 +465,7 @@ function S:Update(now, db)
     playerHP      = UnitHealth("player") / math.max(1, UnitHealthMax("player"))
 
     local spec = DetectSpec(db)
+    S.currentSpec = spec
 
     if specEnabled[spec] == false then
         if enhContainer  then enhContainer:Hide()  end
@@ -491,6 +478,17 @@ function S:Update(now, db)
     if spec == "ENHANCE" then
         if enhContainer  then enhContainer:Show()  end
         if elemContainer then elemContainer:Hide() end
+        -- Snap TotemTwist below SlyRotate once, matching its width. After that
+        -- the player can drag it freely — we never re-anchor.
+        if not ttSnapped then
+            local ttFrame = SlyTotemTwistFrame
+            local srFrame = SlyRotateFrame
+            if ttFrame and srFrame then
+                ttFrame:ClearAllPoints()
+                ttFrame:SetPoint("TOP", srFrame, "BOTTOM", 0, -4)
+                ttSnapped = true
+            end
+        end
         UpdateEnhance(now)
     else
         if enhContainer  then enhContainer:Hide()  end
@@ -514,26 +512,13 @@ function S:OnEvent(event, arg1, arg2, arg3)
         local spellName = arg3 and GetSpellInfo(arg3)
         if not spellName then return end
 
-        if spellName == "Windfury Totem" then
-            -- Arm the 10-second WFT aura window (mirrors TotemTwist addon logic)
-            twistState  = "armed"
-            wftDropTime = GetTime()
-
-        elseif spellName == "Grace of Air Totem" then
-            -- GoA dropped while armed → urgent countdown to re-drop WFT
-            if twistState == "armed" then
-                twistState   = "urgent"
-                goatDropTime = GetTime()
-            end
-
-        elseif spellName == "Searing Totem"       or
+        if spellName == "Searing Totem"       or
                spellName == "Magma Totem"          or
                spellName == "Fire Nova Totem"      or
                spellName == "Fire Elemental Totem" then
-            -- Fire totem cast — GetTotemInfo will update on the next PLAYER_TOTEM_UPDATE,
-            -- but eagerly set the name so the row updates within this tick.
+            -- Fire totem cast — eagerly set name and scan for updated expiry
             fireTotemName = spellName
-            -- expiry set by ScanFireTotem via PLAYER_TOTEM_UPDATE
+            ScanFireTotem()
         end
     end
 end

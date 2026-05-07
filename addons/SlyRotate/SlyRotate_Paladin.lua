@@ -60,6 +60,8 @@ local ROWS_HOLY = {
     { key="HL",     label="Holy Light",        icon=ICO.HolyLight,      color={0.9, 0.8, 0.5} },
 }
 
+M.specRows = { RETRIBUTION = ROWS_RETRIBUTION, PROTECTION = ROWS_PROTECTION, HOLY = ROWS_HOLY }
+
 -- ─── Module state ─────────────────────────────────────────────
 local spec        = nil
 local currentRows = nil
@@ -104,8 +106,8 @@ function M:Build(body)
         local r = SR.BuildRow(body, rd, i)
         r.key = rd.key
         rows[i] = r
-    end
-end
+    end    M.specRowFrames = { [spec] = rows }
+    M.currentSpec = specend
 
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)

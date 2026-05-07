@@ -17,7 +17,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlyRotate"
-local VERSION    = "1.1.0"
+local VERSION    = "1.3.0"
 
 -- ─── Public namespace ───────────────────────────────────────
 -- Modules are loaded after this file (per .toc order) and call
@@ -29,6 +29,7 @@ SR._active  = nil  -- module matching the logged-in character
 
 -- ─── DB defaults ────────────────────────────────────────────
 local DB_DEFAULTS = {
+    rows = {},   -- [classKey][specKey][rowKey] = true/false
     locked       = false,
     shown        = true,
     combatOnly   = false,
@@ -85,6 +86,57 @@ local function ApplyDefaults(dest, src)
             ApplyDefaults(dest[k], v)
         end
     end
+end
+
+-- ─── Row enable/disable helpers ─────────────────────────────
+-- Returns true if a specific row key is enabled for the given class/spec.
+-- Defaults to true if no explicit entry exists in the DB.
+function SR.IsRowEnabled(classKey, specKey, rowKey)
+    local db = SR.db
+    if not db or not db.rows then return true end
+    local cls = db.rows[classKey]
+    if not cls then return true end
+    local sp = cls[specKey]
+    if not sp then return true end
+    local v = sp[rowKey]
+    return v ~= false
+end
+
+-- Populate any missing row-enable entries as true for a given spec.
+function SR.EnsureRowDefaults(classKey, specKey, rowDefs)
+    local db = SR.db
+    if not db then return end
+    db.rows = db.rows or {}
+    db.rows[classKey] = db.rows[classKey] or {}
+    db.rows[classKey][specKey] = db.rows[classKey][specKey] or {}
+    local sp = db.rows[classKey][specKey]
+    for _, rd in ipairs(rowDefs) do
+        if sp[rd.key] == nil then sp[rd.key] = true end
+    end
+end
+
+-- Hide disabled rows, show enabled rows, and re-index positions.
+-- Returns visible row count.
+function SR.RelayoutRowFrames(frames, classKey, specKey)
+    if not frames then return 0 end
+    local RH  = SR.ROW_H
+    local Col = SR.Col
+    local vis = 0
+    for _, row in ipairs(frames) do
+        local key     = row.rowDef and row.rowDef.key
+        local enabled = (not key) or SR.IsRowEnabled(classKey, specKey, key)
+        if enabled then
+            vis = vis + 1
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 0, -(vis-1)*(RH+1))
+            row.bg:SetColorTexture(0, 0, 0, vis % 2 == 0 and 0.18 or 0.05)
+            row.num:SetText(Col("444455", tostring(vis)))
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    return vis
 end
 
 -- ─── Module registration ─────────────────────────────────────
@@ -294,6 +346,7 @@ local function BuildMainFrame()
     body:SetSize(FRAME_W, bodyH)
     body:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -(HDR_H + 2))
 
+    SR._bodyFrame = body
     mod:Build(body)
 
     local drag = CreateFrame("Frame", nil, f)
@@ -310,6 +363,7 @@ local function BuildMainFrame()
     end)
 
     mainFrame = f
+    SR._mainFrame = f
     if not SR.db.shown then f:Hide() end
 
     if SlyStyle and SlyStyle.OnThemeChange then
@@ -749,6 +803,10 @@ local function SetupSlashCmd()
 
         elseif msg == "config" then
             BuildConfigPanel()
+
+        elseif msg == "admin" then
+            if SR.BuildAdminPanel then SR.BuildAdminPanel()
+            else DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88","[SlyRotate]") .. " Admin module not loaded.") end
 
         else
             -- Toggle show/hide

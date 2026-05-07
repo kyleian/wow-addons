@@ -61,6 +61,8 @@ local BEAR_ROWS = {
     { key="FRENZIED",    label="Frenzied  (skip)",  icon=ICO.FRENZIED,  color={0.45,0.45,0.50} },
 }
 
+D.specRows = { CAT = CAT_ROWS, BEAR = BEAR_ROWS }
+
 -- ─── Combat state ────────────────────────────────────────────
 local catEnergy       = 0
 local catCPs          = 0
@@ -113,6 +115,8 @@ function D:Build(body)
         rd._idx = i
         bearRowFrames[i] = SR.BuildRow(bearContainer, rd, i)
     end
+
+    D.specRowFrames = { CAT = catRowFrames, BEAR = bearRowFrames }
 end
 
 -- ─── Helpers ─────────────────────────────────────────────────
@@ -413,6 +417,7 @@ function D:Update(now, db)
     playerHP  = UnitHealth("player") / math.max(1, UnitHealthMax("player"))
 
     local form = GetDruidForm()
+    D.currentSpec = (form == "CAT") and "CAT" or (form == "BEAR") and "BEAR" or nil
 
     -- Map form to a spec key for the toggle check
     local formSpec = (form == "CAT") and "CAT" or (form == "BEAR") and "BEAR" or nil

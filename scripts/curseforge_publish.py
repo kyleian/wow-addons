@@ -32,6 +32,7 @@ import urllib.request
 
 CF_API = "https://wow.curseforge.com/api"
 GAME_VERSION_TYPE_ID = 73246  # Burning Crusade Classic / TBC Anniversary
+GAME_VERSION_NAME     = "2.5.5"  # TBC Anniversary patch
 GAME_VERSION_FALLBACK = [73246]  # used if API lookup returns empty
 BOUNDARY = "CF_BOUNDARY_SLYSUITE_UPLOAD"
 
@@ -100,13 +101,20 @@ def main():
         config = json.load(f)
 
     # Resolve TBC Classic game version IDs from CurseForge
-    print(f"Fetching CurseForge game versions (typeID={GAME_VERSION_TYPE_ID})...")
+    print(f"Fetching CurseForge game versions (typeID={GAME_VERSION_TYPE_ID}, name={GAME_VERSION_NAME})...")
     tbc_ids = []
     try:
         all_versions = cf_request("/game/versions", token)
         tbc_ids = [v["id"] for v in all_versions
-                   if v.get("gameVersionTypeID") == GAME_VERSION_TYPE_ID]
-        print(f"Found {len(tbc_ids)} TBC Classic version ID(s): {tbc_ids[:5]}")
+                   if v.get("gameVersionTypeID") == GAME_VERSION_TYPE_ID
+                   and v.get("name") == GAME_VERSION_NAME]
+        if not tbc_ids:
+            # Fall back to any TBC version if exact name not found
+            tbc_ids = [v["id"] for v in all_versions
+                       if v.get("gameVersionTypeID") == GAME_VERSION_TYPE_ID]
+            print(f"WARNING: '{GAME_VERSION_NAME}' not found; using all TBC IDs: {tbc_ids[:5]}")
+        else:
+            print(f"Found game version '{GAME_VERSION_NAME}' ID(s): {tbc_ids}")
     except RuntimeError as e:
         print(f"WARNING: Could not fetch game versions ({e}) — using fallback.")
     if not tbc_ids:

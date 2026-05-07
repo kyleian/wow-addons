@@ -61,7 +61,7 @@ local ROWS_SURVIVAL = {
     { key="STEADY", label="Steady Shot",     icon=ICO.SteadyShot,    color={0.5, 0.8, 0.5} },
     { key="VIPER",  label="→ Aspect: Viper", icon=ICO.ViperAspect,   color={0.9, 0.9, 0.3} },
 }
-
+M.specRows = { BM = ROWS_BM, MM = ROWS_MM, SURVIVAL = ROWS_SURVIVAL }
 -- ─── Module state ─────────────────────────────────────────────
 local spec        = nil
 local currentRows = nil
@@ -110,6 +110,8 @@ function M:Build(body)
         r.key = rd.key
         rows[i] = r
     end
+    M.specRowFrames = { [spec] = rows }
+    M.currentSpec = spec
 end
 
 -- ─── Priority update ──────────────────────────────────────────
