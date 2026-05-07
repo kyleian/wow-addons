@@ -31,7 +31,8 @@ import urllib.request
 
 
 CF_API = "https://wow.curseforge.com/api"
-GAME_VERSION_TYPE_ID = 67  # Burning Crusade Classic / TBC Anniversary
+GAME_VERSION_TYPE_ID = 73246  # Burning Crusade Classic / TBC Anniversary
+GAME_VERSION_FALLBACK = [73246]  # used if API lookup returns empty
 BOUNDARY = "CF_BOUNDARY_SLYSUITE_UPLOAD"
 
 
@@ -106,10 +107,11 @@ def main():
         tbc_ids = [v["id"] for v in all_versions
                    if v.get("gameVersionTypeID") == GAME_VERSION_TYPE_ID]
         print(f"Found {len(tbc_ids)} TBC Classic version ID(s): {tbc_ids[:5]}")
-        if not tbc_ids:
-            print(f"WARNING: No game versions found for typeID {GAME_VERSION_TYPE_ID}.")
     except RuntimeError as e:
-        print(f"WARNING: Could not fetch game versions ({e}) — uploading without gameVersions tag.")
+        print(f"WARNING: Could not fetch game versions ({e}) — using fallback.")
+    if not tbc_ids:
+        tbc_ids = GAME_VERSION_FALLBACK
+        print(f"WARNING: Using hardcoded fallback version IDs: {tbc_ids}")
 
     errors = 0
     skipped = 0
