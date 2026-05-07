@@ -1,0 +1,93 @@
+name: Addon Release
+
+# Per-addon release triggered by tags in the form:  <AddonName>-v<semver>
+# Examples:  SlyRotate-v1.2.0   SlySuite_Char-v2.1.0
+#
+# Keeps each addon's semver independent of the parent SlySuite suite tag (v*).
+# The suite-wide release.yml is triggered by bare `v*` tags only.
+
+on:
+  push:
+    tags:
+      - '*-v[0-9]*'   # matches AddonName-v1.2.3, never matches bare v1.2.3
+
+permissions:
+  contents: write
+
+jobs:
+  addon-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse addon name and version from tag
+        id: tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"         # e.g. SlyRotate-v1.2.0
+          ADDON_NAME="${TAG%-v*}"          # SlyRotate
+          VERSION="${TAG#*-v}"             # 1.2.0
+          echo "ADDON_NAME=${ADDON_NAME}" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${VERSION}"       >> "$GITHUB_OUTPUT"
+          echo "Releasing: ${ADDON_NAME} v${VERSION}"
+
+      - name: Verify addon directory exists
+        run: |
+          if [ ! -d "addons/${{ steps.tag.outputs.ADDON_NAME }}" ]; then
+            echo "ERROR: addons/${{ steps.tag.outputs.ADDON_NAME }} not found"
+            exit 1
+          fi
+
+      - name: Verify version matches .toc file
+        run: |
+          ADDON="${{ steps.tag.outputs.ADDON_NAME }}"
+          TAG_VER="${{ steps.tag.outputs.VERSION }}"
+          TOC_FILE="addons/${ADDON}/${ADDON}.toc"
+          if [ ! -f "$TOC_FILE" ]; then
+            echo "WARNING: .toc file not found at ${TOC_FILE} — skipping version check"
+          else
+            TOC_VER=$(grep -i '^## Version:' "$TOC_FILE" | sed 's/.*: *//')
+            echo ".toc version : ${TOC_VER}"
+            echo "Tag version  : ${TAG_VER}"
+            if [ "$TOC_VER" != "$TAG_VER" ]; then
+              echo "ERROR: tag version (${TAG_VER}) does not match .toc Version (${TOC_VER})"
+              exit 1
+            fi
+          fi
+
+      - name: Package addon zip
+        run: |
+          mkdir -p dist
+          ADDON="${{ steps.tag.outputs.ADDON_NAME }}"
+          VER="${{ steps.tag.outputs.VERSION }}"
+          (cd addons && zip -r "../dist/${ADDON}-${VER}.zip" "${ADDON}/")
+          echo "Packaged: dist/${ADDON}-${VER}.zip"
+          ls -lh "dist/${ADDON}-${VER}.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ steps.tag.outputs.ADDON_NAME }} v${{ steps.tag.outputs.VERSION }}"
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## ${{ steps.tag.outputs.ADDON_NAME }} v${{ steps.tag.outputs.VERSION }}
+
+            TBC Anniversary (Interface 20505)
+
+            See [commit history](https://github.com/${{ github.repository }}/commits) for changes.
+
+            ### Installation
+            Extract the `.zip` directly into `Interface/AddOns/` in your WoW directory.
+          files: dist/${{ steps.tag.outputs.ADDON_NAME }}-${{ steps.tag.outputs.VERSION }}.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+
+      - name: Upload to CurseForge
+        continue-on-error: true
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CF_API_KEY }}
+        run: |
+          python scripts/curseforge_publish.py dist \
+            "${{ steps.tag.outputs.VERSION }}" \
+            --addon "${{ steps.tag.outputs.ADDON_NAME }}"

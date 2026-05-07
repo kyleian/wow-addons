@@ -3,7 +3,11 @@
 curseforge_publish.py — Upload packaged addon zips to CurseForge.
 
 Usage:
+    # Upload all addons (suite release, tag v1.5.1):
     python3 scripts/curseforge_publish.py <dist_dir> <version>
+
+    # Upload a single addon (per-addon release, tag SlyRotate-v1.2.0):
+    python3 scripts/curseforge_publish.py <dist_dir> <version> --addon <AddonName>
 
 Reads config.json for `curseProjectId` per addon.
 Skips addons where curseProjectId is empty or missing.
@@ -18,6 +22,7 @@ To publish an addon:
 TBC Classic Anniversary = gameVersionTypeID 67 on CurseForge.
 """
 
+import argparse
 import json
 import os
 import sys
@@ -72,12 +77,18 @@ def build_multipart(metadata: dict, zip_path: str) -> bytes:
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: curseforge_publish.py <dist_dir> <version>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Upload addon zips to CurseForge.")
+    parser.add_argument("dist_dir", help="Directory containing packaged .zip files")
+    parser.add_argument("version",  help="Version string (e.g. 1.2.0)")
+    parser.add_argument("--addon",  default=None,
+                        help="If set, upload only this addon (e.g. SlyRotate). "
+                             "Used by per-addon release tags (<AddonName>-v*).")
+    args = parser.parse_args()
 
-    dist_dir = sys.argv[1]
-    version = sys.argv[2]
+    dist_dir    = args.dist_dir
+    version     = args.version
+    addon_filter = args.addon  # None = all addons; str = single addon name
     token = (os.environ.get("CURSEFORGE_TOKEN") or os.environ.get("CF_API_KEY") or "").strip()
 
     if not token:
@@ -107,8 +118,12 @@ def main():
     uploaded = 0
 
     for addon in config.get("addons", []):
-        name = addon["name"]
+        name     = addon["name"]
         curse_id = str(addon.get("curseProjectId", "")).strip()
+
+        # Per-addon mode: skip everything except the target addon
+        if addon_filter and name != addon_filter:
+            continue
 
         if not curse_id:
             print(f"SKIP  {name:<22} — curseProjectId not set in config.json")
@@ -121,9 +136,16 @@ def main():
             skipped += 1
             continue
 
+        # Use the tag from which this run was triggered for the changelog link.
+        # For per-addon releases the tag is <AddonName>-v<version>.
+        if addon_filter:
+            tag_ref = f"{addon_filter}-v{version}"
+        else:
+            tag_ref = f"v{version}"
+
         metadata = {
             "changelog": (
-                f"https://github.com/kyleian/wow-addons/releases/tag/v{version}"
+                f"https://github.com/kyleian/wow-addons/releases/tag/{tag_ref}"
             ),
             "changelogType": "markdown",
             "displayName": f"{name} v{version}",
@@ -142,6 +164,10 @@ def main():
         except RuntimeError as e:
             print(f"FAIL  {name:<22} : {e}")
             errors += 1
+
+    if addon_filter and uploaded == 0 and errors == 0 and skipped == 0:
+        print(f"ERROR: addon '{addon_filter}' not found in config.json")
+        sys.exit(1)
 
     print(f"\nDone — {uploaded} uploaded, {skipped} skipped, {errors} failed.")
 
