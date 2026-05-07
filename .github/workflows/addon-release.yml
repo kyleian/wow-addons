@@ -84,7 +84,6 @@ jobs:
           generate_release_notes: false
 
       - name: Upload to CurseForge
-        continue-on-error: true
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CF_API_KEY }}
         run: |
