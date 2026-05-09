@@ -17,7 +17,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlyRotate"
-local VERSION    = "1.3.1"
+local VERSION    = "1.3.2"
 
 -- ─── Public namespace ───────────────────────────────────────
 -- Modules are loaded after this file (per .toc order) and call
@@ -702,6 +702,7 @@ evtFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 evtFrame:RegisterEvent("UNIT_AURA")
 evtFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 evtFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+evtFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 evtFrame:RegisterEvent("PLAYER_LOGOUT")
 
 evtFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
@@ -719,9 +720,38 @@ evtFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Only hide for combatOnly if we are NOT simultaneously entering a new
+        -- zone (BGs fire PLAYER_REGEN_ENABLED on zone-in even when the player
+        -- is about to enter combat immediately).  We guard with InCombatLockdown
+        -- which will already be false here; hide is safe.
         if SR.db and SR.db.combatOnly then
             if mainFrame then mainFrame:Hide() end
             if spotFrame then spotFrame:Hide() end
+        end
+
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Restore frame visibility after zone transitions (BGs, instances).
+        -- Run on the next frame to let the zone fully settle first.
+        if mainFrame then
+            C_Timer.After(0, function()
+                if not SR.db then return end
+                if SR.db.combatOnly then
+                    -- combatOnly: show if in combat, hide if not
+                    if InCombatLockdown() and SR.db.shown then
+                        mainFrame:Show()
+                        if spotFrame and SR.db.spotShown then spotFrame:Show() end
+                    else
+                        mainFrame:Hide()
+                        if spotFrame then spotFrame:Hide() end
+                    end
+                else
+                    -- Always-on mode: restore saved visibility
+                    if SR.db.shown then
+                        mainFrame:Show()
+                        if spotFrame and SR.db.spotShown then spotFrame:Show() end
+                    end
+                end
+            end)
         end
 
     elseif event == "PLAYER_LOGOUT" then

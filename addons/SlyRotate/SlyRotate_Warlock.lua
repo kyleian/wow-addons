@@ -123,8 +123,10 @@ function M:Build(body)
         local r = SR.BuildRow(body, rd, i)
         r.key = rd.key
         rows[i] = r
-    end    M.specRowFrames = { [spec] = rows }
-    M.currentSpec = specend
+    end
+    M.specRowFrames = { [spec] = rows }
+    M.currentSpec = spec
+end
 
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)

@@ -133,8 +133,10 @@ function M:Build(body)
         local r = SR.BuildRow(body, rd, i)
         r.key = rd.key
         rows[i] = r
-    end    M.specRowFrames = { [spec] = rows }
-    M.currentSpec = specend
+    end
+    M.specRowFrames = { [spec] = rows }
+    M.currentSpec = spec
+end
 
 -- ─── Mana forecast helper ──────────────────────────────────────
 -- Estimates mana% at the end of the fight based on current burn rate.
