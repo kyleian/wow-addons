@@ -53,6 +53,7 @@ local specTabsFrame  = nil
 local rowListFrame   = nil
 local specBtns       = {}
 local rowCheckboxes  = {}
+local rowFrames      = {}   -- container frames (row BG + all children)
 
 -- ─── Helpers ────────────────────────────────────────────────
 local function TC(key)
@@ -83,12 +84,10 @@ end
 
 -- ─── Row list population ─────────────────────────────────────
 local function PopulateRowList(classKey, specKey)
-    -- Clear previous checkboxes
-    for _, cb in ipairs(rowCheckboxes) do
-        cb:Hide()
-        cb:SetParent(nil)
-    end
-    rowCheckboxes = {}
+    -- Clear previous row containers (hides checkboxes, icons, labels)
+    for _, rf in ipairs(rowFrames) do rf:Hide() end
+    rowFrames      = {}
+    rowCheckboxes  = {}
 
     if not rowListFrame then return end
     rowListFrame:SetHeight(0)
@@ -98,10 +97,15 @@ local function PopulateRowList(classKey, specKey)
 
     local rowDefs = mod.specRows[specKey]
     if not rowDefs or #rowDefs == 0 then
-        local empty = rowListFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local row = CreateFrame("Frame", nil, rowListFrame)
+        row:SetSize(rowListFrame:GetWidth(), 28)
+        row:SetPoint("TOPLEFT", rowListFrame, "TOPLEFT", 0, 0)
+        local empty = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         empty:SetFont(empty:GetFont(), 9, "OUTLINE")
-        empty:SetPoint("TOPLEFT", rowListFrame, "TOPLEFT", 6, -8)
+        empty:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -8)
         empty:SetText(Col("555566", "(no rows defined for this spec)"))
+        rowFrames[1] = row
+        rowListFrame:SetHeight(28)
         return
     end
 
@@ -167,6 +171,7 @@ local function PopulateRowList(classKey, specKey)
         lbl:SetText(Col(hex, rdLocal.label))
 
         rowCheckboxes[i] = cb
+        rowFrames[i]     = row
         yOff = yOff - ROW_H
     end
 
@@ -246,12 +251,6 @@ local function SelectClass(classKey)
     for _, btn in ipairs(classBtns) do
         btn._bg:SetColorTexture(0.10, 0.10, 0.15, 1)
         btn._lbl:SetTextColor(0.55, 0.55, 0.62)
-    end
-    for _, info in ipairs(CLASS_ORDER) do
-        if info.key == classKey then
-            local btn = classBtns[_]
-            -- find by classKey
-        end
     end
     for i, info in ipairs(CLASS_ORDER) do
         if info.key == classKey and classBtns[i] then
