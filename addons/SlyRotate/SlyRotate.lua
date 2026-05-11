@@ -17,7 +17,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlyRotate"
-local VERSION    = "1.3.2"
+local VERSION    = "1.3.3"
 
 -- ─── Public namespace ───────────────────────────────────────
 -- Modules are loaded after this file (per .toc order) and call
