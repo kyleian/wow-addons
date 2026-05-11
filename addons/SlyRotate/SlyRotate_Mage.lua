@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyRotate_Mage — Arcane / Fire / Frost
 -- TBC Anniversary (Interface 20505)
 --
@@ -14,47 +14,29 @@ M.classLabel = "Mage"
 M.headerIcon = "Interface\\Icons\\Spell_Holy_MagicSentry"
 M.specKeys   = { "ARCANE", "FIRE", "FROST" }
 
--- ─── Icons ───────────────────────────────────────────────────
-local ICO = {
-    ArcanePower  = "Interface\\Icons\\Spell_Nature_Lightning",
-    ArcaneBlast  = "Interface\\Icons\\Spell_Arcane_Blast",
-    ArcaneMissile= "Interface\\Icons\\Spell_Nature_StarFall",
-    PresenceOfMind="Interface\\Icons\\Spell_Nature_EnchantArmor",
-    Scorch       = "Interface\\Icons\\Spell_Fire_SoulBurn",
-    Fireball     = "Interface\\Icons\\Spell_Fire_Fireball02",
-    Combustion   = "Interface\\Icons\\Spell_Fire_SealOfFire",
-    FireBlast    = "Interface\\Icons\\Spell_Fire_FireBolt02",
-    Frostbolt    = "Interface\\Icons\\Spell_Frost_FrostBolt02",
-    IcyVeins     = "Interface\\Icons\\Spell_Frost_ColdsBlood",
-    WaterElem    = "Interface\\Icons\\Spell_Frost_Summon_WaterElemental_2",
-    ColdSnap     = "Interface\\Icons\\Spell_Frost_WizardMark",
-    FrostfireBolt= "Interface\\Icons\\Spell_Frost_FrostfireBolt",
-    Evocation    = "Interface\\Icons\\Spell_Nature_Lightning",
-}
-
 -- ─── Row definitions ─────────────────────────────────────────
 local ROWS_ARCANE = {
-    { key="APOW",    label="Arcane Power",    icon=ICO.ArcanePower,   color={0.6, 0.6, 1.0} },
-    { key="POM",     label="Presence of Mind",icon=ICO.PresenceOfMind,color={0.8, 0.8, 0.4} },
-    { key="AB",      label="Arcane Blast",    icon=ICO.ArcaneBlast,   color={0.5, 0.5, 0.9} },
-    { key="AM",      label="Arcane Missiles", icon=ICO.ArcaneMissile, color={0.5, 0.8, 1.0} },
-    { key="EVOC",    label="Evocation (OOM)", icon=ICO.Evocation,     color={0.8, 0.5, 1.0} },
-    { key="MANA",    label="Mana Forecast",   icon=ICO.ArcaneBlast,   color={0.9, 0.9, 0.3} },
+    { key="APOW",    label="Arcane Power",    spell="Arcane Power",   color={0.6, 0.6, 1.0} },
+    { key="POM",     label="Presence of Mind",spell="Presence of Mind",color={0.8, 0.8, 0.4} },
+    { key="AB",      label="Arcane Blast",    spell="Arcane Blast",   color={0.5, 0.5, 0.9} },
+    { key="AM",      label="Arcane Missiles", spell="Arcane Missiles", color={0.5, 0.8, 1.0} },
+    { key="EVOC",    label="Evocation (OOM)", spell="Evocation",     color={0.8, 0.5, 1.0} },
+    { key="MANA",    label="Mana Forecast",   spell="Arcane Blast",   color={0.9, 0.9, 0.3} },
 }
 
 local ROWS_FIRE = {
-    { key="COMB",    label="Combustion",      icon=ICO.Combustion,    color={1.0, 0.5, 0.1} },
-    { key="SCORCH",  label="Scorch (debuff)", icon=ICO.Scorch,        color={0.9, 0.4, 0.2} },
-    { key="FIREBALL",label="Fireball (spam)", icon=ICO.Fireball,      color={1.0, 0.6, 0.2} },
-    { key="FBLAST",  label="Fire Blast",      icon=ICO.FireBlast,     color={1.0, 0.3, 0.1} },
+    { key="COMB",    label="Combustion",      spell="Combustion",    color={1.0, 0.5, 0.1} },
+    { key="SCORCH",  label="Scorch (debuff)", spell="Scorch",        color={0.9, 0.4, 0.2} },
+    { key="FIREBALL",label="Fireball (spam)", spell="Fireball",      color={1.0, 0.6, 0.2} },
+    { key="FBLAST",  label="Fire Blast",      spell="Fire Blast",     color={1.0, 0.3, 0.1} },
 }
 
 local ROWS_FROST = {
-    { key="IVEIN",   label="Icy Veins",       icon=ICO.IcyVeins,      color={0.5, 0.8, 1.0} },
-    { key="WELEM",   label="Water Elemental", icon=ICO.WaterElem,     color={0.3, 0.7, 0.9} },
-    { key="CSNAP",   label="Cold Snap",       icon=ICO.ColdSnap,      color={0.7, 0.9, 1.0} },
-    { key="PROC",    label="Brain Freeze!",   icon=ICO.FrostfireBolt, color={1.0, 0.9, 0.5} },
-    { key="FBOLT",   label="Frostbolt (spam)",icon=ICO.Frostbolt,     color={0.4, 0.7, 0.9} },
+    { key="IVEIN",   label="Icy Veins",       spell="Icy Veins",      color={0.5, 0.8, 1.0} },
+    { key="WELEM",   label="Water Elemental", spell="Summon Water Elemental",     color={0.3, 0.7, 0.9} },
+    { key="CSNAP",   label="Cold Snap",       spell="Cold Snap",      color={0.7, 0.9, 1.0} },
+    { key="PROC",    label="Brain Freeze!",   spell="Frostbolt", color={1.0, 0.9, 0.5} },
+    { key="FBOLT",   label="Frostbolt (spam)",spell="Frostbolt",     color={0.4, 0.7, 0.9} },
 }
 M.specRows = { ARCANE = ROWS_ARCANE, FIRE = ROWS_FIRE, FROST = ROWS_FROST }
 -- ─── Module state ─────────────────────────────────────────────

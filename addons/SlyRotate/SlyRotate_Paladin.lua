@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyRotate_Paladin — Retribution / Protection / Holy
 -- TBC Anniversary (Interface 20505)
 --
@@ -15,49 +15,30 @@ M.classLabel = "Paladin"
 M.headerIcon = "Interface\\Icons\\ClassIcon_Paladin"
 M.specKeys   = { "RETRIBUTION", "PROTECTION", "HOLY" }
 
--- ─── Icons ───────────────────────────────────────────────────
-local ICO = {
-    SealCommand     = "Interface\\Icons\\Ability_Paladin_SealOfCommand",
-    SealBlood       = "Interface\\Icons\\Ability_Racial_CannibalizeSelf",   -- Blood elf seal
-    SealRighteousness="Interface\\Icons\\Spell_Holy_AuraOfLight",
-    Judgement       = "Interface\\Icons\\Ability_Paladin_Judgement",
-    CrusaderStrike  = "Interface\\Icons\\Spell_Holy_CrusaderStrike",
-    Consecration    = "Interface\\Icons\\Spell_Holy_Consecration",
-    Exorcism        = "Interface\\Icons\\Spell_Holy_Excorcism",
-    HolyShield      = "Interface\\Icons\\Spell_Holy_HolyBolt",
-    AvengersShield  = "Interface\\Icons\\Spell_Holy_AvengersShield",
-    HammerOfWrath   = "Interface\\Icons\\Ability_Warrior_WarCry",
-    DivineFavor     = "Interface\\Icons\\Spell_Holy_DivineFavor",
-    HolyShock       = "Interface\\Icons\\Spell_Holy_SearingLight",
-    FlashOfLight    = "Interface\\Icons\\Spell_Holy_FlashHeal",
-    HolyLight       = "Interface\\Icons\\Spell_Holy_HolyBolt",
-    LayOnHands      = "Interface\\Icons\\Spell_Holy_LayOnHands",
-}
-
 -- ─── Row definitions per spec ─────────────────────────────────
 local ROWS_RETRIBUTION = {
-    { key="SEAL",   label="Seal (uptime)",     icon=ICO.SealCommand,    color={0.9, 0.7, 0.3} },
-    { key="CS",     label="Crusader Strike",   icon=ICO.CrusaderStrike, color={1.0, 0.6, 0.2} },
-    { key="JUDGE",  label="Judgement",         icon=ICO.Judgement,      color={0.8, 0.5, 0.2} },
-    { key="CONSC",  label="Consecration",      icon=ICO.Consecration,   color={0.9, 0.8, 0.3} },
-    { key="EXORC",  label="Exorcism",          icon=ICO.Exorcism,       color={0.8, 0.9, 0.5} },
-    { key="HOW",    label="Hammer of Wrath",   icon=ICO.HammerOfWrath,  color={0.9, 0.3, 0.2} },
+    { key="SEAL",   label="Seal (uptime)",     spell="Seal of Command",    color={0.9, 0.7, 0.3} },
+    { key="CS",     label="Crusader Strike",   spell="Crusader Strike", color={1.0, 0.6, 0.2} },
+    { key="JUDGE",  label="Judgement",         spell="Judgement",      color={0.8, 0.5, 0.2} },
+    { key="CONSC",  label="Consecration",      spell="Consecration",   color={0.9, 0.8, 0.3} },
+    { key="EXORC",  label="Exorcism",          spell="Exorcism",       color={0.8, 0.9, 0.5} },
+    { key="HOW",    label="Hammer of Wrath",   spell="Hammer of Wrath",  color={0.9, 0.3, 0.2} },
 }
 
 local ROWS_PROTECTION = {
-    { key="AVS",    label="Avenger's Shield",  icon=ICO.AvengersShield, color={0.6, 0.7, 1.0} },
-    { key="HOLYSH", label="Holy Shield",       icon=ICO.HolyShield,     color={0.8, 0.8, 1.0} },
-    { key="JUDGE",  label="Judgement",         icon=ICO.Judgement,      color={0.8, 0.5, 0.2} },
-    { key="CONSC",  label="Consecration",      icon=ICO.Consecration,   color={0.9, 0.8, 0.3} },
-    { key="SEAL",   label="Seal (uptime)",     icon=ICO.SealRighteousness, color={0.9, 0.7, 0.3} },
+    { key="AVS",    label="Avenger's Shield",  spell="Avenger's Shield", color={0.6, 0.7, 1.0} },
+    { key="HOLYSH", label="Holy Shield",       spell="Holy Shield",     color={0.8, 0.8, 1.0} },
+    { key="JUDGE",  label="Judgement",         spell="Judgement",      color={0.8, 0.5, 0.2} },
+    { key="CONSC",  label="Consecration",      spell="Consecration",   color={0.9, 0.8, 0.3} },
+    { key="SEAL",   label="Seal (uptime)",     spell="Seal of Righteousness", color={0.9, 0.7, 0.3} },
 }
 
 local ROWS_HOLY = {
-    { key="DF",     label="Divine Favor",      icon=ICO.DivineFavor,    color={1.0, 0.9, 0.4} },
-    { key="HSHOCK", label="Holy Shock",        icon=ICO.HolyShock,      color={1.0, 0.7, 0.3} },
-    { key="LOH",    label="Lay on Hands",      icon=ICO.LayOnHands,     color={0.8, 0.9, 1.0} },
-    { key="FOL",    label="Flash of Light",    icon=ICO.FlashOfLight,   color={0.9, 0.9, 0.9} },
-    { key="HL",     label="Holy Light",        icon=ICO.HolyLight,      color={0.9, 0.8, 0.5} },
+    { key="DF",     label="Divine Favor",      spell="Divine Favor",    color={1.0, 0.9, 0.4} },
+    { key="HSHOCK", label="Holy Shock",        spell="Holy Shock",      color={1.0, 0.7, 0.3} },
+    { key="LOH",    label="Lay on Hands",      spell="Lay on Hands",     color={0.8, 0.9, 1.0} },
+    { key="FOL",    label="Flash of Light",    spell="Flash of Light",   color={0.9, 0.9, 0.9} },
+    { key="HL",     label="Holy Light",        spell="Holy Light",      color={0.9, 0.8, 0.5} },
 }
 
 M.specRows = { RETRIBUTION = ROWS_RETRIBUTION, PROTECTION = ROWS_PROTECTION, HOLY = ROWS_HOLY }

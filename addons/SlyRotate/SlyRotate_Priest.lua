@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyRotate_Priest — Shadow / Holy / Discipline
 -- TBC Anniversary (Interface 20505)
 --
@@ -16,51 +16,31 @@ M.classLabel = "Priest"
 M.headerIcon = "Interface\\Icons\\ClassIcon_Priest"
 M.specKeys   = { "SHADOW", "HOLY", "DISCIPLINE" }
 
--- ─── Icons ───────────────────────────────────────────────────
-local ICO = {
-    VampiricTouch   = "Interface\\Icons\\Spell_Holy_VampiricEmbrace",
-    SWPain          = "Interface\\Icons\\Spell_Shadow_WordPain",
-    SWDeath         = "Interface\\Icons\\Spell_Shadow_ShadowWordDeath",
-    MindBlast       = "Interface\\Icons\\Spell_Shadow_MindBomb",
-    MindFlay        = "Interface\\Icons\\Spell_Shadow_MindFlay",
-    Shadowfiend     = "Interface\\Icons\\Spell_Shadow_Shadowfiend",
-    InnerFocus      = "Interface\\Icons\\Spell_Frost_StarFall",
-    DispersionIcon  = "Interface\\Icons\\Spell_Shadow_Dispersion",
-    FlashHeal       = "Interface\\Icons\\Spell_Holy_FlashHeal",
-    GreaterHeal     = "Interface\\Icons\\Spell_Holy_HolyBolt",
-    CircleOfHeal    = "Interface\\Icons\\Spell_Holy_CircleOfHeal",
-    GuardianSpirit  = "Interface\\Icons\\Spell_Holy_GuardianSpirit",
-    PoH             = "Interface\\Icons\\Spell_Holy_PrayerOfHealing02",
-    PowerInfusion   = "Interface\\Icons\\Ability_Priest_PowerInfusion",
-    PWShield        = "Interface\\Icons\\Spell_Holy_Power",
-    PainSuppression = "Interface\\Icons\\Spell_Holy_PainSuppression",
-}
-
 -- ─── Row definitions ─────────────────────────────────────────
 local ROWS_SHADOW = {
-    { key="VT",     label="Vampiric Touch",   icon=ICO.VampiricTouch,  color={0.7, 0.4, 0.9} },
-    { key="SWP",    label="SW: Pain",         icon=ICO.SWPain,         color={0.6, 0.2, 0.8} },
-    { key="MB",     label="Mind Blast",       icon=ICO.MindBlast,      color={0.5, 0.3, 0.9} },
-    { key="SHADOW", label="Shadowfiend",      icon=ICO.Shadowfiend,    color={0.5, 0.5, 0.9} },
-    { key="IF",     label="Inner Focus",      icon=ICO.InnerFocus,     color={0.7, 0.7, 1.0} },
-    { key="SWD",    label="SW: Death",        icon=ICO.SWDeath,        color={0.9, 0.3, 0.3} },
-    { key="MF",     label="Mind Flay (fill)", icon=ICO.MindFlay,       color={0.4, 0.4, 0.7} },
+    { key="VT",     label="Vampiric Touch",   spell="Vampiric Touch",  color={0.7, 0.4, 0.9} },
+    { key="SWP",    label="SW: Pain",         spell="Shadow Word: Pain",         color={0.6, 0.2, 0.8} },
+    { key="MB",     label="Mind Blast",       spell="Mind Blast",      color={0.5, 0.3, 0.9} },
+    { key="SHADOW", label="Shadowfiend",      spell="Shadowfiend",    color={0.5, 0.5, 0.9} },
+    { key="IF",     label="Inner Focus",      spell="Inner Focus",     color={0.7, 0.7, 1.0} },
+    { key="SWD",    label="SW: Death",        spell="Shadow Word: Death",        color={0.9, 0.3, 0.3} },
+    { key="MF",     label="Mind Flay (fill)", spell="Mind Flay",       color={0.4, 0.4, 0.7} },
 }
 
 local ROWS_HOLY = {
-    { key="GS",     label="Guardian Spirit",  icon=ICO.GuardianSpirit, color={1.0, 1.0, 0.6} },
-    { key="COH",    label="Circle of Healing",icon=ICO.CircleOfHeal,   color={0.5, 1.0, 0.5} },
-    { key="POH",    label="Prayer of Healing",icon=ICO.PoH,            color={0.7, 0.9, 0.7} },
-    { key="FH",     label="Flash Heal",       icon=ICO.FlashHeal,      color={0.9, 0.9, 0.9} },
-    { key="GH",     label="Greater Heal",     icon=ICO.GreaterHeal,    color={0.8, 0.8, 0.5} },
+    { key="GS",     label="Guardian Spirit",  spell="Prayer of Healing", color={1.0, 1.0, 0.6} },
+    { key="COH",    label="Circle of Healing",spell="Circle of Healing",   color={0.5, 1.0, 0.5} },
+    { key="POH",    label="Prayer of Healing",spell="Prayer of Healing",            color={0.7, 0.9, 0.7} },
+    { key="FH",     label="Flash Heal",       spell="Flash Heal",      color={0.9, 0.9, 0.9} },
+    { key="GH",     label="Greater Heal",     spell="Greater Heal",    color={0.8, 0.8, 0.5} },
 }
 
 local ROWS_DISCIPLINE = {
-    { key="PI",     label="Power Infusion",   icon=ICO.PowerInfusion,  color={0.8, 0.5, 1.0} },
-    { key="PS",     label="Pain Suppression", icon=ICO.PainSuppression,color={1.0, 0.7, 0.3} },
-    { key="SHIELD", label="PW: Shield",       icon=ICO.PWShield,       color={0.6, 0.7, 1.0} },
-    { key="FH",     label="Flash Heal",       icon=ICO.FlashHeal,      color={0.9, 0.9, 0.9} },
-    { key="GH",     label="Greater Heal",     icon=ICO.GreaterHeal,    color={0.8, 0.8, 0.5} },
+    { key="PI",     label="Power Infusion",   spell="Power Infusion",  color={0.8, 0.5, 1.0} },
+    { key="PS",     label="Pain Suppression", spell="Pain Suppression",color={1.0, 0.7, 0.3} },
+    { key="SHIELD", label="PW: Shield",       spell="Power Word: Shield",       color={0.6, 0.7, 1.0} },
+    { key="FH",     label="Flash Heal",       spell="Flash Heal",      color={0.9, 0.9, 0.9} },
+    { key="GH",     label="Greater Heal",     spell="Greater Heal",    color={0.8, 0.8, 0.5} },
 }
 
 M.specRows = { SHADOW = ROWS_SHADOW, HOLY = ROWS_HOLY, DISCIPLINE = ROWS_DISCIPLINE }

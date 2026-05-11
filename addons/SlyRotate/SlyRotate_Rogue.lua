@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyRotate_Rogue — Combat / Assassination / Subtlety
 -- TBC Anniversary (Interface 20505)
 --
@@ -15,46 +15,29 @@ M.classLabel = "Rogue"
 M.headerIcon = "Interface\\Icons\\Ability_Stealth"
 M.specKeys   = { "COMBAT", "ASSASSINATION", "SUBTLETY" }
 
--- ─── Icons ───────────────────────────────────────────────────
-local ICO = {
-    SliceAndDice  = "Interface\\Icons\\Ability_Rogue_SliceAndDice",
-    Rupture       = "Interface\\Icons\\Ability_Rogue_Rupture",
-    Eviscerate    = "Interface\\Icons\\Ability_Rogue_Eviscerate",
-    SinisterStrike= "Interface\\Icons\\Ability_Backstab",
-    Mutilate      = "Interface\\Icons\\Ability_Rogue_Mutilate",
-    BladeFlurry   = "Interface\\Icons\\Ability_Warrior_BladeStorm",
-    AdrenalineRush= "Interface\\Icons\\Spell_Shadow_ShadowWordPain",  -- best match available
-    Hemorrhage    = "Interface\\Icons\\Ability_Rogue_Hemorrhage",
-    Ambush        = "Interface\\Icons\\Ability_Rogue_Ambush",
-    ColdBlood     = "Interface\\Icons\\Spell_Shadow_ChillTouch",
-    Expose        = "Interface\\Icons\\Ability_Rogue_ExposeArmor",
-    KidneyShot    = "Interface\\Icons\\Ability_Rogue_KidneyShot",
-    Energy        = "Interface\\Icons\\ClassIcon_Rogue",
-}
-
 -- ─── Row definitions ─────────────────────────────────────────
 local ROWS_COMBAT = {
-    { key="AR",     label="Adrenaline Rush",  icon=ICO.AdrenalineRush, color={1.0, 0.7, 0.2} },
-    { key="BF",     label="Blade Flurry",     icon=ICO.BladeFlurry,    color={0.8, 0.8, 0.3} },
-    { key="SND",    label="Slice & Dice",     icon=ICO.SliceAndDice,   color={0.4, 0.9, 0.4} },
-    { key="RUP",    label="Rupture",          icon=ICO.Rupture,        color={0.9, 0.3, 0.3} },
-    { key="EVIS",   label="Eviscerate (5CP)", icon=ICO.Eviscerate,     color={0.9, 0.6, 0.2} },
-    { key="SS",     label="Sinister Strike",  icon=ICO.SinisterStrike, color={0.6, 0.6, 0.6} },
+    { key="AR",     label="Adrenaline Rush",  spell="Adrenaline Rush", color={1.0, 0.7, 0.2} },
+    { key="BF",     label="Blade Flurry",     spell="Blade Flurry",    color={0.8, 0.8, 0.3} },
+    { key="SND",    label="Slice & Dice",     spell="Slice and Dice",   color={0.4, 0.9, 0.4} },
+    { key="RUP",    label="Rupture",          spell="Rupture",        color={0.9, 0.3, 0.3} },
+    { key="EVIS",   label="Eviscerate (5CP)", spell="Eviscerate",     color={0.9, 0.6, 0.2} },
+    { key="SS",     label="Sinister Strike",  spell="Sinister Strike", color={0.6, 0.6, 0.6} },
 }
 
 local ROWS_ASSASSINATION = {
-    { key="CB",     label="Cold Blood",       icon=ICO.ColdBlood,      color={0.6, 0.8, 1.0} },
-    { key="SND",    label="Slice & Dice",     icon=ICO.SliceAndDice,   color={0.4, 0.9, 0.4} },
-    { key="RUP",    label="Rupture",          icon=ICO.Rupture,        color={0.9, 0.3, 0.3} },
-    { key="EVIS",   label="Eviscerate (5CP)", icon=ICO.Eviscerate,     color={0.9, 0.6, 0.2} },
-    { key="MUTILATE", label="Mutilate",       icon=ICO.Mutilate,       color={0.7, 0.2, 0.8} },
+    { key="CB",     label="Cold Blood",       spell="Cold Blood",      color={0.6, 0.8, 1.0} },
+    { key="SND",    label="Slice & Dice",     spell="Slice and Dice",   color={0.4, 0.9, 0.4} },
+    { key="RUP",    label="Rupture",          spell="Rupture",        color={0.9, 0.3, 0.3} },
+    { key="EVIS",   label="Eviscerate (5CP)", spell="Eviscerate",     color={0.9, 0.6, 0.2} },
+    { key="MUTILATE", label="Mutilate",       spell="Mutilate",       color={0.7, 0.2, 0.8} },
 }
 
 local ROWS_SUBTLETY = {
-    { key="SND",    label="Slice & Dice",     icon=ICO.SliceAndDice,   color={0.4, 0.9, 0.4} },
-    { key="RUP",    label="Rupture",          icon=ICO.Rupture,        color={0.9, 0.3, 0.3} },
-    { key="EVIS",   label="Eviscerate (5CP)", icon=ICO.Eviscerate,     color={0.9, 0.6, 0.2} },
-    { key="HEMOR",  label="Hemorrhage",       icon=ICO.Hemorrhage,     color={0.7, 0.2, 0.2} },
+    { key="SND",    label="Slice & Dice",     spell="Slice and Dice",   color={0.4, 0.9, 0.4} },
+    { key="RUP",    label="Rupture",          spell="Rupture",        color={0.9, 0.3, 0.3} },
+    { key="EVIS",   label="Eviscerate (5CP)", spell="Eviscerate",     color={0.9, 0.6, 0.2} },
+    { key="HEMOR",  label="Hemorrhage",       spell="Hemorrhage",     color={0.7, 0.2, 0.2} },
 }
 M.specRows = { COMBAT = ROWS_COMBAT, ASSASSINATION = ROWS_ASSASSINATION, SUBTLETY = ROWS_SUBTLETY }
 -- ─── Module state ─────────────────────────────────────────────

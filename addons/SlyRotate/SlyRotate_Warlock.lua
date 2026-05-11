@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyRotate_Warlock — Affliction / Destruction / Demonology
 -- TBC Anniversary (Interface 20505)
 --
@@ -14,48 +14,32 @@ M.headerIcon = "Interface\\Icons\\Spell_Shadow_DeathCoil"
 M.specKeys   = { "AFFLICTION", "DESTRUCTION", "DEMONOLOGY" }
 
 -- ─── Spell icons ─────────────────────────────────────────────
-local ICO = {
-    CurseAgony      = "Interface\\Icons\\Spell_Shadow_CurseOfSargeras",
-    CurseElements   = "Interface\\Icons\\Spell_Shadow_ChillTouch",
-    Corruption      = "Interface\\Icons\\Spell_Shadow_AbominationExplosion",
-    Immolate        = "Interface\\Icons\\Spell_Fire_Immolation",
-    SiphonLife      = "Interface\\Icons\\Spell_Shadow_VampiricAura",
-    UnstableAfflict = "Interface\\Icons\\Spell_Shadow_UnstableAffliction_3",
-    ShadowBolt      = "Interface\\Icons\\Spell_Shadow_ShadowBolt",
-    Conflagrate     = "Interface\\Icons\\Spell_Fire_Conflagrate",
-    Incinerate      = "Interface\\Icons\\Spell_Fire_SelfDestruct",
-    LifeTap         = "Interface\\Icons\\Spell_Shadow_LifeTap",
-    SoulFire        = "Interface\\Icons\\Spell_Fire_BlueFire",
-    Drain           = "Interface\\Icons\\Spell_Shadow_SoulLeech_2",
-    DemonicSacrifice = "Interface\\Icons\\Spell_Shadow_DemonicSacrifice",
-}
-
 -- ─── Row definitions per spec ─────────────────────────────────
 local ROWS_AFFLICTION = {
-    { key="CURSE",    label="Curse of Agony",       icon=ICO.CurseAgony,      color={0.7, 0.3, 0.9} },
-    { key="UA",       label="Unstable Affliction",  icon=ICO.UnstableAfflict, color={0.85, 0.4, 1.0} },
-    { key="CORRUPT",  label="Corruption",            icon=ICO.Corruption,      color={0.6, 0.2, 0.8} },
-    { key="IMMO",     label="Immolate",              icon=ICO.Immolate,        color={0.95, 0.5, 0.2} },
-    { key="SIPHON",   label="Siphon Life",           icon=ICO.SiphonLife,      color={0.5, 0.9, 0.5} },
-    { key="SBOLT",    label="Shadow Bolt (filler)",  icon=ICO.ShadowBolt,      color={0.5, 0.5, 0.9} },
-    { key="LIFETAP",  label="Life Tap (mana)",       icon=ICO.LifeTap,         color={0.9, 0.4, 0.4} },
+    { key="CURSE",    label="Curse of Agony",       spell="Curse of Agony",      color={0.7, 0.3, 0.9} },
+    { key="UA",       label="Unstable Affliction",  spell="Unstable Affliction", color={0.85, 0.4, 1.0} },
+    { key="CORRUPT",  label="Corruption",            spell="Corruption",      color={0.6, 0.2, 0.8} },
+    { key="IMMO",     label="Immolate",              spell="Immolate",        color={0.95, 0.5, 0.2} },
+    { key="SIPHON",   label="Siphon Life",           spell="Siphon Life",      color={0.5, 0.9, 0.5} },
+    { key="SBOLT",    label="Shadow Bolt (filler)",  spell="Shadow Bolt",      color={0.5, 0.5, 0.9} },
+    { key="LIFETAP",  label="Life Tap (mana)",       spell="Life Tap",         color={0.9, 0.4, 0.4} },
 }
 
 local ROWS_DESTRUCTION = {
-    { key="IMMO",     label="Immolate",              icon=ICO.Immolate,        color={0.95, 0.5, 0.2} },
-    { key="CONFLAG",  label="Conflagrate",           icon=ICO.Conflagrate,     color={1.0, 0.6, 0.1} },
-    { key="INCINERATE", label="Incinerate",          icon=ICO.Incinerate,      color={1.0, 0.4, 0.0} },
-    { key="SBOLT",    label="Shadow Bolt (filler)",  icon=ICO.ShadowBolt,      color={0.5, 0.5, 0.9} },
-    { key="SOULFIRE", label="Soul Fire (if proc)",   icon=ICO.SoulFire,        color={0.9, 0.8, 0.2} },
-    { key="LIFETAP",  label="Life Tap (mana)",       icon=ICO.LifeTap,         color={0.9, 0.4, 0.4} },
+    { key="IMMO",     label="Immolate",              spell="Immolate",        color={0.95, 0.5, 0.2} },
+    { key="CONFLAG",  label="Conflagrate",           spell="Conflagrate",     color={1.0, 0.6, 0.1} },
+    { key="INCINERATE", label="Incinerate",          spell="Incinerate",      color={1.0, 0.4, 0.0} },
+    { key="SBOLT",    label="Shadow Bolt (filler)",  spell="Shadow Bolt",      color={0.5, 0.5, 0.9} },
+    { key="SOULFIRE", label="Soul Fire (if proc)",   spell="Soul Fire",        color={0.9, 0.8, 0.2} },
+    { key="LIFETAP",  label="Life Tap (mana)",       spell="Life Tap",         color={0.9, 0.4, 0.4} },
 }
 
 local ROWS_DEMONOLOGY = {
-    { key="CORRUPT",  label="Corruption",            icon=ICO.Corruption,      color={0.6, 0.2, 0.8} },
-    { key="IMMO",     label="Immolate",              icon=ICO.Immolate,        color={0.95, 0.5, 0.2} },
-    { key="CURSE",    label="Curse of Elements",     icon=ICO.CurseElements,   color={0.7, 0.3, 0.9} },
-    { key="SBOLT",    label="Shadow Bolt (filler)",  icon=ICO.ShadowBolt,      color={0.5, 0.5, 0.9} },
-    { key="LIFETAP",  label="Life Tap (mana)",       icon=ICO.LifeTap,         color={0.9, 0.4, 0.4} },
+    { key="CORRUPT",  label="Corruption",            spell="Corruption",      color={0.6, 0.2, 0.8} },
+    { key="IMMO",     label="Immolate",              spell="Immolate",        color={0.95, 0.5, 0.2} },
+    { key="CURSE",    label="Curse of Elements",     spell="Curse of the Elements",   color={0.7, 0.3, 0.9} },
+    { key="SBOLT",    label="Shadow Bolt (filler)",  spell="Shadow Bolt",      color={0.5, 0.5, 0.9} },
+    { key="LIFETAP",  label="Life Tap (mana)",       spell="Life Tap",         color={0.9, 0.4, 0.4} },
 }
 
 M.specRows = { AFFLICTION = ROWS_AFFLICTION, DESTRUCTION = ROWS_DESTRUCTION, DEMONOLOGY = ROWS_DEMONOLOGY }

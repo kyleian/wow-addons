@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyRotate — Shaman Module
 -- Enhancement: Stormstrike → Earth Shock GCD loop, weapon procs,
 --              totem CD tracking (WFT window handled by SlySuite_TotemTwist).
@@ -14,24 +14,6 @@ S.headerIcon = "Interface\\Icons\\Spell_Nature_LightningShield"
 S.specKeys   = { "ENHANCE", "ELEMENTAL" }
 S.specLabels = { ENHANCE="Enhancement", ELEMENTAL="Elemental" }
 
--- ─── Icons ──────────────────────────────────────────────────
-local ICO = {
-    SS        = "Interface\\Icons\\Spell_Nature_StormStrike",
-    ES        = "Interface\\Icons\\Spell_Nature_EarthShock",
-    FS        = "Interface\\Icons\\Spell_Fire_FlameTongue",
-    WF        = "Interface\\Icons\\Spell_Nature_CallLightning",
-    MGTM      = "Interface\\Icons\\Spell_Nature_ManaRegenTotem",
-    NS        = "Interface\\Icons\\Spell_Nature_RavenForm",    -- Nature's Swiftness
-    SR        = "Interface\\Icons\\Spell_Nature_ShamanisticRage",
-    LB        = "Interface\\Icons\\Spell_Lightning_LightningBolt01",
-    CL        = "Interface\\Icons\\Spell_Lightning_LightningBoltBlue",
-    EM        = "Interface\\Icons\\Spell_Nature_elementalshields",
-    PROC      = "Interface\\Icons\\Spell_Nature_TauntOther",   -- Windfury proc indicator
-    LOCAL_DEF = "Interface\\Icons\\Spell_Nature_ThunderClap",
-    WFT       = "Interface\\Icons\\Spell_Nature_WinFury",      -- Windfury Totem
-    SEAR      = "Interface\\Icons\\Spell_Fire_SearingTotem",   -- Searing Totem
-}
-
 -- ─── Enhancement priority row definitions ────────────────────
 -- TBC Enhancement loop (weapon MH = Windfury, OH = Flametongue):
 --   1. Stormstrike on CD       (12s CD)
@@ -42,12 +24,12 @@ local ICO = {
 --   6. Windfury proc window    (tracked from combat log)
 -- NOTE: Totem twist handled by SlySuite_TotemTwist (shown below this frame)
 local ENHANCE_ROWS = {
-    { key="SS",     label="Stormstrike",                  icon=ICO.SS,   color={0.38,0.84,1.00} },
-    { key="FS",     label="Flame Shock  (DoT)",           icon=ICO.FS,   color={1.00,0.48,0.12} },
-    { key="ES",     label="Earth Shock",                  icon=ICO.ES,   color={0.55,0.88,0.55} },
-    { key="SEARING",label="Fire Totem",                   icon=ICO.SEAR, color={0.90,0.35,0.10} },
-    { key="SR",     label="Shamanic Rage  (mana)",        icon=ICO.SR,   color={0.60,0.25,0.90} },
-    { key="WF_PROC",label="Windfury Proc!",               icon=ICO.PROC, color={1.00,0.95,0.20} },
+    { key="SS",     label="Stormstrike",                  spell="Stormstrike",   color={0.38,0.84,1.00} },
+    { key="FS",     label="Flame Shock  (DoT)",           spell="Flame Shock",   color={1.00,0.48,0.12} },
+    { key="ES",     label="Earth Shock",                  spell="Earth Shock",   color={0.55,0.88,0.55} },
+    { key="SEARING",label="Fire Totem",                   spell="Searing Totem", color={0.90,0.35,0.10} },
+    { key="SR",     label="Shamanic Rage  (mana)",        spell="Shamanistic Rage",   color={0.60,0.25,0.90} },
+    { key="WF_PROC",label="Windfury Proc!",               spell="Windfury Totem", color={1.00,0.95,0.20} },
 }
 
 -- ─── Elemental priority row definitions ──────────────────────
@@ -58,11 +40,11 @@ local ENHANCE_ROWS = {
 --   4. Chain Lightning     — 3+ targets (3s CD)
 --   5. Lightning Bolt      — primary filler spam
 local ELEMENTAL_ROWS = {
-    { key="EM",  label="Elemental Mastery  (CD)",  icon=ICO.EM, color={1.00,0.80,0.10} },
-    { key="NS",  label="Nature's Swiftness  (CD)", icon=ICO.NS, color={0.45,1.00,0.45} },
-    { key="FS",  label="Flame Shock  (DoT)",       icon=ICO.FS, color={1.00,0.48,0.12} },
-    { key="CL",  label="Chain Lightning  (3+ AoE)",icon=ICO.CL, color={0.38,0.70,1.00} },
-    { key="LB",  label="Lightning Bolt  (spam)",   icon=ICO.LB, color={0.80,0.80,1.00} },
+    { key="EM",  label="Elemental Mastery  (CD)",  spell="Elemental Mastery",  color={1.00,0.80,0.10} },
+    { key="NS",  label="Nature's Swiftness  (CD)", spell="Nature's Swiftness", color={0.45,1.00,0.45} },
+    { key="FS",  label="Flame Shock  (DoT)",       spell="Flame Shock",        color={1.00,0.48,0.12} },
+    { key="CL",  label="Chain Lightning  (3+ AoE)",spell="Chain Lightning",    color={0.38,0.70,1.00} },
+    { key="LB",  label="Lightning Bolt  (spam)",   spell="Lightning Bolt",     color={0.80,0.80,1.00} },
 }
 
 -- Expose row definitions for the admin panel (must be after both tables)

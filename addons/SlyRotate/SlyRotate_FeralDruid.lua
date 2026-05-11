@@ -12,53 +12,33 @@ D.headerIcon = "Interface\\Icons\\Ability_Druid_CatForm"
 D.specKeys   = { "CAT", "BEAR" }
 D.specLabels = { CAT="Cat DPS", BEAR="Bear Tank" }
 
--- ─── Icons ──────────────────────────────────────────────────
-local ICO = {
-    TF         = "Interface\\Icons\\Ability_Druid_TigersFury",
-    RIP        = "Interface\\Icons\\Ability_GhoulFrenzy",
-    MANGLE     = "Interface\\Icons\\Ability_Druid_Mangle2",
-    SHRED      = "Interface\\Icons\\Spell_Shadow_VampiricAura",
-    FB         = "Interface\\Icons\\Ability_Druid_FerociousBite",
-    POWERSHIFT = "Interface\\Icons\\Ability_Druid_CatForm",
-    WAIT       = "Interface\\Icons\\Spell_Magic_WardingCurse",
-    LACERATE   = "Interface\\Icons\\Ability_Druid_Lacerate",
-    MAUL       = "Interface\\Icons\\Ability_Druid_Maul",
-    SWIPE      = "Interface\\Icons\\Ability_Druid_Swipe",
-    DEMO_ROAR  = "Interface\\Icons\\Ability_Druid_DemoralizingRoar",
-    BASH       = "Interface\\Icons\\Ability_Druid_Bash",
-    FRENZIED   = "Interface\\Icons\\Ability_BullRush",
-}
-
--- ─── Spell name constants (rank-independent) ─────────────────
-local SP_TF       = "Tiger's Fury"
-local SP_RIP      = "Rip"
-local SP_MANGLE_C = "Mangle (Cat)"
-local SP_MANGLE_B = "Mangle (Bear)"
-local SP_SHRED    = "Shred"
-local SP_FB       = "Ferocious Bite"
-local SP_LACERATE = "Lacerate"
-local SP_MAUL     = "Maul"
-local SP_DEMO_ROAR= "Demoralizing Roar"
-local SP_BASH     = "Bash"
-local SP_FRENZIED = "Frenzied Regeneration"
+-- ─── Spell name constants ──────────────────────────────────
+local SP_RIP        = "Rip"
+local SP_MANGLE_C   = "Mangle (Cat)"
+local SP_MANGLE_B   = "Mangle (Bear)"
+local SP_LACERATE   = "Lacerate"
+local SP_DEMO_ROAR  = "Demoralizing Roar"
+local SP_TF         = "Tiger's Fury"
+local SP_BASH       = "Bash"
+local SP_FRENZIED   = "Frenzied Regeneration"
 
 -- ─── Row definitions ─────────────────────────────────────────
 local CAT_ROWS = {
-    { key="RIP",        label="Rip  (≥4CP ≥30E)",   icon=ICO.RIP,        color={1.00,0.28,0.28} },
-    { key="MANGLE_CAT", label="Mangle  (≥40E)",     icon=ICO.MANGLE,     color={1.00,0.68,0.18} },
-    { key="SHRED",      label="Shred  (≥42E)",      icon=ICO.SHRED,      color={0.38,0.84,1.00} },
-    { key="POWERSHIFT", label="Powershift",         icon=ICO.POWERSHIFT, color={0.45,1.00,0.45} },
-    { key="WAIT",       label="Wait  (tick)",       icon=ICO.WAIT,       color={0.42,0.42,0.48} },
-    { key="FB",         label="+ FB swap (dying)",  icon=ICO.FB,         color={1.00,0.55,0.10} },
-    { key="TF",         label="Tiger's Fury  (CD)", icon=ICO.TF,         color={1.00,0.65,0.00} },
+    { key="RIP",        label="Rip  (≥4CP ≥30E)",   spell="Rip",                color={1.00,0.28,0.28} },
+    { key="MANGLE_CAT", label="Mangle  (≥40E)",     spell="Mangle (Cat)",       color={1.00,0.68,0.18} },
+    { key="SHRED",      label="Shred  (≥42E)",      spell="Shred",              color={0.38,0.84,1.00} },
+    { key="POWERSHIFT", label="Powershift",         icon="Interface\\Icons\\Ability_Druid_CatForm",        color={0.45,1.00,0.45} },
+    { key="WAIT",       label="Wait  (tick)",       icon="Interface\\Icons\\Spell_Magic_WardingCurse",     color={0.42,0.42,0.48} },
+    { key="FB",         label="+ FB swap (dying)",  spell="Ferocious Bite",     color={1.00,0.55,0.10} },
+    { key="TF",         label="Tiger's Fury  (CD)", spell="Tiger's Fury",       color={1.00,0.65,0.00} },
 }
 local BEAR_ROWS = {
-    { key="MANGLE_BEAR", label="Mangle (Bear)",     icon=ICO.MANGLE,    color={1.00,0.55,0.10} },
-    { key="LACERATE",    label="Lacerate  (spam)",  icon=ICO.LACERATE,  color={0.90,0.28,0.28} },
-    { key="MAUL",        label="+ Maul  (off-GCD)", icon=ICO.MAUL,      color={1.00,0.82,0.22} },
-    { key="DEMO_ROAR",   label="Demo Roar  (opt)",  icon=ICO.DEMO_ROAR, color={0.65,0.40,1.00} },
-    { key="BASH",        label="Bash",              icon=ICO.BASH,      color={0.40,0.85,1.00} },
-    { key="FRENZIED",    label="Frenzied  (skip)",  icon=ICO.FRENZIED,  color={0.45,0.45,0.50} },
+    { key="MANGLE_BEAR", label="Mangle (Bear)",     spell="Mangle (Bear)",      color={1.00,0.55,0.10} },
+    { key="LACERATE",    label="Lacerate  (spam)",  spell="Lacerate",           color={0.90,0.28,0.28} },
+    { key="MAUL",        label="+ Maul  (off-GCD)", spell="Maul",               color={1.00,0.82,0.22} },
+    { key="DEMO_ROAR",   label="Demo Roar  (opt)",  spell="Demoralizing Roar",  color={0.65,0.40,1.00} },
+    { key="BASH",        label="Bash",              spell="Bash",               color={0.40,0.85,1.00} },
+    { key="FRENZIED",    label="Frenzied  (skip)",  spell="Frenzied Regeneration", color={0.45,0.45,0.50} },
 }
 
 D.specRows = { CAT = CAT_ROWS, BEAR = BEAR_ROWS }

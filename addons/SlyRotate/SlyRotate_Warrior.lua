@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyRotate — Warrior Module
 -- Fury DPS, Arms DPS, Protection Tank
 -- Port of SlySuite_WarriorHelper rotation logic into the
@@ -13,57 +13,35 @@ W.headerIcon = "Interface\\Icons\\Ability_Warrior_Bloodthirst"
 W.specKeys   = { "FURY", "ARMS", "PROT" }
 W.specLabels = { FURY="Fury DPS", ARMS="Arms DPS", PROT="Prot Tank" }
 
--- ─── Icons ──────────────────────────────────────────────────
-local ICO = {
-    BT         = "Interface\\Icons\\Ability_Warrior_Bloodthirst",
-    WW         = "Interface\\Icons\\Ability_Warrior_Whirlwind",
-    MS         = "Interface\\Icons\\Ability_Warrior_SavageBlow",
-    SLAM       = "Interface\\Icons\\Ability_Warrior_Decimate",
-    SS         = "Interface\\Icons\\Ability_Warrior_ShieldSlam",
-    REVENGE    = "Interface\\Icons\\Ability_Warrior_Revenge",
-    DEVASTATE  = "Interface\\Icons\\Ability_Warrior_Devastate",
-    EXECUTE    = "Interface\\Icons\\Inv_Sword_48",
-    HS         = "Interface\\Icons\\Ability_Warrior_HeroicStrike",
-    SUNDER     = "Interface\\Icons\\Ability_Warrior_Sunder",
-    DEMO       = "Interface\\Icons\\Ability_Warrior_WarCry",
-    TC         = "Interface\\Icons\\Spell_Nature_ThunderClap",
-    DW         = "Interface\\Icons\\Spell_Shadow_DeathScream",
-    SHIELD_BLK = "Interface\\Icons\\Ability_Defend",
-    OVERPOWER  = "Interface\\Icons\\Ability_MeleeDamage",
-    RAMPAGE    = "Interface\\Icons\\Ability_Warrior_RampagePurple",
-    CLEAVE     = "Interface\\Icons\\Ability_Warrior_Cleave",
-    PROCS      = "Interface\\Icons\\Ability_Rogue_Sprint",
-}
-
 -- ─── Row definitions ─────────────────────────────────────────
 local FURY_ROWS = {
-    { key="SUNDER",     label="Sunder Armor",         icon=ICO.SUNDER,    color={0.70,0.70,0.70} },
-    { key="BT",         label="Bloodthirst",          icon=ICO.BT,        color={1.00,0.25,0.25} },
-    { key="WW",         label="Whirlwind",            icon=ICO.WW,        color={1.00,0.68,0.18} },
-    { key="EXECUTE",    label="Execute  (<20%)",      icon=ICO.EXECUTE,   color={1.00,0.40,0.10} },
-    { key="OVERPOWER",  label="+ Overpower  (opt)",   icon=ICO.OVERPOWER, color={0.45,1.00,0.45} },
-    { key="HS",         label="+ Heroic Strike",      icon=ICO.HS,        color={1.00,0.82,0.22} },
-    { key="DEATH_WISH", label="Death Wish  (passive)",icon=ICO.DW,        color={0.60,0.25,0.90} },
-    { key="PROCS",      label="Procs  (DST/DS/MG)",   icon=ICO.PROCS,     color={0.20,0.90,0.95} },
+    { key="SUNDER",     label="Sunder Armor",         spell="Sunder Armor",        color={0.70,0.70,0.70} },
+    { key="BT",         label="Bloodthirst",          spell="Bloodthirst",         color={1.00,0.25,0.25} },
+    { key="WW",         label="Whirlwind",            spell="Whirlwind",           color={1.00,0.68,0.18} },
+    { key="EXECUTE",    label="Execute  (<20%)",      spell="Execute",             color={1.00,0.40,0.10} },
+    { key="OVERPOWER",  label="+ Overpower  (opt)",   spell="Overpower",           color={0.45,1.00,0.45} },
+    { key="HS",         label="+ Heroic Strike",      spell="Heroic Strike",       color={1.00,0.82,0.22} },
+    { key="DEATH_WISH", label="Death Wish  (passive)",spell="Death Wish",          color={0.60,0.25,0.90} },
+    { key="PROCS",      label="Procs  (DST/DS/MG)",   spell="Heroic Strike",       color={0.20,0.90,0.95} },
 }
 local ARMS_ROWS = {
-    { key="SUNDER",     label="Sunder Armor",         icon=ICO.SUNDER,    color={0.70,0.70,0.70} },
-    { key="SLAM",       label="Slam  (post-swing)",   icon=ICO.SLAM,      color={1.00,0.95,0.35} },
-    { key="MS",         label="Mortal Strike",        icon=ICO.MS,        color={1.00,0.25,0.25} },
-    { key="WW",         label="Whirlwind",            icon=ICO.WW,        color={1.00,0.68,0.18} },
-    { key="EXECUTE",    label="Execute  (<20%)",      icon=ICO.EXECUTE,   color={1.00,0.40,0.10} },
-    { key="HS",         label="+ Heroic Strike",      icon=ICO.HS,        color={1.00,0.82,0.22} },
-    { key="DEATH_WISH", label="Death Wish  (passive)",icon=ICO.DW,        color={0.60,0.25,0.90} },
-    { key="PROCS",      label="Procs  (DST/DS/MG)",   icon=ICO.PROCS,     color={0.20,0.90,0.95} },
+    { key="SUNDER",     label="Sunder Armor",         spell="Sunder Armor",        color={0.70,0.70,0.70} },
+    { key="SLAM",       label="Slam  (post-swing)",   spell="Slam",                color={1.00,0.95,0.35} },
+    { key="MS",         label="Mortal Strike",        spell="Mortal Strike",       color={1.00,0.25,0.25} },
+    { key="WW",         label="Whirlwind",            spell="Whirlwind",           color={1.00,0.68,0.18} },
+    { key="EXECUTE",    label="Execute  (<20%)",      spell="Execute",             color={1.00,0.40,0.10} },
+    { key="HS",         label="+ Heroic Strike",      spell="Heroic Strike",       color={1.00,0.82,0.22} },
+    { key="DEATH_WISH", label="Death Wish  (passive)",spell="Death Wish",          color={0.60,0.25,0.90} },
+    { key="PROCS",      label="Procs  (DST/DS/MG)",   spell="Heroic Strike",       color={0.20,0.90,0.95} },
 }
 local PROT_ROWS = {
-    { key="SHIELD_BLOCK", label="Shield Block  (crit/crush)",icon=ICO.SHIELD_BLK,color={0.40,0.85,1.00} },
-    { key="SHIELD_SLAM",  label="Shield Slam",              icon=ICO.SS,         color={1.00,0.55,0.10} },
-    { key="REVENGE",      label="Revenge",                  icon=ICO.REVENGE,    color={0.90,0.28,0.28} },
-    { key="DEMO_SHOUT",   label="Demo Shout",               icon=ICO.DEMO,       color={0.65,0.40,1.00} },
-    { key="THUNDER_CLAP", label="Thunder Clap",             icon=ICO.TC,         color={0.38,0.84,1.00} },
-    { key="DEVASTATE",    label="Devastate  (filler)",      icon=ICO.DEVASTATE,  color={0.65,0.65,0.70} },
-    { key="HS",           label="+ Heroic Strike  (dump)",  icon=ICO.HS,         color={1.00,0.82,0.22} },
+    { key="SHIELD_BLOCK", label="Shield Block  (crit/crush)",spell="Shield Block",       color={0.40,0.85,1.00} },
+    { key="SHIELD_SLAM",  label="Shield Slam",              spell="Shield Slam",        color={1.00,0.55,0.10} },
+    { key="REVENGE",      label="Revenge",                  spell="Revenge",            color={0.90,0.28,0.28} },
+    { key="DEMO_SHOUT",   label="Demo Shout",               spell="Demoralizing Shout", color={0.65,0.40,1.00} },
+    { key="THUNDER_CLAP", label="Thunder Clap",             spell="Thunder Clap",       color={0.38,0.84,1.00} },
+    { key="DEVASTATE",    label="Devastate  (filler)",      spell="Devastate",          color={0.65,0.65,0.70} },
+    { key="HS",           label="+ Heroic Strike  (dump)",  spell="Heroic Strike",      color={1.00,0.82,0.22} },
 }
 
 -- Expose row definitions for the admin panel (after all ROWS tables)

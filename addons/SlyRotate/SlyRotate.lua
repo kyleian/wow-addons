@@ -36,6 +36,8 @@ local DB_DEFAULTS = {
     spotShown    = true,
     position     = { point = "CENTER", x = 280, y = 0 },
     spotPosition = { point = "CENTER", x = 0,   y = -150 },
+    iconCache = {},   -- [spellName] = texturePath, resolved at runtime
+    errorLog = {},    -- recent errors, capped at 50
     classes = {
         WARRIOR = {
             enabled   = true,
@@ -147,6 +149,19 @@ function SR.RegisterModule(classKey, t)
     SR._modules[classKey] = t
 end
 
+-- ─── Icon resolver ───────────────────────────────────────────
+-- Call during Build() (after PLAYER_LOGIN) — GetSpellInfo works then.
+-- Results are cached in SlyRotateDB.iconCache for subsequent sessions.
+local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
+function SR.GetIcon(spellName)
+    if not spellName then return FALLBACK_ICON end
+    local cache = SR.db and SR.db.iconCache
+    if cache and cache[spellName] then return cache[spellName] end
+    local _, _, icon = GetSpellInfo(spellName)
+    if icon and cache then cache[spellName] = icon end
+    return icon or FALLBACK_ICON
+end
+
 -- ─── Layout constants (shared with modules) ──────────────────
 local FRAME_W  = 220
 local HDR_H    = 18
@@ -226,7 +241,7 @@ function SR.BuildRow(parent, rowDef, idx)
     local icon = row:CreateTexture(nil, "ARTWORK")
     icon:SetSize(ROW_H - 6, ROW_H - 6)
     icon:SetPoint("LEFT", row, "LEFT", 14, 0)
-    icon:SetTexture(rowDef.icon)
+    icon:SetTexture(rowDef.icon or SR.GetIcon(rowDef.spell))
     icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     icon:SetAlpha(0.40)
     row.icon = icon
@@ -461,7 +476,7 @@ function SR.UpdateSpotlight(rows, activeKey, statusStr)
     local hex = string.format("%02x%02x%02x",
         math.floor(c[1]*255), math.floor(c[2]*255), math.floor(c[3]*255))
     spotName:SetText(Col(hex, rd.label))
-    spotIcon:SetTexture(rd.icon)
+    spotIcon:SetTexture(rd.icon or SR.GetIcon(rd.spell))
     spotSub:SetText(statusStr or "")
     if spotFrame._bdr then
         spotFrame._bdr:SetColorTexture(c[1]*0.6, c[2]*0.6, c[3]*0.6, 0.95)
@@ -709,7 +724,8 @@ evtFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
     -- Forward to active module first
     local mod = SR._active
     if mod and mod.OnEvent then
-        mod:OnEvent(event, arg1, arg2, arg3)
+        local ok, err = pcall(mod.OnEvent, mod, event, arg1, arg2, arg3)
+        if not ok then SR.LogError("OnEvent:"..event, err) end
     end
 
     -- Core logic
@@ -768,6 +784,16 @@ evtFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
     end
 end)
 
+-- ─── Error logging ─────────────────────────────────────────
+function SR.LogError(context, err)
+    SR.db = SR.db or {}
+    SR.db.errorLog = SR.db.errorLog or {}
+    local entry = (date and date("%H:%M:%S") or "??") .. "  [" .. context .. "]  " .. tostring(err)
+    table.insert(SR.db.errorLog, entry)
+    if #SR.db.errorLog > 50 then table.remove(SR.db.errorLog, 1) end
+    DEFAULT_CHAT_FRAME:AddMessage(Col("ff4444","[SlyRotate ERR] ") .. Col("ffaaaa", tostring(err)))
+end
+
 -- ─── Tick (50 ms) ────────────────────────────────────────────
 local tickFrame = CreateFrame("Frame")
 local tickAcc   = 0
@@ -780,7 +806,8 @@ tickFrame:SetScript("OnUpdate", function(self, dt)
     if not mod then return end
     local classDb = SR.db.classes[mod.classKey]
     if classDb and classDb.enabled == false then return end
-    mod:Update(GetTime(), SR.db)
+    local ok, err = pcall(mod.Update, mod, GetTime(), SR.db)
+    if not ok then SR.LogError("Update", err) end
 end)
 
 -- ─── Slash commands ──────────────────────────────────────────
@@ -833,6 +860,21 @@ local function SetupSlashCmd()
 
         elseif msg == "config" then
             BuildConfigPanel()
+
+        elseif msg == "errors" then
+            local log = SR.db and SR.db.errorLog
+            if not log or #log == 0 then
+                DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88","[SlyRotate]") .. " No errors logged.")
+            else
+                DEFAULT_CHAT_FRAME:AddMessage(Col("ff4444","[SlyRotate] Last " .. #log .. " error(s):"))
+                for i = math.max(1, #log - 9), #log do
+                    DEFAULT_CHAT_FRAME:AddMessage(Col("ffaaaa", log[i]))
+                end
+            end
+
+        elseif msg == "reseticons" then
+            if SR.db then SR.db.iconCache = {} end
+            DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88", "[SlyRotate]") .. " Icon cache cleared. /reload to re-resolve.")
 
         elseif msg == "admin" then
             if SR.BuildAdminPanel then SR.BuildAdminPanel()

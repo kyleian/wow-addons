@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- SlyRotate_Hunter — Beast Mastery / Marksmanship / Survival
 -- TBC Anniversary (Interface 20505)
 --
@@ -14,52 +14,34 @@ M.classLabel = "Hunter"
 M.headerIcon = "Interface\\Icons\\Ability_Hunter_BeastMastery"
 M.specKeys   = { "BM", "MM", "SURVIVAL" }
 
--- ─── Icons ───────────────────────────────────────────────────
-local ICO = {
-    BestialWrath   = "Interface\\Icons\\Ability_Hunter_BestialWrath",
-    KillCommand    = "Interface\\Icons\\Ability_Hunter_KillCommand",
-    ArcaneShot     = "Interface\\Icons\\Ability_Impalingbolt",
-    SteadyShot     = "Interface\\Icons\\Ability_Hunter_SteadyShot",
-    MultiShot      = "Interface\\Icons\\Ability_UpgradeMoonGlaive",
-    AimedShot      = "Interface\\Icons\\Inv_Spellbook_03",
-    TrueshotAura   = "Interface\\Icons\\Ability_Hunter_TrueshotAura",
-    RapidFire      = "Interface\\Icons\\Ability_Hunter_RapidKilling",
-    WyvernSting    = "Interface\\Icons\\Ability_Hunter_WyvernSting",
-    ExplosiveTrap  = "Interface\\Icons\\Spell_Fire_Selfdestruct",
-    ExposeWeakness = "Interface\\Icons\\Ability_Hunter_ExposeWeakness",
-    HawkAspect     = "Interface\\Icons\\Spell_Nature_AgioOfStamina",
-    ViperAspect    = "Interface\\Icons\\Ability_Hunter_AspectOfTheViper",
-    PetAttack      = "Interface\\Icons\\Ability_Physical_TauntEye",
-}
-
 -- ─── Row definitions ─────────────────────────────────────────
 local ROWS_BM = {
-    { key="BW",     label="Bestial Wrath",   icon=ICO.BestialWrath,  color={0.95, 0.5, 0.2} },
-    { key="RF",     label="Rapid Fire",      icon=ICO.RapidFire,     color={1.0, 0.8, 0.3} },
-    { key="KC",     label="Kill Command",    icon=ICO.KillCommand,   color={0.9, 0.3, 0.2} },
-    { key="ARCS",   label="Arcane Shot",     icon=ICO.ArcaneShot,    color={0.6, 0.4, 0.9} },
-    { key="STEADY", label="Steady Shot",     icon=ICO.SteadyShot,    color={0.5, 0.8, 0.5} },
-    { key="VIPER",  label="→ Aspect: Viper", icon=ICO.ViperAspect,   color={0.9, 0.9, 0.3} },
+    { key="BW",     label="Bestial Wrath",   spell="Bestial Wrath",  color={0.95, 0.5, 0.2} },
+    { key="RF",     label="Rapid Fire",      spell="Rapid Fire",     color={1.0, 0.8, 0.3} },
+    { key="KC",     label="Kill Command",    spell="Kill Command",   color={0.9, 0.3, 0.2} },
+    { key="ARCS",   label="Arcane Shot",     spell="Arcane Shot",    color={0.6, 0.4, 0.9} },
+    { key="STEADY", label="Steady Shot",     spell="Steady Shot",    color={0.5, 0.8, 0.5} },
+    { key="VIPER",  label="→ Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
 }
 
 local ROWS_MM = {
-    { key="RF",     label="Rapid Fire",      icon=ICO.RapidFire,     color={1.0, 0.8, 0.3} },
-    { key="AIMED",  label="Aimed Shot",      icon=ICO.AimedShot,     color={0.9, 0.6, 0.2} },
-    { key="MULTI",  label="Multi-Shot",      icon=ICO.MultiShot,     color={0.7, 0.5, 0.9} },
-    { key="ARCS",   label="Arcane Shot",     icon=ICO.ArcaneShot,    color={0.6, 0.4, 0.9} },
-    { key="STEADY", label="Steady Shot",     icon=ICO.SteadyShot,    color={0.5, 0.8, 0.5} },
-    { key="TSA",    label="Trueshot Aura ✓", icon=ICO.TrueshotAura,  color={0.9, 0.8, 0.4} },
-    { key="VIPER",  label="→ Aspect: Viper", icon=ICO.ViperAspect,   color={0.9, 0.9, 0.3} },
+    { key="RF",     label="Rapid Fire",      spell="Rapid Fire",     color={1.0, 0.8, 0.3} },
+    { key="AIMED",  label="Aimed Shot",      spell="Aimed Shot",     color={0.9, 0.6, 0.2} },
+    { key="MULTI",  label="Multi-Shot",      spell="Multi-Shot",     color={0.7, 0.5, 0.9} },
+    { key="ARCS",   label="Arcane Shot",     spell="Arcane Shot",    color={0.6, 0.4, 0.9} },
+    { key="STEADY", label="Steady Shot",     spell="Steady Shot",    color={0.5, 0.8, 0.5} },
+    { key="TSA",    label="Trueshot Aura ✓", spell="Trueshot Aura",  color={0.9, 0.8, 0.4} },
+    { key="VIPER",  label="→ Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
 }
 
 local ROWS_SURVIVAL = {
-    { key="RF",     label="Rapid Fire",      icon=ICO.RapidFire,     color={1.0, 0.8, 0.3} },
-    { key="EW",     label="Expose Weakness", icon=ICO.ExposeWeakness,color={0.8, 0.7, 0.3} },
-    { key="ETRAP",  label="Explosive Trap",  icon=ICO.ExplosiveTrap, color={0.9, 0.4, 0.1} },
-    { key="WSTING", label="Wyvern Sting",    icon=ICO.WyvernSting,   color={0.5, 0.8, 0.8} },
-    { key="ARCS",   label="Arcane Shot",     icon=ICO.ArcaneShot,    color={0.6, 0.4, 0.9} },
-    { key="STEADY", label="Steady Shot",     icon=ICO.SteadyShot,    color={0.5, 0.8, 0.5} },
-    { key="VIPER",  label="→ Aspect: Viper", icon=ICO.ViperAspect,   color={0.9, 0.9, 0.3} },
+    { key="RF",     label="Rapid Fire",      spell="Rapid Fire",     color={1.0, 0.8, 0.3} },
+    { key="EW",     label="Expose Weakness", spell="Expose Weakness",color={0.8, 0.7, 0.3} },
+    { key="ETRAP",  label="Explosive Trap",  spell="Explosive Trap", color={0.9, 0.4, 0.1} },
+    { key="WSTING", label="Wyvern Sting",    spell="Wyvern Sting",   color={0.5, 0.8, 0.8} },
+    { key="ARCS",   label="Arcane Shot",     spell="Arcane Shot",    color={0.6, 0.4, 0.9} },
+    { key="STEADY", label="Steady Shot",     spell="Steady Shot",    color={0.5, 0.8, 0.5} },
+    { key="VIPER",  label="→ Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
 }
 M.specRows = { BM = ROWS_BM, MM = ROWS_MM, SURVIVAL = ROWS_SURVIVAL }
 -- ─── Module state ─────────────────────────────────────────────
