@@ -1,12 +1,12 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyRotate_Rogue — Combat / Assassination / Subtlety
 -- TBC Anniversary (Interface 20505)
 --
--- Combat:      Slice & Dice → Rupture → Eviscerate (5CP)
+-- Combat:      Slice & Dice >> Rupture >> Eviscerate (5CP)
 --              Blade Flurry + Adrenaline Rush CDs
--- Assassination: Mutilate → Slice & Dice → Rupture → Evisc
+-- Assassination: Mutilate >> Slice & Dice >> Rupture >> Evisc
 --              Deadly Poison stacks indicator
--- Subtlety:    Hemorrhage → SnD → Rupture → Evisc
+-- Subtlety:    Hemorrhage >> SnD >> Rupture >> Evisc
 -- ============================================================
 
 local M = {}

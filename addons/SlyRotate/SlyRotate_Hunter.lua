@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyRotate_Hunter — Beast Mastery / Marksmanship / Survival
 -- TBC Anniversary (Interface 20505)
 --
@@ -21,7 +21,7 @@ local ROWS_BM = {
     { key="KC",     label="Kill Command",    spell="Kill Command",   color={0.9, 0.3, 0.2} },
     { key="ARCS",   label="Arcane Shot",     spell="Arcane Shot",    color={0.6, 0.4, 0.9} },
     { key="STEADY", label="Steady Shot",     spell="Steady Shot",    color={0.5, 0.8, 0.5} },
-    { key="VIPER",  label="→ Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
+    { key="VIPER",  label=">> Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
 }
 
 local ROWS_MM = {
@@ -31,7 +31,7 @@ local ROWS_MM = {
     { key="ARCS",   label="Arcane Shot",     spell="Arcane Shot",    color={0.6, 0.4, 0.9} },
     { key="STEADY", label="Steady Shot",     spell="Steady Shot",    color={0.5, 0.8, 0.5} },
     { key="TSA",    label="Trueshot Aura ✓", spell="Trueshot Aura",  color={0.9, 0.8, 0.4} },
-    { key="VIPER",  label="→ Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
+    { key="VIPER",  label=">> Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
 }
 
 local ROWS_SURVIVAL = {
@@ -41,7 +41,7 @@ local ROWS_SURVIVAL = {
     { key="WSTING", label="Wyvern Sting",    spell="Wyvern Sting",   color={0.5, 0.8, 0.8} },
     { key="ARCS",   label="Arcane Shot",     spell="Arcane Shot",    color={0.6, 0.4, 0.9} },
     { key="STEADY", label="Steady Shot",     spell="Steady Shot",    color={0.5, 0.8, 0.5} },
-    { key="VIPER",  label="→ Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
+    { key="VIPER",  label=">> Aspect: Viper", spell="Aspect of the Viper",   color={0.9, 0.9, 0.3} },
 }
 M.specRows = { BM = ROWS_BM, MM = ROWS_MM, SURVIVAL = ROWS_SURVIVAL }
 -- ─── Module state ─────────────────────────────────────────────

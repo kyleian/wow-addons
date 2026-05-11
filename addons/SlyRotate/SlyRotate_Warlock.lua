@@ -1,9 +1,9 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyRotate_Warlock — Affliction / Destruction / Demonology
 -- TBC Anniversary (Interface 20505)
 --
 -- Affliction:  Curse management + DoT uptime priority
--- Destruction: Immolate → Conflagrate → Shadow Bolt filler
+-- Destruction: Immolate >> Conflagrate >> Shadow Bolt filler
 -- Demonology:  Pet management + shadow bolt / corruption spam
 -- ============================================================
 
@@ -117,7 +117,7 @@ local function GetActiveKey(now, db)
     end
 
     if spec == "AFFLICTION" then
-        -- Priority: UA → Curse → Corruption → Immolate → Siphon Life → SBolt
+        -- Priority: UA >> Curse >> Corruption >> Immolate >> Siphon Life >> SBolt
         if dotExpiry.UA > 0 and (dotExpiry.UA - now) < 2 then
             return "UA", SR.Col("ff9955", SR.Fmt(dotExpiry.UA - now))
         end
@@ -151,7 +151,7 @@ local function GetActiveKey(now, db)
         return "SBOLT", SR.Col("559955", "filler")
 
     elseif spec == "DESTRUCTION" then
-        -- Priority: Immolate → Conflagrate (if up) → Incinerate → SBolt
+        -- Priority: Immolate >> Conflagrate (if up) >> Incinerate >> SBolt
         if dotExpiry.IMMO == 0 or (dotExpiry.IMMO - now) <= 0 then
             return "IMMO", SR.Col("ff4444", "MISSING")
         end
@@ -172,7 +172,7 @@ local function GetActiveKey(now, db)
         return "SBOLT", SR.Col("559955", "filler")
 
     else -- DEMONOLOGY
-        -- Priority: Corruption → Immolate → Curse of Elements → SBolt
+        -- Priority: Corruption >> Immolate >> Curse of Elements >> SBolt
         if dotExpiry.CURSE == 0 or (dotExpiry.CURSE - now) <= 0 then
             return "CURSE", SR.Col("ff4444", "MISSING")
         end

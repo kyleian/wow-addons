@@ -1,8 +1,8 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyRotate — Shaman Module
--- Enhancement: Stormstrike → Earth Shock GCD loop, weapon procs,
+-- Enhancement: Stormstrike >> Earth Shock GCD loop, weapon procs,
 --              totem CD tracking (WFT window handled by SlySuite_TotemTwist).
--- Elemental: Flame Shock DoT → Lightning Bolt / Chain Lightning loop,
+-- Elemental: Flame Shock DoT >> Lightning Bolt / Chain Lightning loop,
 --            Elemental Mastery / Nature's Swiftness CD tracking.
 -- ============================================================
 
@@ -207,7 +207,7 @@ local function UpdateEnhance(now)
 
     -- ── Priority ──
     -- Correct Enhancement priority:
-    --   SS → FS (missing or expiring <3s) → ES (only if FS up with ≥3s) → Fire totem → SR (mana) → wait
+    --   SS >> FS (missing or expiring <3s) >> ES (only if FS up with ≥3s) >> Fire totem >> SR (mana) >> wait
     -- SR bumps to top when mana is critical and it's off CD
     local manaCritical = manaP < 0.25 and srCD <= 0 and srL <= 0
     local best

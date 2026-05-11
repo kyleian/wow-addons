@@ -1,9 +1,9 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyRotate_Mage — Arcane / Fire / Frost
 -- TBC Anniversary (Interface 20505)
 --
 -- Arcane:  AB stack management + live mana forecast
--- Fire:    Scorch debuff → Fireball spam + Combustion CD
+-- Fire:    Scorch debuff >> Fireball spam + Combustion CD
 -- Frost:   Frostbolt spam + Icy Veins / Water Elem CDs
 --          Brain Freeze proc (instant Frostfire Bolt)
 -- ============================================================
@@ -47,7 +47,7 @@ local rows        = {}
 -- Arcane state
 local abStacks      = 0           -- Arcane Blast debuff stacks (0-4)
 local abStackExpiry = 0           -- when the AB stack buff falls off
-local AM_MANA_PCT   = 0.40        -- dump ABx4 stacks → Arcane Missiles below this
+local AM_MANA_PCT   = 0.40        -- dump ABx4 stacks >> Arcane Missiles below this
 local ABX4_MANA_PCT = 0.25        -- EVOC threshold: use Evocation below 25%
 
 -- Combat start time for mana forecast
@@ -148,7 +148,7 @@ local function GetActiveKey(now, db)
             return "POM", SR.Col("55ff55", "READY")
         end
 
-        -- Dump stacks → Arcane Missiles at 4 stacks or if low mana
+        -- Dump stacks >> Arcane Missiles at 4 stacks or if low mana
         local stacksUp = (abStackExpiry > now) and abStacks or 0
         if stacksUp >= 4 or manaPct < AM_MANA_PCT then
             local pct, toom = ForecastMana(now)
@@ -211,7 +211,7 @@ local function GetActiveKey(now, db)
         -- Cold Snap if Icy Veins is on CD (reset it)
         local csCD = SR.SpellCD("Cold Snap")
         if csCD == 0 and ivCD > 60 then
-            return "CSNAP", SR.Col("55ffff", "USE→IV")
+            return "CSNAP", SR.Col("55ffff", "USE>>IV")
         end
 
         return "FBOLT", SR.Col("559955", "spam")

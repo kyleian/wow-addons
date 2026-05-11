@@ -1,8 +1,8 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyRotate_Priest — Shadow / Holy / Discipline
 -- TBC Anniversary (Interface 20505)
 --
--- Shadow:      SW:P → VT → Mind Blast → Mind Flay filler
+-- Shadow:      SW:P >> VT >> Mind Blast >> Mind Flay filler
 --              Shadowfiend + Inner Focus CDs; mana indicator
 -- Holy:        Guardian Spirit + Circle of Healing + PoH CDs
 --              Flash of Light / Greater Heal suggestions

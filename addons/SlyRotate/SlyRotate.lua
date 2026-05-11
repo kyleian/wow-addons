@@ -223,7 +223,7 @@ function SR.DetectSpecByTalents(defs, default)
     local pts = {}
     for i = 1, GetNumTalentTabs() do
         local _, _, p = GetTalentTabInfo(i)
-        pts[i] = p or 0
+        pts[i] = tonumber(p) or 0
     end
     for _, d in ipairs(defs) do
         if (pts[d.tab] or 0) >= 31 then return d.spec end

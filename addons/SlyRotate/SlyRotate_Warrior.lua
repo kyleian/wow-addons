@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- SlyRotate — Warrior Module
 -- Fury DPS, Arms DPS, Protection Tank
 -- Port of SlySuite_WarriorHelper rotation logic into the
@@ -275,7 +275,7 @@ local function UpdateFury(db, now)
             elseif btSoon then
                 s = Col("ffdd22","SOON  ") .. Col("ff8844", Fmt(btCD))
             else
-                local seq = wwCD > 0 and ("  → WW " .. Fmt(wwCD)) or "  → WW READY"
+                local seq = wwCD > 0 and ("  >> WW " .. Fmt(wwCD)) or "  >> WW READY"
                 s = Col("ff8844", Fmt(btCD)) .. Col("555566", seq)
             end
         elseif k == "WW" then
@@ -420,12 +420,12 @@ local function UpdateArms(db, now)
             if slamWindow then
                 local na  = msCD <= 0 and "MS" or (wwCD <= 0 and "WW" or (msCD <= wwCD and "MS" or "WW"))
                 local ncd = msCD <= 0 and 0   or (wwCD <= 0 and 0   or math.min(msCD, wwCD))
-                local seq = ncd <= 0 and (" → " .. na .. " READY") or (" → " .. na .. " " .. Fmt(ncd))
+                local seq = ncd <= 0 and (" >> " .. na .. " READY") or (" >> " .. na .. " " .. Fmt(ncd))
                 s = Col("ffee00","CAST NOW!") .. Col("888888", seq)
             elseif timeSinceSwing > 0.5 and swingDuration > 0 then
                 local na  = msCD <= wwCD and "MS" or "WW"
                 s = Col("555566","swing ") .. Col("ff8844", string.format("%.1f",nextSwingIn) .. "s") ..
-                    Col("555566"," → " .. na .. (math.min(msCD,wwCD) <= 0 and " READY" or " " .. Fmt(math.min(msCD,wwCD))))
+                    Col("555566"," >> " .. na .. (math.min(msCD,wwCD) <= 0 and " READY" or " " .. Fmt(math.min(msCD,wwCD))))
             else
                 s = Col("555566","swing in  ") .. Col("888888", string.format("%.1f",nextSwingIn) .. "s")
             end
@@ -435,7 +435,7 @@ local function UpdateArms(db, now)
             elseif msSoon then
                 s = Col("ffdd22","SOON  ") .. Col("ff8844", Fmt(msCD))
             else
-                local seq = wwCD > 0 and ("  → WW " .. Fmt(wwCD)) or "  → WW READY"
+                local seq = wwCD > 0 and ("  >> WW " .. Fmt(wwCD)) or "  >> WW READY"
                 s = Col("ff8844", Fmt(msCD)) .. Col("555566", seq)
             end
         elseif k == "WW" then
@@ -444,7 +444,7 @@ local function UpdateArms(db, now)
             elseif wwSoon then
                 s = Col("ffdd22","SOON  ") .. Col("ff8844", Fmt(wwCD))
             else
-                local seq = msCD > 0 and ("  → MS " .. Fmt(msCD)) or "  → MS READY"
+                local seq = msCD > 0 and ("  >> MS " .. Fmt(msCD)) or "  >> MS READY"
                 s = Col("ff8844", Fmt(wwCD)) .. Col("555566", seq)
             end
         elseif k == "EXECUTE" then
@@ -495,8 +495,8 @@ local function UpdateArms(db, now)
     local nxt   = msCD <= wwCD and "MS" or "WW"
     local nxtCD = msCD <= wwCD and msCD or wwCD
     local after = msCD <= wwCD
-        and (wwCD > 0 and (" → WW " .. Fmt(wwCD)) or " → WW READY")
-        or  (msCD > 0 and (" → MS " .. Fmt(msCD)) or " → MS READY")
+        and (wwCD > 0 and (" >> WW " .. Fmt(wwCD)) or " >> WW READY")
+        or  (msCD > 0 and (" >> MS " .. Fmt(msCD)) or " >> MS READY")
     local spotSt
     if slamWindow then
         spotSt = "CAST NOW! +" .. string.format("%.2f", timeSinceSwing) .. "s" .. after
