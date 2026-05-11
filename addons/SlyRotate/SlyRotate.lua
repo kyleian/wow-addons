@@ -158,8 +158,37 @@ function SR.GetIcon(spellName)
     local cache = SR.db and SR.db.iconCache
     if cache and cache[spellName] then return cache[spellName] end
     local _, _, icon = GetSpellInfo(spellName)
-    if icon and cache then cache[spellName] = icon end
-    return icon or FALLBACK_ICON
+    if icon and type(icon) == "string" and icon ~= "" then
+        if cache then cache[spellName] = icon end
+        return icon
+    end
+    return FALLBACK_ICON
+end
+
+-- Walk every built row frame and re-resolve icons.
+-- Call after PLAYER_LOGIN when GetSpellInfo is fully reliable.
+function SR.RefreshIcons()
+    local function refreshRows(rowFrames)
+        if not rowFrames then return end
+        for _, row in ipairs(rowFrames) do
+            if row.icon and row.rowDef then
+                local rd = row.rowDef
+                if not rd.icon then  -- only for spell= rows, not hardcoded icon= rows
+                    local tex = SR.GetIcon(rd.spell)
+                    if tex and tex ~= FALLBACK_ICON then
+                        row.icon:SetTexture(tex)
+                    end
+                end
+            end
+        end
+    end
+    for _, mod in pairs(SR._modules) do
+        if mod.specRowFrames then
+            for _, frames in pairs(mod.specRowFrames) do
+                refreshRows(frames)
+            end
+        end
+    end
 end
 
 -- ─── Layout constants (shared with modules) ──────────────────
@@ -772,6 +801,10 @@ evtFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        -- On first login, refresh icons now that GetSpellInfo is fully reliable.
+        C_Timer.After(0.5, function()
+            SR.RefreshIcons()
+        end)
         -- Restore frame visibility after zone transitions (BGs, instances).
         -- Run on the next frame to let the zone fully settle first.
         if mainFrame then
@@ -897,6 +930,51 @@ local function SetupSlashCmd()
                     DEFAULT_CHAT_FRAME:AddMessage(Col("ffaaaa", log[i]))
                 end
             end
+
+        elseif msg == "dumpicons" then
+            -- Resolve all spell icons now and dump to SavedVariables for static mapping
+            local dump = {}
+            local spells = {
+                "Adrenaline Rush","Aimed Shot","Arcane Blast","Arcane Missiles","Arcane Power",
+                "Arcane Shot","Aspect of the Viper","Avenger's Shield","Bash","Bestial Wrath",
+                "Blade Flurry","Bloodthirst","Chain Lightning","Circle of Healing","Cold Blood",
+                "Cold Snap","Combustion","Conflagrate","Consecration","Corruption",
+                "Crusader Strike","Curse of Agony","Curse of the Elements","Death Wish",
+                "Demoralizing Roar","Demoralizing Shout","Devastate","Divine Favor",
+                "Earth Shock","Elemental Mastery","Eviscerate","Evocation","Execute",
+                "Exorcism","Explosive Trap","Expose Weakness","Ferocious Bite","Fire Blast",
+                "Fireball","Flame Shock","Flash Heal","Flash of Light","Frenzied Regeneration",
+                "Frostbolt","Greater Heal","Hammer of Wrath","Hemorrhage","Heroic Strike",
+                "Holy Light","Holy Shield","Holy Shock","Icy Veins","Immolate","Incinerate",
+                "Inner Focus","Judgement","Kill Command","Lacerate","Lay on Hands","Life Tap",
+                "Lightning Bolt","Mangle (Bear)","Mangle (Cat)","Maul","Mind Blast","Mind Flay",
+                "Mortal Strike","Multi-Shot","Mutilate","Nature's Swiftness","Overpower",
+                "Pain Suppression","Power Infusion","Power Word: Shield","Prayer of Healing",
+                "Presence of Mind","Rapid Fire","Revenge","Rip","Rupture","Scorch",
+                "Seal of Command","Seal of Righteousness","Searing Totem","Shadow Bolt",
+                "Shadow Word: Death","Shadow Word: Pain","Shadowfiend","Shamanistic Rage",
+                "Shield Block","Shield Slam","Shred","Sinister Strike","Siphon Life","Slam",
+                "Slice and Dice","Soul Fire","Steady Shot","Stormstrike","Summon Water Elemental",
+                "Sunder Armor","Thunder Clap","Tiger's Fury","Trueshot Aura","Unstable Affliction",
+                "Vampiric Touch","Whirlwind","Windfury Totem","Wyvern Sting",
+            }
+            local found, missing = 0, 0
+            for _, name in ipairs(spells) do
+                local _, _, icon, _, _, _, spellID = GetSpellInfo(name)
+                if icon and type(icon) == "string" then
+                    dump[name] = { icon = icon, id = spellID or 0 }
+                    found = found + 1
+                else
+                    dump[name] = { icon = "MISSING", id = 0 }
+                    missing = missing + 1
+                end
+            end
+            SR.db.iconDump = dump
+            DEFAULT_CHAT_FRAME:AddMessage(
+                Col("88ff88","[SlyRotate]") ..
+                " Icon dump: " .. Col("44ff44", found .. " found") ..
+                ", " .. Col("ff4444", missing .. " missing") ..
+                ". Saved to SlyRotateDB.iconDump — /reload then check SavedVariables.")
 
         elseif msg == "reseticons" then
             if SR.db then SR.db.iconCache = {} end
