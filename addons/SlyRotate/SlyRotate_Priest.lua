@@ -103,8 +103,8 @@ end
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)
     if spec == "SHADOW" then
-        local mana    = UnitMana("player")
-        local maxMana = UnitManaMax("player")
+        local mana    = UnitPower("player", Enum.PowerType.Mana)
+        local maxMana = UnitPowerMax("player", Enum.PowerType.Mana)
         local manaPct = maxMana > 0 and (mana / maxMana) or 1
 
         -- Shadowfiend to restore mana if low
