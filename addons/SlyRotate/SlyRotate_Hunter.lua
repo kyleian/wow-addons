@@ -98,8 +98,8 @@ end
 
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)
-    local mana    = UnitMana("player")
-    local maxMana = UnitManaMax("player")
+    local mana    = UnitPower("player", Enum.PowerType.Mana)
+    local maxMana = UnitPowerMax("player", Enum.PowerType.Mana)
     local manaPct = maxMana > 0 and (mana / maxMana) or 1
 
     -- Aspect of the Viper mana management
@@ -186,8 +186,8 @@ function M:Update(now, db)
     if not rows[1] then return end
     local activeKey, statusStr = GetActiveKey(now, db)
 
-    local mana = UnitMana("player")
-    local maxMana = UnitManaMax("player")
+    local mana = UnitPower("player", Enum.PowerType.Mana)
+    local maxMana = UnitPowerMax("player", Enum.PowerType.Mana)
     local manaPct = maxMana > 0 and (mana / maxMana) or 1
 
     for _, row in ipairs(rows) do

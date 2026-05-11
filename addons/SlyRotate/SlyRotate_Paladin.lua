@@ -136,7 +136,7 @@ local function GetActiveKey(now, db)
         end
 
         -- Consecration (mana permitting)
-        local mana = UnitMana("player") / UnitManaMax("player")
+        local mana = UnitPower("player", Enum.PowerType.Mana) / UnitPowerMax("player", Enum.PowerType.Mana)
         if mana > 0.30 then
             local consCD = SR.SpellCD("Consecration")
             if consCD == 0 then

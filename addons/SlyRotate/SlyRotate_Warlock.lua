@@ -114,7 +114,7 @@ end
 
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)
-    local mana    = (UnitMana("player") / UnitManaMax("player"))
+    local mana    = (UnitPower("player", Enum.PowerType.Mana) / UnitPowerMax("player", Enum.PowerType.Mana))
     local inRange = true  -- assume in range; can extend with range check
 
     -- Life Tap threshold — highest priority if OOM

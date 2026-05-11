@@ -127,8 +127,8 @@ local function ForecastMana(now)
     if not combatStart or not manaAtStart then return nil, nil end
     local elapsed = now - combatStart
     if elapsed < 5 then return nil, nil end
-    local curMana  = UnitMana("player")
-    local maxMana  = UnitManaMax("player")
+    local curMana  = UnitPower("player", Enum.PowerType.Mana)
+    local maxMana  = UnitPowerMax("player", Enum.PowerType.Mana)
     local spent    = manaAtStart - curMana
     if spent <= 0 then return nil, nil end
     local burnPerSec  = spent / elapsed
@@ -138,8 +138,8 @@ end
 
 -- ─── Priority update ──────────────────────────────────────────
 local function GetActiveKey(now, db)
-    local mana    = UnitMana("player")
-    local maxMana = UnitManaMax("player")
+    local mana    = UnitPower("player", Enum.PowerType.Mana)
+    local maxMana = UnitPowerMax("player", Enum.PowerType.Mana)
     local manaPct = maxMana > 0 and (mana / maxMana) or 1
 
     if spec == "ARCANE" then
@@ -254,7 +254,7 @@ function M:Update(now, db)
                 st = cd > 0 and SR.Col("888888", SR.Fmt(cd)) or SR.Col("55ff55", "READY")
             elseif row.key == "MANA" then
                 if toom then
-                    local pct = UnitMana("player") / UnitManaMax("player")
+                    local pct = UnitPower("player", Enum.PowerType.Mana) / UnitPowerMax("player", Enum.PowerType.Mana)
                     st = SR.Col("888888", string.format("%.0f%% / %s", pct*100, SR.Fmt(toom)))
                 end
             end
@@ -294,7 +294,7 @@ function M:OnEvent(event, arg1)
     elseif event == "PLAYER_REGEN_DISABLED" then
         -- Entered combat
         combatStart = GetTime()
-        manaAtStart = UnitMana("player")
+        manaAtStart = UnitPower("player", Enum.PowerType.Mana)
     elseif event == "PLAYER_REGEN_ENABLED" then
         combatStart = nil; manaAtStart = nil
     elseif event == "PLAYER_TARGET_CHANGED" then
