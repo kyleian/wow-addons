@@ -52,10 +52,13 @@ local sealExpiry  = 0   -- when our Seal buff expires
 local judgeCost   = 0   -- last Judgement cast time (8s CD + talent)
 
 -- ─── spec detection ───────────────────────────────────────────
+-- TBC tab order: 1=Holy, 2=Protection, 3=Retribution
 local function DetectSpec()
-    if GetSpellInfo("Crusader Strike")   then return "RETRIBUTION" end
-    if GetSpellInfo("Avenger's Shield")  then return "PROTECTION"  end
-    return "HOLY"
+    return SR.DetectSpecByTalents({
+        { spec="HOLY",        tab=1 },
+        { spec="PROTECTION",  tab=2 },
+        { spec="RETRIBUTION", tab=3 },
+    }, "RETRIBUTION")
 end
 
 -- ─── Required API ─────────────────────────────────────────────

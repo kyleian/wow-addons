@@ -60,10 +60,13 @@ local REFRESH_AT  = 2    -- reapply if < 2s remaining
 local weakenedSoulExpiry = 0   -- Weakened Soul debuff expires on target
 
 -- ─── Spec detection ───────────────────────────────────────────
+-- TBC tab order: 1=Discipline, 2=Holy, 3=Shadow
 local function DetectSpec()
-    if GetSpellInfo("Vampiric Touch")   then return "SHADOW"     end
-    if GetSpellInfo("Pain Suppression") then return "DISCIPLINE"  end
-    return "HOLY"
+    return SR.DetectSpecByTalents({
+        { spec="DISCIPLINE", tab=1 },
+        { spec="HOLY",       tab=2 },
+        { spec="SHADOW",     tab=3 },
+    }, "HOLY")
 end
 
 -- ─── Required API ─────────────────────────────────────────────

@@ -161,18 +161,12 @@ local function DetectSpec(db)
     end
     -- GetSpellInfo checks the game DB, not the player's spellbook — unreliable.
     -- Use talent point counts instead: highest tree wins.
-    local best, bestPts = "FURY", -1
-    local specMap = { Arms = "ARMS", Fury = "FURY", Protection = "PROT" }
-    if GetNumTalentTabs then
-        for t = 1, GetNumTalentTabs() do
-            local tabName, _, pts = GetTalentTabInfo(t)
-            if tabName and pts and specMap[tabName] and pts > bestPts then
-                best    = specMap[tabName]
-                bestPts = pts
-            end
-        end
-    end
-    return best
+    -- TBC tab order: 1=Arms, 2=Fury, 3=Protection
+    return SR.DetectSpecByTalents({
+        { spec="ARMS", tab=1 },
+        { spec="FURY", tab=2 },
+        { spec="PROT", tab=3 },
+    }, "FURY")
 end
 
 -- ─── Debuff / buff scanners ──────────────────────────────────

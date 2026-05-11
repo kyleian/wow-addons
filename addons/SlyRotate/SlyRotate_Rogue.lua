@@ -54,10 +54,13 @@ local SND_REFRESH_AT = 3   -- reapply SnD when < 3s remaining
 local RUP_REFRESH_AT = 3   -- reapply Rupture when < 3s remaining
 
 -- ─── Spec detection ───────────────────────────────────────────
+-- TBC tab order: 1=Assassination, 2=Combat, 3=Subtlety
 local function DetectSpec()
-    if GetSpellInfo("Mutilate")   then return "ASSASSINATION" end
-    if GetSpellInfo("Hemorrhage") then return "SUBTLETY" end
-    return "COMBAT"
+    return SR.DetectSpecByTalents({
+        { spec="ASSASSINATION", tab=1 },
+        { spec="COMBAT",        tab=2 },
+        { spec="SUBTLETY",      tab=3 },
+    }, "COMBAT")
 end
 
 -- ─── Required API ─────────────────────────────────────────────

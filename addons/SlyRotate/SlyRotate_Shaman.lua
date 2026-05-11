@@ -123,9 +123,11 @@ local function DetectSpec(db)
     if db and db.classes.SHAMAN and db.classes.SHAMAN.specOverride then
         return db.classes.SHAMAN.specOverride
     end
-    if GetSpellInfo("Stormstrike")       then return "ENHANCE"   end
-    if GetSpellInfo("Elemental Mastery") then return "ELEMENTAL" end
-    return "ENHANCE"  -- default: most common TBC Shaman spec
+    -- TBC tab order: 1=Elemental, 2=Enhancement (Restoration not tracked)
+    return SR.DetectSpecByTalents({
+        { spec="ELEMENTAL", tab=1 },
+        { spec="ENHANCE",   tab=2 },
+    }, "ENHANCE")
 end
 
 -- ─── Helpers ─────────────────────────────────────────────────

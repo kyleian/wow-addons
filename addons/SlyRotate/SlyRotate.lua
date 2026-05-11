@@ -212,6 +212,32 @@ SR.Col     = Col
 SR.Fmt     = Fmt
 SR.SpellCD = SpellCD
 
+-- ─── Shared spec detection ───────────────────────────────────
+-- defs: array of { spec=string, tab=number } in any order.
+-- A spec wins outright if it has >= 31 pts in its tab (standard deep-spec
+-- threshold in TBC — enough to reach Tier 6).  If none qualify, the tab
+-- with the most points wins.  If all tabs are 0 (talents not yet loaded),
+-- returns default or defs[1].spec.
+function SR.DetectSpecByTalents(defs, default)
+    if not GetNumTalentTabs then return default or defs[1].spec end
+    local pts = {}
+    for i = 1, GetNumTalentTabs() do
+        local _, _, p = GetTalentTabInfo(i)
+        pts[i] = p or 0
+    end
+    for _, d in ipairs(defs) do
+        if (pts[d.tab] or 0) >= 31 then return d.spec end
+    end
+    local best, bestPts = (default or defs[1].spec), -1
+    for _, d in ipairs(defs) do
+        if (pts[d.tab] or 0) > bestPts then
+            bestPts = pts[d.tab] or 0
+            best = d.spec
+        end
+    end
+    return best
+end
+
 -- ─── Shared row builder ──────────────────────────────────────
 -- rowDef must have: key, label, icon, color={r,g,b}
 -- rowDef._idx must be set by the caller before invoking.

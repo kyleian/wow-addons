@@ -56,10 +56,13 @@ local inViperAspect = false
 local tsaActive     = false      -- Trueshot Aura buffed on player
 
 -- ─── Spec detection ───────────────────────────────────────────
+-- TBC tab order: 1=Beast Mastery, 2=Marksmanship, 3=Survival
 local function DetectSpec()
-    if GetSpellInfo("Bestial Wrath") then return "BM" end
-    if GetSpellInfo("Aimed Shot")    then return "MM" end
-    return "SURVIVAL"
+    return SR.DetectSpecByTalents({
+        { spec="BM",       tab=1 },
+        { spec="MM",       tab=2 },
+        { spec="SURVIVAL", tab=3 },
+    }, "MM")
 end
 
 -- ─── Required API ─────────────────────────────────────────────

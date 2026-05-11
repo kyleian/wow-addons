@@ -63,19 +63,13 @@ local conflagrateReady = 0
 local lifeTapManaThresh = 0.35  -- tap when below 35% mana
 
 -- ─── Talent detection ─────────────────────────────────────────
+-- TBC tab order: 1=Affliction, 2=Demonology, 3=Destruction
 local function DetectSpec()
-    -- Heuristic: check for Unstable Affliction (Tier-5 Affliction talent)
-    -- and Conflagrate (Tier-4 Destruction talent)
-    local hasUA     = GetSpellInfo("Unstable Affliction") ~= nil
-    local hasConflag = GetSpellInfo("Conflagrate")        ~= nil
-
-    if hasUA then
-        return "AFFLICTION"
-    elseif hasConflag then
-        return "DESTRUCTION"
-    else
-        return "DEMONOLOGY"
-    end
+    return SR.DetectSpecByTalents({
+        { spec="AFFLICTION",  tab=1 },
+        { spec="DEMONOLOGY",  tab=2 },
+        { spec="DESTRUCTION", tab=3 },
+    }, "AFFLICTION")
 end
 
 -- ─── Module required API ──────────────────────────────────────

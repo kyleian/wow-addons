@@ -62,28 +62,13 @@ local scorchExpiry  = 0
 local brainFreeze   = false    -- Brain Freeze proc active
 
 -- ─── Talent detection ─────────────────────────────────────────
+-- TBC tab order: 1=Arcane, 2=Fire, 3=Frost
 local function DetectSpec()
-    -- Deep Arcane: Arcane Power is a Tier-5 talent
-    -- Deep Fire: Combustion is available at level 20 baseline but
-    --   Improved Scorch is Tier-3 Fire, Pyroblast is Tier-1
-    -- Deep Frost: Ice Lance is baseline, Summon Water Elemental Tier-5
-    local hasSummonWE = GetSpellInfo("Summon Water Elemental") ~= nil
-    local hasIcyVeins = GetSpellInfo("Icy Veins") ~= nil
-    local hasFlamestrike = GetSpellInfo("Flamestrike") ~= nil  -- everyone, not useful
-    -- Heuristic: check Arcane Power vs Icy Veins vs everything else
-    local hasArcanePow = GetSpellInfo("Arcane Power") ~= nil
-
-    if hasArcanePow then
-        -- Arcane has Arcane Power as signature talent (Tier 5, 21 pts)
-        -- Fire also picks up some arcane, so use deeper check
-        -- If they also have Icy Veins it's actually Frost
-        if hasIcyVeins then return "FROST" end
-        return "ARCANE"
-    elseif hasIcyVeins then
-        return "FROST"
-    else
-        return "FIRE"
-    end
+    return SR.DetectSpecByTalents({
+        { spec="ARCANE", tab=1 },
+        { spec="FIRE",   tab=2 },
+        { spec="FROST",  tab=3 },
+    }, "FIRE")
 end
 
 -- ─── Required API ─────────────────────────────────────────────
