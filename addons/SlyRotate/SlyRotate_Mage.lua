@@ -283,7 +283,8 @@ end
 
 -- ─── Events ───────────────────────────────────────────────────
 function M:OnEvent(event, arg1)
-    if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+    if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA"
+    or event == "CHARACTER_POINTS_CHANGED" then
         local newSpec = DetectSpec()
         if newSpec ~= spec then
             spec = newSpec
@@ -359,6 +360,7 @@ function M:RegisterEvents()
     SR.RegisterEvent("PLAYER_TARGET_CHANGED")
     SR.RegisterEvent("PLAYER_REGEN_DISABLED")
     SR.RegisterEvent("PLAYER_REGEN_ENABLED")
+    SR.RegisterEvent("CHARACTER_POINTS_CHANGED")
 end
 
 function M:ScanAll()
