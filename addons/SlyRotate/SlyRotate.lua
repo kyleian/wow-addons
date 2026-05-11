@@ -17,7 +17,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlyRotate"
-local VERSION    = "1.3.3"
+local VERSION    = "1.3.4"
 
 -- ─── Public namespace ───────────────────────────────────────
 -- Modules are loaded after this file (per .toc order) and call
@@ -153,12 +153,77 @@ end
 -- Call during Build() (after PLAYER_LOGIN) — GetSpellInfo works then.
 -- Results are cached in SlyRotateDB.iconCache for subsequent sessions.
 local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
+
+-- GetSpellInfo(name) only works for spells the player knows.
+-- GetSpellInfo(id)   works for ANY spell. Map names → rank-1 IDs for cross-class resolution.
+local SPELL_ID_MAP = {
+    ["Adrenaline Rush"]        = 13750, ["Aimed Shot"]             = 20904,
+    ["Arcane Blast"]           = 30451, ["Arcane Missiles"]        = 5143,
+    ["Arcane Power"]           = 12042, ["Arcane Shot"]            = 3044,
+    ["Aspect of the Viper"]    = 34074, ["Avenger's Shield"]       = 31935,
+    ["Bash"]                   = 5209,  ["Bestial Wrath"]          = 19574,
+    ["Blade Flurry"]           = 13877, ["Bloodthirst"]            = 23881,
+    ["Chain Lightning"]        = 421,   ["Circle of Healing"]      = 34861,
+    ["Cold Blood"]             = 14177, ["Cold Snap"]              = 11958,
+    ["Combustion"]             = 11129, ["Conflagrate"]            = 17962,
+    ["Consecration"]           = 26573, ["Corruption"]             = 172,
+    ["Crusader Strike"]        = 35395, ["Curse of Agony"]         = 980,
+    ["Curse of the Elements"]  = 1490,  ["Death Wish"]             = 12292,
+    ["Demoralizing Roar"]      = 99,    ["Demoralizing Shout"]     = 1160,
+    ["Devastate"]              = 20243, ["Divine Favor"]           = 20216,
+    ["Earth Shock"]            = 8042,  ["Elemental Mastery"]      = 16166,
+    ["Eviscerate"]             = 2098,  ["Evocation"]              = 12051,
+    ["Execute"]                = 5308,  ["Exorcism"]               = 879,
+    ["Explosive Trap"]         = 13813, ["Expose Weakness"]        = 34500,
+    ["Ferocious Bite"]         = 22568, ["Fire Blast"]             = 2136,
+    ["Fireball"]               = 133,   ["Flame Shock"]            = 8050,
+    ["Flash Heal"]             = 2061,  ["Flash of Light"]         = 19750,
+    ["Frenzied Regeneration"]  = 22842, ["Frostbolt"]              = 116,
+    ["Greater Heal"]           = 2060,  ["Hammer of Wrath"]        = 24275,
+    ["Hemorrhage"]             = 16511, ["Heroic Strike"]          = 78,
+    ["Holy Light"]             = 635,   ["Holy Shield"]            = 20925,
+    ["Holy Shock"]             = 20473, ["Icy Veins"]              = 12472,
+    ["Immolate"]               = 348,   ["Incinerate"]             = 29722,
+    ["Inner Focus"]            = 14751, ["Judgement"]              = 20271,
+    ["Kill Command"]           = 34026, ["Lacerate"]               = 33745,
+    ["Lay on Hands"]           = 633,   ["Life Tap"]               = 1454,
+    ["Lightning Bolt"]         = 403,   ["Mangle (Bear)"]          = 33878,
+    ["Mangle (Cat)"]           = 33876, ["Maul"]                   = 6807,
+    ["Mind Blast"]             = 8092,  ["Mind Flay"]              = 15407,
+    ["Mortal Strike"]          = 12294, ["Multi-Shot"]             = 2643,
+    ["Mutilate"]               = 1329,  ["Nature's Swiftness"]     = 16188,
+    ["Overpower"]              = 7384,  ["Pain Suppression"]       = 33206,
+    ["Power Infusion"]         = 10060, ["Power Word: Shield"]     = 17,
+    ["Prayer of Healing"]      = 596,   ["Presence of Mind"]       = 12043,
+    ["Rapid Fire"]             = 3045,  ["Revenge"]                = 6572,
+    ["Rip"]                    = 1079,  ["Rupture"]                = 1943,
+    ["Scorch"]                 = 2948,  ["Seal of Command"]        = 20375,
+    ["Seal of Righteousness"]  = 20154, ["Searing Totem"]          = 3599,
+    ["Shadow Bolt"]            = 686,   ["Shadow Word: Death"]     = 32379,
+    ["Shadow Word: Pain"]      = 589,   ["Shadowfiend"]            = 34433,
+    ["Shamanistic Rage"]       = 30823, ["Shield Block"]           = 2565,
+    ["Shield Slam"]            = 23922, ["Shred"]                  = 5221,
+    ["Sinister Strike"]        = 1752,  ["Siphon Life"]            = 18265,
+    ["Slam"]                   = 1464,  ["Slice and Dice"]         = 5171,
+    ["Soul Fire"]              = 6353,  ["Steady Shot"]            = 34120,
+    ["Stormstrike"]            = 17364, ["Summon Water Elemental"] = 31687,
+    ["Sunder Armor"]           = 7386,  ["Thunder Clap"]           = 6343,
+    ["Tiger's Fury"]           = 5217,  ["Trueshot Aura"]          = 19506,
+    ["Unstable Affliction"]    = 30108, ["Vampiric Touch"]         = 34914,
+    ["Whirlwind"]              = 1680,  ["Windfury Totem"]         = 8512,
+    ["Wyvern Sting"]           = 19386,
+}
+SR.SPELL_ID_MAP = SPELL_ID_MAP  -- expose for modules if needed
+
 function SR.GetIcon(spellName)
     if not spellName then return FALLBACK_ICON end
     local cache = SR.db and SR.db.iconCache
     if cache and cache[spellName] then return cache[spellName] end
-    local _, _, icon = GetSpellInfo(spellName)
-    if icon and type(icon) == "string" and icon ~= "" then
+    -- Prefer ID lookup (works for any class); fall back to name lookup
+    local key = SPELL_ID_MAP[spellName] or spellName
+    local _, _, icon = GetSpellInfo(key)
+    -- icon is either a string path or a numeric fileDataID — store raw, don't tostring()
+    if icon and icon ~= "" and icon ~= 0 then
         if cache then cache[spellName] = icon end
         return icon
     end
@@ -960,8 +1025,9 @@ local function SetupSlashCmd()
             }
             local found, missing = 0, 0
             for _, name in ipairs(spells) do
-                local _, _, icon, _, _, _, spellID = GetSpellInfo(name)
-                if icon and type(icon) == "string" then
+                local key = SPELL_ID_MAP[name] or name
+                local _, _, icon, _, _, _, spellID = GetSpellInfo(key)
+                if icon and icon ~= "" and icon ~= 0 then
                     dump[name] = { icon = icon, id = spellID or 0 }
                     found = found + 1
                 else
@@ -979,6 +1045,20 @@ local function SetupSlashCmd()
         elseif msg == "reseticons" then
             if SR.db then SR.db.iconCache = {} end
             DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88", "[SlyRotate]") .. " Icon cache cleared. /reload to re-resolve.")
+
+        elseif msg == "testspell" then
+            -- Debug: print raw GetSpellInfo return values by name vs by ID
+            local testSpells = { "Heroic Strike", "Fireball", "Corruption", "Steady Shot" }
+            DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88","[SlyRotate]") .. " GetSpellInfo debug (name | id):")
+            for _, sn in ipairs(testSpells) do
+                local a,b,c = GetSpellInfo(sn)
+                local spellID = SPELL_ID_MAP[sn]
+                local da,db,dc = spellID and GetSpellInfo(spellID)
+                DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                    "  %s: byName=icon:%s(%s) | byID(%s)=icon:%s(%s)",
+                    sn, tostring(c), type(c), tostring(spellID), tostring(dc), type(dc)
+                ))
+            end
 
         elseif msg == "admin" then
             if SR.BuildAdminPanel then SR.BuildAdminPanel()
