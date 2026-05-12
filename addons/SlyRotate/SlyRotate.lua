@@ -17,7 +17,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlyRotate"
-local VERSION    = "1.3.4"
+local VERSION    = "1.3.5"
 
 -- ─── Public namespace ───────────────────────────────────────
 -- Modules are loaded after this file (per .toc order) and call
@@ -297,7 +297,8 @@ local function Fmt(secs)
     return string.format("%.1fs", secs)
 end
 local function SpellCD(name)
-    local start, dur = GetSpellCooldown(name)
+    local key = SPELL_ID_MAP[name] or name
+    local start, dur = GetSpellCooldown(key)
     if dur and dur > 1.5 then return math.max(0, start + dur - GetTime()) end
     return 0
 end
@@ -322,7 +323,7 @@ function SR.DetectSpecByTalents(defs, default)
     for _, d in ipairs(defs) do
         if (pts[d.tab] or 0) >= 31 then return d.spec end
     end
-    local best, bestPts = (default or defs[1].spec), -1
+    local best, bestPts = (default or defs[1].spec), 0
     for _, d in ipairs(defs) do
         if (pts[d.tab] or 0) > bestPts then
             bestPts = pts[d.tab] or 0

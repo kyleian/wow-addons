@@ -28,11 +28,10 @@ local ROWS_SHADOW = {
 }
 
 local ROWS_HOLY = {
-    { key="GS",     label="Guardian Spirit",  spell="Prayer of Healing", color={1.0, 1.0, 0.6} },
     { key="COH",    label="Circle of Healing",spell="Circle of Healing",   color={0.5, 1.0, 0.5} },
-    { key="POH",    label="Prayer of Healing",spell="Prayer of Healing",            color={0.7, 0.9, 0.7} },
-    { key="FH",     label="Flash Heal",       spell="Flash Heal",      color={0.9, 0.9, 0.9} },
-    { key="GH",     label="Greater Heal",     spell="Greater Heal",    color={0.8, 0.8, 0.5} },
+    { key="POH",    label="Prayer of Healing",spell="Prayer of Healing",   color={0.7, 0.9, 0.7} },
+    { key="FH",     label="Flash Heal",       spell="Flash Heal",          color={0.9, 0.9, 0.9} },
+    { key="GH",     label="Greater Heal",     spell="Greater Heal",        color={0.8, 0.8, 0.5} },
 }
 
 local ROWS_DISCIPLINE = {
@@ -71,8 +70,8 @@ end
 
 -- ─── Required API ─────────────────────────────────────────────
 function M:GetBodyHeight(ROW_H)
-    local n = (spec == "SHADOW")     and #ROWS_SHADOW
-           or (spec == "HOLY")       and #ROWS_HOLY
+    local n = (spec == "SHADOW")      and #ROWS_SHADOW
+           or (spec == "HOLY")        and #ROWS_HOLY
            or #ROWS_DISCIPLINE
     return n * (ROW_H + 1) + 4
 end
@@ -110,35 +109,21 @@ local function GetActiveKey(now, db)
         local maxMana = UnitPowerMax("player", Enum.PowerType.Mana)
         local manaPct = maxMana > 0 and (mana / maxMana) or 1
 
-        -- Shadowfiend to restore mana if low
-        if manaPct < 0.35 then
-            local sfCD = SR.SpellCD("Shadowfiend")
-            if sfCD == 0 then
-                return "SHADOW", SR.Col("ff4444", "OOM!")
-            end
-        end
-
-        -- Inner Focus (free next spell)
-        local ifCD = SR.SpellCD("Inner Focus")
-        if ifCD == 0 then
-            return "IF", SR.Col("55ff55", "READY")
-        end
-
-        -- Vampiric Touch uptime (must reapply once it falls off or near end)
+        -- 1. Maintain Vampiric Touch (highest priority — also provides mana regen)
         if vtExpiry == 0 or (vtExpiry - now) < REFRESH_AT then
             return "VT", vtExpiry > 0
                 and SR.Col("ff9944", SR.Fmt(vtExpiry - now))
                 or  SR.Col("ff4444", "MISSING")
         end
 
-        -- SW: Pain uptime
+        -- 2. Maintain SW: Pain
         if swpExpiry == 0 or (swpExpiry - now) < REFRESH_AT then
             return "SWP", swpExpiry > 0
                 and SR.Col("ff9944", SR.Fmt(swpExpiry - now))
                 or  SR.Col("ff4444", "MISSING")
         end
 
-        -- SW: Death (execute)
+        -- 3. SW: Death execute (<25%)
         if UnitExists("target") then
             local tHP = UnitHealth("target") / math.max(1, UnitHealthMax("target"))
             if tHP < 0.25 then
@@ -149,22 +134,29 @@ local function GetActiveKey(now, db)
             end
         end
 
-        -- Mind Blast on CD
+        -- 4. Mind Blast — if Inner Focus is also ready, suggest IF first
         local mbCD = SR.SpellCD("Mind Blast")
         if mbCD == 0 then
+            local ifCD = SR.SpellCD("Inner Focus")
+            if ifCD == 0 then
+                return "IF", SR.Col("55ff55", "then MB!")
+            end
             return "MB", SR.Col("55ff55", "READY")
         end
 
-        -- Mind Flay filler
+        -- 5. Shadowfiend for mana recovery
+        if manaPct < 0.35 then
+            local sfCD = SR.SpellCD("Shadowfiend")
+            if sfCD == 0 then
+                return "SHADOW", SR.Col("ff4444", "OOM!")
+            end
+        end
+
+        -- 6. Mind Flay filler
         return "MF", SR.Col("559955", "filler")
 
     elseif spec == "HOLY" then
-        -- Guardian Spirit CD
-        local gsCD = SR.SpellCD("Guardian Spirit")
-        if gsCD == 0 then
-            return "GS", SR.Col("55ff55", "READY")
-        end
-        -- Circle of Healing
+        -- Circle of Healing (TBC: 6s CD, 41pt Holy talent)
         local cohCD = SR.SpellCD("Circle of Healing")
         if cohCD == 0 then
             return "COH", SR.Col("55ff55", "READY")
@@ -229,9 +221,6 @@ function M:Update(now, db)
             elseif row.key == "SHIELD" then
                 local rem = weakenedSoulExpiry - now
                 st = rem > 0 and SR.Col("888888", SR.Fmt(rem)) or SR.Col("55ff55", "READY")
-            elseif row.key == "GS" then
-                local cd = SR.SpellCD("Guardian Spirit")
-                st = cd > 0 and SR.Col("888888", SR.Fmt(cd)) or SR.Col("55ff55", "READY")
             elseif row.key == "COH" then
                 local cd = SR.SpellCD("Circle of Healing")
                 st = cd > 0 and SR.Col("888888", SR.Fmt(cd)) or SR.Col("55ff55", "READY")
@@ -251,9 +240,26 @@ local DOT_DURATIONS = {
 }
 
 function M:OnEvent(event, arg1)
-    if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
-        if not spec then spec = DetectSpec() end
-        self:ScanAll()
+    if event == "PLAYER_ENTERING_WORLD" then
+        -- Always re-detect spec with a delay — talents may not be loaded at ADDON_LOADED.
+        -- If spec changed (e.g. was wrongly detected as DISC at startup), rebuild the frame.
+        M:ScanAll()
+        C_Timer.After(0.5, function()
+            local detected = DetectSpec()
+            if detected ~= M.currentSpec then
+                spec = detected
+                if SR._bodyFrame then
+                    M:Build(SR._bodyFrame)
+                    local bodyH = M:GetBodyHeight(SR.ROW_H)
+                    SR._bodyFrame:SetHeight(bodyH)
+                    if SR._mainFrame then
+                        SR._mainFrame:SetHeight(SR.HDR_H + 2 + bodyH)
+                    end
+                end
+            end
+        end)
+    elseif event == "ZONE_CHANGED_NEW_AREA" then
+        M:ScanAll()
     elseif event == "PLAYER_TARGET_CHANGED" then
         vtExpiry  = 0
         swpExpiry = 0
