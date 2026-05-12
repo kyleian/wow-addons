@@ -245,6 +245,16 @@ function M:OnEvent(event, arg1)
         -- If spec changed (e.g. was wrongly detected as DISC at startup), rebuild the frame.
         M:ScanAll()
         C_Timer.After(0.5, function()
+            -- Only trust detection if talents are actually loaded (total pts > 0)
+            local total = 0
+            if GetNumTalentTabs then
+                for i = 1, GetNumTalentTabs() do
+                    local _, _, p = GetTalentTabInfo(i)
+                    total = total + (tonumber(p) or 0)
+                end
+            end
+            if total == 0 then return end  -- talents not ready yet, don't guess
+
             local detected = DetectSpec()
             if detected ~= M.currentSpec then
                 spec = detected
@@ -300,7 +310,17 @@ function M:RegisterEvents()
 end
 
 function M:ScanAll()
-    if not spec then spec = DetectSpec() end
+    -- Only detect spec if talents are loaded (total > 0), else keep current or nil
+    if not spec then
+        local total = 0
+        if GetNumTalentTabs then
+            for i = 1, GetNumTalentTabs() do
+                local _, _, p = GetTalentTabInfo(i)
+                total = total + (tonumber(p) or 0)
+            end
+        end
+        if total > 0 then spec = DetectSpec() end
+    end
     vtExpiry  = 0
     swpExpiry = 0
     weakenedSoulExpiry = 0
