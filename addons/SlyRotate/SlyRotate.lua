@@ -17,7 +17,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlyRotate"
-local VERSION    = "1.3.6"
+local VERSION    = "1.3.7"
 
 -- ─── Public namespace ───────────────────────────────────────
 -- Modules are loaded after this file (per .toc order) and call
@@ -218,16 +218,55 @@ SR.SPELL_ID_MAP = SPELL_ID_MAP  -- expose for modules if needed
 function SR.GetIcon(spellName)
     if not spellName then return FALLBACK_ICON end
     local cache = SR.db and SR.db.iconCache
-    if cache and cache[spellName] then return cache[spellName] end
+    if cache and cache[spellName] then
+        local v = cache[spellName]
+        -- Upgrade old string-encoded fileDataIDs (e.g. "132369") to numbers
+        if type(v) == "string" and tonumber(v) then
+            v = tonumber(v)
+            cache[spellName] = v
+        end
+        return v
+    end
     -- Prefer ID lookup (works for any class); fall back to name lookup
     local key = SPELL_ID_MAP[spellName] or spellName
-    local _, _, icon = GetSpellInfo(key)
-    -- icon is either a string path or a numeric fileDataID — store raw, don't tostring()
-    if icon and icon ~= "" and icon ~= 0 then
+    -- Try name lookup first — returns string path for spells the player knows.
+    -- Only use ID lookup as fallback (returns numeric fileDataID which may not
+    -- work with SetTexture in all Classic client builds).
+    local _, _, icon = GetSpellInfo(spellName)
+    if icon and type(icon) == "string" and icon ~= "" then
         if cache then cache[spellName] = icon end
         return icon
     end
+    -- Fallback: ID-based lookup for cross-class or unlearned spells
+    local spellID = SPELL_ID_MAP[spellName]
+    if spellID then
+        local _, _, idIcon = GetSpellInfo(spellID)
+        if idIcon and idIcon ~= "" and idIcon ~= 0 then
+            if cache then cache[spellName] = idIcon end
+            return idIcon
+        end
+    end
     return FALLBACK_ICON
+end
+
+-- Scan the player's spellbook and populate iconCache with string texture paths.
+-- GetSpellBookItemTexture returns proper "Interface\\Icons\\..." strings, unlike
+-- GetSpellInfo(id) which returns numeric fileDataIDs in modern Classic clients.
+function SR.ScanSpellbookIcons()
+    if not SR.db then return end
+    local cache = SR.db.iconCache
+    if not cache then return end
+    local numTabs = GetNumSpellTabs and GetNumSpellTabs() or 0
+    for tab = 1, numTabs do
+        local _, _, offset, count = GetSpellTabInfo(tab)
+        for i = offset + 1, offset + count do
+            local name = GetSpellBookItemName(i, BOOKTYPE_SPELL)
+            local icon = GetSpellBookItemTexture(i, BOOKTYPE_SPELL)
+            if name and icon and type(icon) == "string" and icon ~= "" then
+                cache[name] = icon  -- highest-rank name wins (last scanned)
+            end
+        end
+    end
 end
 
 -- Walk every built row frame and re-resolve icons.
@@ -867,8 +906,9 @@ evtFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- On first login, refresh icons now that GetSpellInfo is fully reliable.
+        -- Scan spellbook then refresh icons — spellbook gives string paths, not numeric IDs.
         C_Timer.After(0.5, function()
+            SR.ScanSpellbookIcons()
             SR.RefreshIcons()
         end)
         -- Restore frame visibility after zone transitions (BGs, instances).
@@ -985,6 +1025,38 @@ local function SetupSlashCmd()
 
         elseif msg == "config" then
             BuildConfigPanel()
+
+        elseif msg:sub(1, 5) == "spec " then
+            -- /slyrotate spec shadow|holy|discipline|fury|arms|etc.
+            local _, classFile = UnitClass("player")
+            local override = msg:sub(6):upper():gsub("%s+", "")
+            local mod = SR._active
+            if not mod or not classFile then
+                DEFAULT_CHAT_FRAME:AddMessage(Col("ff4444","[SlyRotate]") .. " No active module.")
+            else
+                local valid = false
+                if mod.specKeys then
+                    for _, k in ipairs(mod.specKeys) do
+                        if k == override then valid = true; break end
+                    end
+                end
+                if not valid then
+                    local opts = mod.specKeys and table.concat(mod.specKeys, ", ") or "?"
+                    DEFAULT_CHAT_FRAME:AddMessage(Col("ff4444","[SlyRotate]") .. " Unknown spec. Options: " .. Col("ffcc00", opts))
+                else
+                    SR.db.classes[classFile] = SR.db.classes[classFile] or {}
+                    SR.db.classes[classFile].specOverride = override
+                    DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88","[SlyRotate]") .. " Spec locked to " .. Col("ffcc00", override) .. ". /reload to apply.")
+                end
+            end
+
+        elseif msg == "spec" then
+            -- /slyrotate spec — clear override and auto-detect
+            local _, classFile = UnitClass("player")
+            if classFile and SR.db.classes[classFile] then
+                SR.db.classes[classFile].specOverride = nil
+            end
+            DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88","[SlyRotate]") .. " Spec override cleared. /reload to auto-detect.")
 
         elseif msg == "errors" then
             local log = SR.db and SR.db.errorLog

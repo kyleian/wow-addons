@@ -64,6 +64,10 @@ local brainFreeze   = false    -- Brain Freeze proc active
 -- ─── Talent detection ─────────────────────────────────────────
 -- TBC tab order: 1=Arcane, 2=Fire, 3=Frost
 local function DetectSpec()
+    local db = SR.db
+    if db and db.classes.MAGE and db.classes.MAGE.specOverride then
+        return db.classes.MAGE.specOverride
+    end
     return SR.DetectSpecByTalents({
         { spec="ARCANE", tab=1 },
         { spec="FIRE",   tab=2 },

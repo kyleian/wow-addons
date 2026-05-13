@@ -61,6 +61,10 @@ local weakenedSoulExpiry = 0   -- Weakened Soul debuff expires on target
 -- ─── Spec detection ───────────────────────────────────────────
 -- TBC tab order: 1=Discipline, 2=Holy, 3=Shadow
 local function DetectSpec()
+    local db = SR.db
+    if db and db.classes.PRIEST and db.classes.PRIEST.specOverride then
+        return db.classes.PRIEST.specOverride
+    end
     return SR.DetectSpecByTalents({
         { spec="DISCIPLINE", tab=1 },
         { spec="HOLY",       tab=2 },

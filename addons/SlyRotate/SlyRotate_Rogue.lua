@@ -56,6 +56,10 @@ local RUP_REFRESH_AT = 3   -- reapply Rupture when < 3s remaining
 -- ─── Spec detection ───────────────────────────────────────────
 -- TBC tab order: 1=Assassination, 2=Combat, 3=Subtlety
 local function DetectSpec()
+    local db = SR.db
+    if db and db.classes.ROGUE and db.classes.ROGUE.specOverride then
+        return db.classes.ROGUE.specOverride
+    end
     return SR.DetectSpecByTalents({
         { spec="ASSASSINATION", tab=1 },
         { spec="COMBAT",        tab=2 },

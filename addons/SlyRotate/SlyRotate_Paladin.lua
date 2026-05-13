@@ -54,6 +54,10 @@ local judgeCost   = 0   -- last Judgement cast time (8s CD + talent)
 -- ─── spec detection ───────────────────────────────────────────
 -- TBC tab order: 1=Holy, 2=Protection, 3=Retribution
 local function DetectSpec()
+    local db = SR.db
+    if db and db.classes.PALADIN and db.classes.PALADIN.specOverride then
+        return db.classes.PALADIN.specOverride
+    end
     return SR.DetectSpecByTalents({
         { spec="HOLY",        tab=1 },
         { spec="PROTECTION",  tab=2 },

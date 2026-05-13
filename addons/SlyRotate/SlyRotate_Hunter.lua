@@ -58,6 +58,10 @@ local tsaActive     = false      -- Trueshot Aura buffed on player
 -- ─── Spec detection ───────────────────────────────────────────
 -- TBC tab order: 1=Beast Mastery, 2=Marksmanship, 3=Survival
 local function DetectSpec()
+    local db = SR.db
+    if db and db.classes.HUNTER and db.classes.HUNTER.specOverride then
+        return db.classes.HUNTER.specOverride
+    end
     return SR.DetectSpecByTalents({
         { spec="BM",       tab=1 },
         { spec="MM",       tab=2 },

@@ -65,6 +65,10 @@ local lifeTapManaThresh = 0.35  -- tap when below 35% mana
 -- ─── Talent detection ─────────────────────────────────────────
 -- TBC tab order: 1=Affliction, 2=Demonology, 3=Destruction
 local function DetectSpec()
+    local db = SR.db
+    if db and db.classes.WARLOCK and db.classes.WARLOCK.specOverride then
+        return db.classes.WARLOCK.specOverride
+    end
     return SR.DetectSpecByTalents({
         { spec="AFFLICTION",  tab=1 },
         { spec="DEMONOLOGY",  tab=2 },
