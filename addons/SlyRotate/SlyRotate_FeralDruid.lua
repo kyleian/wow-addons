@@ -8,8 +8,9 @@ local D = {}
 
 D.classKey   = "DRUID"
 D.classLabel = "Druid (Feral)"
-D.headerIcon = "Interface\\Icons\\Ability_Druid_CatForm"
-D.headerSpell = "Claw"
+D.headerIcon   = "Interface\\Icons\\Ability_Druid_CatForm"
+D.headerSpell  = "Claw"
+D.headerSpells = { CAT="Shred", BEAR="Mangle (Bear)" }
 D.specKeys   = { "CAT", "BEAR" }
 D.specLabels = { CAT="Cat DPS", BEAR="Bear Tank" }
 
