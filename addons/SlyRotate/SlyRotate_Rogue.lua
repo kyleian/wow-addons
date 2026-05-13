@@ -12,7 +12,9 @@
 local M = {}
 
 M.classLabel = "Rogue"
-M.headerIcon = "Interface\\Icons\\Ability_Stealth"
+M.headerIcon   = "Interface\\Icons\\Ability_Stealth"
+M.headerSpell  = "Sinister Strike"
+M.headerSpells = { COMBAT="Sinister Strike", ASSASSINATION="Mutilate", SUBTLETY="Hemorrhage" }
 M.specKeys   = { "COMBAT", "ASSASSINATION", "SUBTLETY" }
 
 -- ─── Row definitions ─────────────────────────────────────────
@@ -214,7 +216,16 @@ end
 -- ─── Events ───────────────────────────────────────────────────
 function M:OnEvent(event, arg1)
     if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
-        if not spec then spec = DetectSpec() end
+        C_Timer.After(0.5, function()
+            local total = 0
+            if GetNumTalentTabs then
+                for i = 1, GetNumTalentTabs() do
+                    local _, _, p = GetTalentTabInfo(i)
+                    total = total + (tonumber(p) or 0)
+                end
+            end
+            if total > 0 then spec = DetectSpec() end
+        end)
         self:ScanAll()
     elseif event == "PLAYER_TARGET_CHANGED" then
         rupExpiry = 0
@@ -272,7 +283,7 @@ function M:RegisterEvents()
 end
 
 function M:ScanAll()
-    if not spec then spec = DetectSpec() end
+    spec = DetectSpec()
     comboPoints = GetComboPoints("player", "target") or 0
 
     -- Scan for SnD on player

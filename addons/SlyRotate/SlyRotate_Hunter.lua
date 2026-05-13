@@ -11,7 +11,9 @@
 local M = {}
 
 M.classLabel = "Hunter"
-M.headerIcon = "Interface\\Icons\\Ability_Hunter_BeastMastery"
+M.headerIcon   = "Interface\\Icons\\Ability_Hunter_BeastMastery"
+M.headerSpell  = "Arcane Shot"
+M.headerSpells = { BM="Bestial Wrath", MM="Aimed Shot", SURVIVAL="Explosive Shot" }
 M.specKeys   = { "BM", "MM", "SURVIVAL" }
 
 -- ─── Row definitions ─────────────────────────────────────────
@@ -221,13 +223,22 @@ function M:Update(now, db)
     end
 
     SR.UpdateSpotlight(currentRows, activeKey, statusStr)
-    SR.SetModeLabel(SR.Col("aacc55", spec or "???"))
+    SR.SetModeLabel("")
 end
 
 -- ─── Events ───────────────────────────────────────────────────
 function M:OnEvent(event, arg1)
     if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
-        if not spec then spec = DetectSpec() end
+        C_Timer.After(0.5, function()
+            local total = 0
+            if GetNumTalentTabs then
+                for i = 1, GetNumTalentTabs() do
+                    local _, _, p = GetTalentTabInfo(i)
+                    total = total + (tonumber(p) or 0)
+                end
+            end
+            if total > 0 then spec = DetectSpec() end
+        end)
         self:ScanAll()
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then self:ScanAll() end
@@ -239,7 +250,7 @@ function M:RegisterEvents()
 end
 
 function M:ScanAll()
-    if not spec then spec = DetectSpec() end
+    spec = DetectSpec()
 
     -- Scan player buffs for aspects / Trueshot Aura
     inViperAspect = false

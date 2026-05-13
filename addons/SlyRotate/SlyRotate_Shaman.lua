@@ -10,7 +10,9 @@ local S = {}
 
 S.classKey   = "SHAMAN"
 S.classLabel = "Shaman"
-S.headerIcon = "Interface\\Icons\\Spell_Nature_LightningShield"
+S.headerIcon   = "Interface\\Icons\\Spell_Nature_LightningShield"
+S.headerSpell  = "Lightning Bolt"
+S.headerSpells = { ENHANCE="Stormstrike", ELEMENTAL="Lightning Bolt" }
 S.specKeys   = { "ENHANCE", "ELEMENTAL" }
 S.specLabels = { ENHANCE="Enhancement", ELEMENTAL="Elemental" }
 
@@ -88,6 +90,9 @@ function S:GetHeaderText()
 end
 
 function S:Build(body)
+    -- Hide any previously created containers before rebuilding
+    if enhContainer  then enhContainer:Hide()  end
+    if elemContainer then elemContainer:Hide() end
     local FW   = SR.FRAME_W
     local RH   = SR.ROW_H
     local enhH  = #ENHANCE_ROWS  * (RH + 1)
@@ -328,7 +333,6 @@ local function UpdateEnhance(now)
 
     local manaCol = manaP < 0.20 and "ff4444" or manaP < 0.40 and "ffcc44" or "4488ff"
     SR.SetModeLabel(
-        Col("88ccff","ENHA") .. "  " ..
         Col(manaCol, string.format("%.0f%%", manaP * 100) .. "M"))
 
     local spotSt
@@ -432,7 +436,6 @@ local function UpdateElemental(now)
 
     local manaCol = manaP < 0.20 and "ff4444" or manaP < 0.40 and "ffcc44" or "4488ff"
     SR.SetModeLabel(
-        Col("88aaff","ELEM") .. "  " ..
         Col(manaCol, string.format("%.0f%%", manaP * 100) .. "M"))
 
     local spotSt = emActive and "INSTANT!" or (best == "FS" and (fsL > 0 and Fmt(fsL) or "MISSING") or "spam")

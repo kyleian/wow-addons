@@ -9,6 +9,7 @@ local D = {}
 D.classKey   = "DRUID"
 D.classLabel = "Druid (Feral)"
 D.headerIcon = "Interface\\Icons\\Ability_Druid_CatForm"
+D.headerSpell = "Claw"
 D.specKeys   = { "CAT", "BEAR" }
 D.specLabels = { CAT="Cat DPS", BEAR="Bear Tank" }
 
@@ -265,7 +266,6 @@ local function UpdateCat(now)
 
     local cpCol = cps >= 4 and "ffee55" or "aaaaaa"
     SR.SetModeLabel(
-        Col("ff9933","CAT") .. "  " ..
         Col("aaaaaa", energy .. "E ") ..
         Col(cpCol, cps .. "CP"))
 
@@ -371,7 +371,6 @@ local function UpdateBear(now)
 
     local hpCol = hp < 0.30 and "ff4444" or hp < 0.60 and "ffcc44" or "44ff44"
     SR.SetModeLabel(
-        Col("ff7722","BEAR") .. "  " ..
         Col("aaaaaa", rage .. "R ") ..
         Col(hpCol, string.format("%.0f%%", hp*100)))
 

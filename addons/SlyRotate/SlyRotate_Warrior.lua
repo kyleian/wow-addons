@@ -9,7 +9,9 @@ local W = {}
 
 W.classKey   = "WARRIOR"
 W.classLabel = "Warrior"
-W.headerIcon = "Interface\\Icons\\Ability_Warrior_Bloodthirst"
+W.headerIcon   = "Interface\\Icons\\Ability_Warrior_Bloodthirst"
+W.headerSpell  = "Bloodthirst"
+W.headerSpells = { FURY="Bloodthirst", ARMS="Mortal Strike", PROT="Shield Slam" }
 W.specKeys   = { "FURY", "ARMS", "PROT" }
 W.specLabels = { FURY="Fury DPS", ARMS="Arms DPS", PROT="Prot Tank" }
 
@@ -87,6 +89,10 @@ function W:GetHeaderText()
 end
 
 function W:Build(body)
+    -- Hide any previously created containers before rebuilding
+    if furyContainer then furyContainer:Hide() end
+    if armsContainer then armsContainer:Hide() end
+    if protContainer then protContainer:Hide() end
     local FW   = SR.FRAME_W
     local RH   = SR.ROW_H
 
@@ -335,7 +341,6 @@ local function UpdateFury(db, now)
 
     local spCol = exPhase and "ff4444" or "aaaaaa"
     SR.SetModeLabel(
-        Col("cc3333","FURY") .. "  " ..
         Col("aaaaaa", rage .. "R ") ..
         Col(spCol, string.format("%.0f%%", tHP*100)))
 
@@ -488,7 +493,6 @@ local function UpdateArms(db, now)
 
     local swCol = slamWindow and "ffee00" or "888888"
     SR.SetModeLabel(
-        Col("ddcc22","ARMS") .. "  " ..
         Col("aaaaaa", rage .. "R ") ..
         Col(swCol, string.format("%.1fs",nextSwingIn) .. "sw"))
 
@@ -616,7 +620,6 @@ local function UpdateProt(db, now)
 
     local hpCol = hp < 0.30 and "ff4444" or hp < 0.60 and "ffcc44" or "44ff44"
     SR.SetModeLabel(
-        Col("4488ff","PROT") .. "  " ..
         Col("aaaaaa", rage .. "R ") ..
         Col(hpCol, string.format("%.0f%%", hp*100)))
 
@@ -644,6 +647,20 @@ function W:Update(now, db)
     end
 
     local spec = DetectSpec(db)
+    -- If specOverride is not set and detection returned the default (talents may not
+    -- be loaded yet), keep the last known good spec rather than flipping to default.
+    if not (db.classes.WARRIOR and db.classes.WARRIOR.specOverride) then
+        local total = 0
+        if GetNumTalentTabs then
+            for i = 1, GetNumTalentTabs() do
+                local _, _, p = GetTalentTabInfo(i)
+                total = total + (tonumber(p) or 0)
+            end
+        end
+        if total == 0 and W.currentSpec then
+            spec = W.currentSpec  -- talents not loaded, keep last good detection
+        end
+    end
     W.currentSpec = spec
 
     -- Enforce per-spec toggle

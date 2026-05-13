@@ -10,7 +10,9 @@
 local M = {}
 
 M.classLabel = "Warlock"
-M.headerIcon = "Interface\\Icons\\Spell_Shadow_DeathCoil"
+M.headerIcon   = "Interface\\Icons\\Spell_Shadow_DeathCoil"
+M.headerSpell  = "Shadow Bolt"
+M.headerSpells = { AFFLICTION="Corruption", DEMONOLOGY="Shadow Bolt", DESTRUCTION="Incinerate" }
 M.specKeys   = { "AFFLICTION", "DESTRUCTION", "DEMONOLOGY" }
 
 -- ─── Spell icons ─────────────────────────────────────────────
@@ -215,7 +217,7 @@ function M:Update(now, db)
     end
 
     SR.UpdateSpotlight(currentRows, activeKey, statusStr)
-    SR.SetModeLabel(SR.Col("cc66ff", spec and spec:sub(1,4) or "???"))
+    SR.SetModeLabel("")
 end
 
 -- ─── Combat-log tracking ──────────────────────────────────────
@@ -238,13 +240,22 @@ local DOT_DURATIONS = {
 
 function M:OnEvent(event, arg1)
     if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
-        local newSpec = DetectSpec()
-        if newSpec ~= spec then
-            spec = newSpec
-            -- Rebuild rows via core (fire a PLAYER_TARGET_CHANGED to force rebuild)
-            -- Actually we just reset the dot expiry
-            for k in pairs(dotExpiry) do dotExpiry[k] = 0 end
-        end
+        C_Timer.After(0.5, function()
+            local total = 0
+            if GetNumTalentTabs then
+                for i = 1, GetNumTalentTabs() do
+                    local _, _, p = GetTalentTabInfo(i)
+                    total = total + (tonumber(p) or 0)
+                end
+            end
+            if total > 0 then
+                local newSpec = DetectSpec()
+                if newSpec ~= spec then
+                    spec = newSpec
+                    for k in pairs(dotExpiry) do dotExpiry[k] = 0 end
+                end
+            end
+        end)
     elseif event == "PLAYER_TARGET_CHANGED" then
         for k in pairs(dotExpiry) do dotExpiry[k] = 0 end
         self:ScanAll()
@@ -279,6 +290,7 @@ function M:RegisterEvents()
 end
 
 function M:ScanAll()
+    spec = DetectSpec()
     -- Scan current target debuffs for our DoTs
     for k in pairs(dotExpiry) do dotExpiry[k] = 0 end
     if not UnitExists("target") then return end

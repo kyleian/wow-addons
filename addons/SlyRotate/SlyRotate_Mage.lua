@@ -11,7 +11,9 @@
 local M = {}
 
 M.classLabel = "Mage"
-M.headerIcon = "Interface\\Icons\\Spell_Holy_MagicSentry"
+M.headerIcon   = "Interface\\Icons\\Spell_Holy_MagicSentry"
+M.headerSpell  = "Frostbolt"
+M.headerSpells = { ARCANE="Arcane Blast", FIRE="Fireball", FROST="Frostbolt" }
 M.specKeys   = { "ARCANE", "FIRE", "FROST" }
 
 -- ─── Row definitions ─────────────────────────────────────────
@@ -267,13 +269,30 @@ function M:Update(now, db)
     end
 
     SR.UpdateSpotlight(currentRows, activeKey, statusStr)
-    SR.SetModeLabel(SR.Col("88ccff", spec and spec:sub(1, 3) or "???"))
+    SR.SetModeLabel("")
 end
 
 -- ─── Events ───────────────────────────────────────────────────
 function M:OnEvent(event, arg1)
-    if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA"
-    or event == "CHARACTER_POINTS_CHANGED" then
+    if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+        C_Timer.After(0.5, function()
+            local total = 0
+            if GetNumTalentTabs then
+                for i = 1, GetNumTalentTabs() do
+                    local _, _, p = GetTalentTabInfo(i)
+                    total = total + (tonumber(p) or 0)
+                end
+            end
+            if total == 0 then return end
+            local newSpec = DetectSpec()
+            if newSpec ~= spec then
+                spec = newSpec
+                abStacks = 0; abStackExpiry = 0
+                scorchStacks = 0; scorchExpiry = 0
+                brainFreeze = false
+            end
+        end)
+    elseif event == "CHARACTER_POINTS_CHANGED" then
         local newSpec = DetectSpec()
         if newSpec ~= spec then
             spec = newSpec
@@ -353,7 +372,7 @@ function M:RegisterEvents()
 end
 
 function M:ScanAll()
-    if not spec then spec = DetectSpec() end
+    spec = DetectSpec()
     if not UnitExists("target") then return end
 
     -- Scan for Improved Scorch debuff on target

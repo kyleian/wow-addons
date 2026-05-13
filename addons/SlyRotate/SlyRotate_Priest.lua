@@ -13,7 +13,9 @@
 local M = {}
 
 M.classLabel = "Priest"
-M.headerIcon = "Interface\\Icons\\ClassIcon_Priest"
+M.headerIcon   = "Interface\\Icons\\ClassIcon_Priest"
+M.headerSpell  = "Shadow Word: Pain"
+M.headerSpells = { SHADOW="Mind Blast", HOLY="Flash Heal", DISCIPLINE="Power Word: Shield" }
 M.specKeys   = { "SHADOW", "HOLY", "DISCIPLINE" }
 
 -- ─── Row definitions ─────────────────────────────────────────
@@ -234,7 +236,7 @@ function M:Update(now, db)
     end
 
     SR.UpdateSpotlight(currentRows, activeKey, statusStr)
-    SR.SetModeLabel(SR.Col("ddddee", spec and spec:sub(1, 4) or "???"))
+    SR.SetModeLabel("")
 end
 
 -- ─── Event handling ───────────────────────────────────────────
@@ -314,17 +316,7 @@ function M:RegisterEvents()
 end
 
 function M:ScanAll()
-    -- Only detect spec if talents are loaded (total > 0), else keep current or nil
-    if not spec then
-        local total = 0
-        if GetNumTalentTabs then
-            for i = 1, GetNumTalentTabs() do
-                local _, _, p = GetTalentTabInfo(i)
-                total = total + (tonumber(p) or 0)
-            end
-        end
-        if total > 0 then spec = DetectSpec() end
-    end
+    spec = DetectSpec()
     vtExpiry  = 0
     swpExpiry = 0
     weakenedSoulExpiry = 0

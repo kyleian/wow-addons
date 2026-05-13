@@ -17,7 +17,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlyRotate"
-local VERSION    = "1.3.7"
+local VERSION    = "1.3.8"
 
 -- ─── Public namespace ───────────────────────────────────────
 -- Modules are loaded after this file (per .toc order) and call
@@ -272,6 +272,11 @@ end
 -- Walk every built row frame and re-resolve icons.
 -- Call after PLAYER_LOGIN when GetSpellInfo is fully reliable.
 function SR.RefreshIcons()
+    -- Refresh header icon from spellbook cache
+    if SR._hdrIconTex and SR._active and SR._active.headerSpell then
+        local tex = SR.GetIcon(SR._active.headerSpell)
+        if tex then SR._hdrIconTex:SetTexture(tex) end
+    end
     local function refreshRows(rowFrames)
         if not rowFrames then return end
         for _, row in ipairs(rowFrames) do
@@ -459,6 +464,49 @@ function SR.SetModeLabel(text)
     if modeLabel then modeLabel:SetText(text or "") end
 end
 
+function SR.SetSpecLabel(specKey)
+    if SR._specLabelTx then
+        SR._specLabelTx:SetText(Col("ffcc66", tostring(specKey or "?")))
+    end
+end
+
+-- ─── Rebuild body rows in-place (used by spec cycle) ─────────
+function SR.RebuildBody()
+    local mod = SR._active
+    if not mod or not SR._bodyFrame or not SR._mainFrame then return end
+    if mod.ScanAll then mod:ScanAll() end
+    if mod.Build then
+        mod:Build(SR._bodyFrame)
+        local bodyH = mod:GetBodyHeight(SR.ROW_H)
+        SR._bodyFrame:SetHeight(bodyH)
+        SR._mainFrame:SetHeight(SR.HDR_H + 2 + bodyH + 4)
+    end
+end
+
+-- ─── Cycle through specKeys for the active class ──────────────
+function SR.CycleSpec()
+    local mod = SR._active
+    if not mod or not mod.specKeys or #mod.specKeys < 2 then return end
+    local _, classFile = UnitClass("player")
+    if not classFile then return end
+    SR.db.classes[classFile] = SR.db.classes[classFile] or {}
+    -- Use current known spec (override or last detected) as starting point
+    local current = SR.db.classes[classFile].specOverride or mod.currentSpec
+    local keys = mod.specKeys
+    local idx = 0
+    for i, k in ipairs(keys) do
+        if k == current then idx = i; break end
+    end
+    if idx == 0 then idx = 1 end
+    local nextIdx = (idx % #keys) + 1
+    local nextSpec = keys[nextIdx]
+    SR.db.classes[classFile].specOverride = nextSpec
+    SR.RebuildBody()
+    SR.SetSpecLabel(nextSpec)
+    DEFAULT_CHAT_FRAME:AddMessage(
+        Col("88ff88", "[SlyRotate]") .. " Spec set to " .. Col("ffcc00", nextSpec))
+end
+
 -- ─── Main frame ──────────────────────────────────────────────
 local function BuildMainFrame()
     if mainFrame then return end
@@ -499,18 +547,45 @@ local function BuildMainFrame()
     local hdrIcon = hdr:CreateTexture(nil, "ARTWORK")
     hdrIcon:SetSize(14, 14)
     hdrIcon:SetPoint("LEFT", hdr, "LEFT", 4, 0)
-    hdrIcon:SetTexture(mod.headerIcon or "Interface\\Icons\\Ability_Warrior_Bloodthirst")
+    hdrIcon:SetTexture(mod.headerIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
     hdrIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    SR._hdrIconTex = hdrIcon
 
-    local titleTx = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    titleTx:SetFont(titleTx:GetFont(), 9, "OUTLINE")
-    titleTx:SetPoint("LEFT", hdrIcon, "RIGHT", 4, 0)
-    titleTx:SetText(mod:GetHeaderText())
+    -- Spec label (replaces title; clickable to cycle spec)
+    local initSpec = (SR.db.classes[select(2,UnitClass("player"))] or {}).specOverride
+                     or mod.currentSpec
+                     or (mod.specKeys and mod.specKeys[1])
+                     or ""
+    local specLabelTx = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    specLabelTx:SetFont(specLabelTx:GetFont(), 9, "OUTLINE")
+    specLabelTx:SetPoint("LEFT", hdrIcon, "RIGHT", 4, 0)
+    specLabelTx:SetText(Col("ffcc66", tostring(initSpec)))
+    SR._specLabelTx = specLabelTx
+
+    SR._specCycleBtn = nil
+    if mod.specKeys and #mod.specKeys > 1 then
+        local hoverBtn = CreateFrame("Button", nil, hdr)
+        hoverBtn:SetSize(80, HDR_H)
+        hoverBtn:SetPoint("LEFT", specLabelTx, "LEFT", -2, 0)
+        hoverBtn:EnableMouse(true)
+        hoverBtn:SetScript("OnClick", SR.CycleSpec)
+        hoverBtn:SetScript("OnEnter", function()
+            specLabelTx:SetTextColor(1, 1, 0.5)
+            GameTooltip:SetOwner(hoverBtn, "ANCHOR_BOTTOM")
+            GameTooltip:SetText("Click to switch spec", 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        hoverBtn:SetScript("OnLeave", function()
+            specLabelTx:SetTextColor(1, 0.8, 0.4)
+            GameTooltip:Hide()
+        end)
+        SR._specCycleBtn = hoverBtn
+    end
 
     modeLabel = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     modeLabel:SetFont(modeLabel:GetFont(), 9, "OUTLINE")
     modeLabel:SetPoint("RIGHT", hdr, "RIGHT", -5, 0)
-    modeLabel:SetText(Col("444455", "---"))
+    modeLabel:SetText("")
 
     local sep = f:CreateTexture(nil, "ARTWORK")
     sep:SetSize(FRAME_W - 2, 1)
@@ -693,7 +768,14 @@ local function BuildConfigPanel()
         ROGUE="Rogue", PALADIN="Paladin", PRIEST="Priest",
     }
 
-    local totalLines = 3  -- combat-only, spotlight, "Classes" separator
+    -- Spec override section: label + "Auto" + one per spec (active class only)
+    local _, specClassFile = UnitClass("player")
+    local activeSpecKeys = SR._active and SR._active.specKeys
+    local specOverrideLines = 0
+    if specClassFile and activeSpecKeys and #activeSpecKeys > 0 then
+        specOverrideLines = 1 + 1 + #activeSpecKeys  -- label + Auto + each spec
+    end
+    local totalLines = 3 + specOverrideLines  -- combat-only, spotlight, spec override, "Classes" separator
     for _, ck in ipairs(classOrder) do
         if SR._modules[ck] then
             totalLines = totalLines + 1  -- class row
@@ -806,6 +888,46 @@ local function BuildConfigPanel()
                 if v then spotFrame:Show() else spotFrame:Hide() end
             end
         end)
+
+    -- Spec Override radio group (active player class only, reload to apply)
+    if specClassFile and activeSpecKeys and #activeSpecKeys > 0 then
+        MakeLabel(Col("666677", "── Spec Override (reload to apply) ──"))
+        local radioGroup = {}
+        local function RefreshRadios()
+            local override = SR.db.classes[specClassFile] and SR.db.classes[specClassFile].specOverride
+            for _, entry in ipairs(radioGroup) do
+                entry.btn:SetChecked(entry.value == override)
+            end
+        end
+        -- Auto-detect option
+        local autoRb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        autoRb:SetSize(20, 20)
+        autoRb:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOff - 1)
+        yOff = yOff - LH
+        if autoRb.text then autoRb.text:SetText("Auto-detect"); autoRb.text:SetTextColor(0.78, 0.78, 0.78) end
+        table.insert(radioGroup, { btn = autoRb, value = nil })
+        autoRb:SetScript("OnClick", function()
+            SR.db.classes[specClassFile] = SR.db.classes[specClassFile] or {}
+            SR.db.classes[specClassFile].specOverride = nil
+            RefreshRadios()
+        end)
+        -- One radio per spec
+        for _, sk in ipairs(activeSpecKeys) do
+            local skLocal = sk
+            local rb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+            rb:SetSize(20, 20)
+            rb:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOff - 1)
+            yOff = yOff - LH
+            if rb.text then rb.text:SetText(specLabel[skLocal] or skLocal); rb.text:SetTextColor(0.78, 0.78, 0.78) end
+            table.insert(radioGroup, { btn = rb, value = skLocal })
+            rb:SetScript("OnClick", function()
+                SR.db.classes[specClassFile] = SR.db.classes[specClassFile] or {}
+                SR.db.classes[specClassFile].specOverride = skLocal
+                RefreshRadios()
+            end)
+        end
+        RefreshRadios()
+    end
 
     MakeLabel(Col("666677", "── Classes ──"))
 
@@ -973,6 +1095,19 @@ tickFrame:SetScript("OnUpdate", function(self, dt)
     if classDb and classDb.enabled == false then return end
     local ok, err = pcall(mod.Update, mod, GetTime(), SR.db)
     if not ok then SR.LogError("Update", err) end
+    if mod.currentSpec then
+        if SR._specLabelTx then
+            SR._specLabelTx:SetText(Col("ffcc66", mod.currentSpec))
+        end
+        if SR._hdrIconTex then
+            local spell = (mod.headerSpells and mod.headerSpells[mod.currentSpec])
+                          or mod.headerSpell
+            if spell then
+                local tex = SR.GetIcon(spell)
+                if tex then SR._hdrIconTex:SetTexture(tex) end
+            end
+        end
+    end
 end)
 
 -- ─── Slash commands ──────────────────────────────────────────
@@ -1201,10 +1336,14 @@ local function Init()
         if spotFrame then spotFrame:Hide() end
     end
 
+    local specHint = ""
+    if SR._active.specKeys then
+        specHint = " · |cffffcc00/slyrotate spec " .. SR._active.specKeys[1] .. "|r to force spec"
+    end
     DEFAULT_CHAT_FRAME:AddMessage(
         Col("88ff88", "[SlyRotate]") .. " v" .. VERSION ..
         " — " .. (SR._active.classLabel or classFile) ..
-        " rotation loaded. |cffffcc00/slyrotate|r toggle · |cffffcc00/slyrotate config|r settings.")
+        " rotation loaded. |cffffcc00/slyrotate|r toggle · |cffffcc00/slyrotate config|r settings" .. specHint .. ".")
 end
 
 -- ─── Boot ────────────────────────────────────────────────────

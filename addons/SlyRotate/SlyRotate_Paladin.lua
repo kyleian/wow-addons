@@ -12,7 +12,9 @@
 local M = {}
 
 M.classLabel = "Paladin"
-M.headerIcon = "Interface\\Icons\\ClassIcon_Paladin"
+M.headerIcon   = "Interface\\Icons\\ClassIcon_Paladin"
+M.headerSpell  = "Judgement"
+M.headerSpells = { RETRIBUTION="Crusader Strike", PROTECTION="Judgement", HOLY="Holy Light" }
 M.specKeys   = { "RETRIBUTION", "PROTECTION", "HOLY" }
 
 -- ─── Row definitions per spec ─────────────────────────────────
@@ -236,13 +238,22 @@ function M:Update(now, db)
     end
 
     SR.UpdateSpotlight(currentRows, activeKey, statusStr)
-    SR.SetModeLabel(SR.Col("ffdd88", spec and spec:sub(1, 4) or "???"))
+    SR.SetModeLabel("")
 end
 
 -- ─── Events ───────────────────────────────────────────────────
 function M:OnEvent(event, arg1)
     if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
-        if not spec then spec = DetectSpec() end
+        C_Timer.After(0.5, function()
+            local total = 0
+            if GetNumTalentTabs then
+                for i = 1, GetNumTalentTabs() do
+                    local _, _, p = GetTalentTabInfo(i)
+                    total = total + (tonumber(p) or 0)
+                end
+            end
+            if total > 0 then spec = DetectSpec() end
+        end)
         self:ScanAll()
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then self:ScanAll() end
@@ -254,7 +265,7 @@ function M:RegisterEvents()
 end
 
 function M:ScanAll()
-    if not spec then spec = DetectSpec() end
+    spec = DetectSpec()
     sealExpiry = 0
 
     -- Scan for any Seal buff on player
