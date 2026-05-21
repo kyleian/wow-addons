@@ -119,7 +119,7 @@
                        "enabled":  true,
                        "description":  "Movable character sheet companion — extended stats + gear sets docked beside CharacterFrame. C key. /slychar",
                        "sourceDir":  "addons\\SlySuite_Char",
-                       "version":  "1.5.2",
+                       "version":  "2.0.0",
                        "curseProjectId":  ""
                    },
                    {

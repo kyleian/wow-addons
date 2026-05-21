@@ -6,13 +6,14 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "1.5.2"
+SC.version = "2.0.0"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
 SC._skipHook        = false   -- true while Chr button is showing CharacterFrame directly
 SC._pendingHideChar = false   -- true when CharacterFrame was left open in combat
 SC._hiddenByCombat  = false   -- true when we suppressed the panel at combat start
+SC._pendingBuild    = false   -- true when SC_BuildMain() was blocked by combat lockdown
 
 -- --------------------------------------------------------
 -- SavedVariables defaults
@@ -21,6 +22,7 @@ local DB_DEFAULTS = {
     position  = nil,     -- {point, x, y} for SlyCharMainFrame
     lastTab   = "stats",
     theme     = "shadow",
+    mode      = "slychar_flyout",  -- "native_flyout" | "slychar" | "slychar_flyout"
     collapsed = {},      -- {[sectionKey]=true} for collapsed stat sections
     hidden    = {},      -- {[sectionKey]=true} for fully hidden stat sections
 }
@@ -47,7 +49,6 @@ end
 function SC_ShowMain()
     if not SlyCharMainFrame then
         if InCombatLockdown() then
-            -- SC_BuildMain creates secure buttons which is forbidden in combat.
             DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Open the character sheet once out of combat first.")
             return
         end
@@ -57,6 +58,8 @@ function SC_ShowMain()
             return
         end
     end
+    -- Re-anchor wing to main frame in case it was displaced by native_flyout mode
+    if SC_ReparentWing then SC_ReparentWing(SlyCharMainFrame) end
     local pos = SC.db.position
     if pos and pos.point then
         SlyCharMainFrame:ClearAllPoints()
@@ -64,7 +67,16 @@ function SC_ShowMain()
     end
     SlyCharMainFrame:Show()
     SlyCharMainFrame:SetAlpha(1)
+    -- Close the >> flyout menu if it was left open.
+    local fm = _G["SlyCharStripFlyout"]
+    if fm then fm:Hide() end
     SC_RefreshAll()
+    -- Restore the active tab (and in slychar_flyout mode, open its wing).
+    -- SC_SwitchTab handles both: tab-frame visibility for slychar mode, and
+    -- wing auto-open for slychar_flyout mode.
+    if SC_SwitchTab then
+        SC_SwitchTab(SC.db.lastTab or "stats")
+    end
 end
 
 function SC_ToggleMain()
@@ -82,71 +94,45 @@ end
 -- Since CharacterFrame is always instantly hidden,
 -- ToggleCharacter() always thinks it's closed and calls Show --
 -- so we toggle based on our own panel state.
---
--- PROBLEM: ShowUIPanel(CharacterFrame) runs the WoW panel manager
--- BEFORE our OnShow hook fires.  The panel manager displaces other
--- registered UI panels (TradeFrame, MerchantFrame, etc.) to make
--- room.  By the time we detect them in OnShow they are already gone.
---
--- FIX: wrap ShowUIPanel directly (it is plain Lua in TBC FrameXML)
--- so our snapshot runs BEFORE the panel manager displaces anything.
 -- --------------------------------------------------------
-local _displacedPanels = {}
-
 local function HookCharacterFrame()
     if not CharacterFrame then return end
 
-    -- True pre-hook: runs before the original ShowUIPanel displaces panels.
-    local _origShowUIPanel = ShowUIPanel
-    ShowUIPanel = function(frame, ...)
-        if frame == CharacterFrame then
-            wipe(_displacedPanels)
-            local candidates = {
-                TradeFrame, MerchantFrame, InspectFrame, SpellBookFrame,
-                GossipFrame, QuestFrame, ItemTextFrame,
-            }
-            for _, f in ipairs(candidates) do
-                if f and f:IsShown() then
-                    table.insert(_displacedPanels, f)
-                end
-            end
-        end
-        return _origShowUIPanel(frame, ...)
-    end
-
     CharacterFrame:HookScript("OnShow", function(self)
-        if SC._skipHook then
-            wipe(_displacedPanels)
+        local mode = (SC.db and SC.db.mode) or "native_flyout"
+
+        if mode == "native_flyout" then
+            -- Let native CharacterFrame show; attach our companion alongside it
+            if SC_ShowNativeCompanion then SC_ShowNativeCompanion() end
             return
         end
 
-        -- If any sibling panel was open when ShowUIPanel fired, do not hijack.
-        -- Also restore any that the panel manager displaced.
-        if #_displacedPanels > 0 then
-            self:Hide()
-            for _, f in ipairs(_displacedPanels) do
-                if not f:IsShown() then ShowUIPanel(f) end
-            end
-            wipe(_displacedPanels)
-            return
-        end
-
-        -- Guard: cursor carry (spell/item drag).
-        if GetCursorInfo() then
-            wipe(_displacedPanels)
-            return
-        end
-
-        wipe(_displacedPanels)
+        -- slychar / slychar_flyout: intercept and redirect to SlyChar panel
+        if SC._skipHook then return end
+        if GetCursorInfo() then return end
 
         if InCombatLockdown() then
-            CharacterFrame:EnableMouse(false)
-            CharacterFrame:EnableKeyboard(false)
-            SC._pendingHideChar = true
+            if SlyCharMainFrame then
+                self:Hide()
+                SlyCharMainFrame:Show()
+                SlyCharMainFrame:SetAlpha(1)
+                SC_RefreshAll()
+            else
+                SC._pendingBuild = true
+                DEFAULT_CHAT_FRAME:AddMessage(
+                    "|cff88bbff[SlyChar]|r Opening after combat ends...")
+            end
             return
         end
         self:Hide()
         SC_ToggleMain()
+    end)
+
+    -- In native_flyout mode: hide companion when CharacterFrame closes
+    CharacterFrame:HookScript("OnHide", function(self)
+        if (SC.db and SC.db.mode) == "native_flyout" then
+            if SC_HideNativeCompanion then SC_HideNativeCompanion() end
+        end
     end)
 end
 
@@ -291,6 +277,23 @@ local function SC_Slash(msg)
         end
 
         DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SC]|r Honor debug saved. /reload then open WTF/.../SavedVariables/SlySuite_Char.lua and search for honorDebug")
+    elseif msg:match("^mode") then
+        local m = (msg:match("^mode%s+(.+)$") or ""):trim()
+        local MODES = {
+            native_flyout  = "Native paper doll + SlyChar flyouts",
+            slychar        = "Full SlyChar panel",
+            slychar_flyout = "SlyChar panel + detached flyouts",
+        }
+        if MODES[m] then
+            if SC.db then SC.db.mode = m end
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Mode set to |cffffdd22" .. m .. "|r — /reload to apply.")
+        else
+            local cur = (SC.db and SC.db.mode) or "native_flyout"
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Mode: |cffffdd22" .. cur .. "|r  (" .. (MODES[cur] or "?") .. ")")
+            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode native_flyout   — native paper doll + SlyChar flyouts  (default)")
+            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode slychar          — full SlyChar panel replaces CharacterFrame")
+            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode slychar_flyout   — SlyChar panel + detached flyouts")
+        end
     else
         SC_ToggleMain()
     end
@@ -315,6 +318,7 @@ evFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 evFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
 evFrame:RegisterEvent("FRIENDLIST_UPDATE")
 evFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+evFrame:RegisterEvent("TRADE_SHOW")
 
 evFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -340,6 +344,24 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
             HookCharacterFrame()
+
+            -- Intercept the H key (ToggleCharacter("HonorFrame")) so it opens
+            -- the SlyChar panel with the honor wing rather than the native PvP frame.
+            -- Must be done here (after SC.db is set) so the mode check works.
+            if ToggleCharacter then
+                local _origToggleChar = ToggleCharacter
+                ToggleCharacter = function(which)
+                    if (which == "HonorFrame" or which == "PVPFrame") then
+                        local mode = (SC.db and SC.db.mode) or "native_flyout"
+                        if mode ~= "native_flyout" then
+                            SC_ShowMain()
+                            if SC_ToggleWing then SC_ToggleWing("honor") end
+                            return
+                        end
+                    end
+                    return _origToggleChar(which)
+                end
+            end
 
             SLASH_SLYCHAR1 = "/slychar"
             SlashCmdList["SLYCHAR"] = SC_Slash
@@ -413,16 +435,21 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             if SC_RefreshAll then SC_RefreshAll() end
         end
 
+    elseif event == "TRADE_SHOW" then
+        -- Trade opened: do nothing. SlyChar stays open (they coexist).
+        -- User can close SlyChar manually if it's in the way.
+
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- Pre-build the main frame now, while we are guaranteed to be outside
-        -- combat lockdown. This ensures SlyCharMainFrame always exists by the
-        -- time the player presses C, even if they never opened it manually.
-        if not SlyCharMainFrame and SC.db and not InCombatLockdown() then
-            local ok, err = pcall(SC_BuildMain)
-            if not ok then
-                DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
-            elseif SlyCharMainFrame then
-                SlyCharMainFrame:Hide()
+        local mode = (SC.db and SC.db.mode) or "native_flyout"
+        -- Pre-build the main frame only for slychar modes (native_flyout builds lazily on demand)
+        if mode ~= "native_flyout" then
+            if not SlyCharMainFrame and SC.db and not InCombatLockdown() then
+                local ok, err = pcall(SC_BuildMain)
+                if not ok then
+                    DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
+                elseif SlyCharMainFrame then
+                    SlyCharMainFrame:Hide()
+                end
             end
         end
 
@@ -461,6 +488,11 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
                 CharacterFrame:EnableKeyboard(true)
                 CharacterFrame:Hide()
             end
+        end
+        -- If player pressed C during combat before the frame was built, open it now.
+        if SC._pendingBuild and SlyCharMainFrame then
+            SC._pendingBuild = false
+            SC_ShowMain()
         end
     end
 end)

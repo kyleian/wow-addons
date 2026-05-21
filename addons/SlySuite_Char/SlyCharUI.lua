@@ -130,6 +130,7 @@ local _classUsesAmmo = (select(2, UnitClass("player"))) == "HUNTER"
 local slotWidgets   = {}
 local tabFrames     = {}
 local tabBtnWidgets = {}
+local tabFrameAnchors = {}   -- records original parent+position for re-parentable tab frames
 local statRows      = {}
 local setRowWidgets = {}
 local repRows       = {}
@@ -493,8 +494,200 @@ local SC_THEMES = {
         tabActiveTxt  = {0.80, 1.00, 0.30},
         tabInactiveTxt= {0.48, 0.62, 0.26},
     },
+    teal = {
+        name="Teal",
+        frameBg  = {0.03, 0.10, 0.11, 0.97},
+        border   = {0.18, 0.60, 0.68, 1},
+        headerBg = {0.04, 0.14, 0.17, 1},
+        sep      = {0.12, 0.40, 0.46, 1},
+        div      = {0.08, 0.28, 0.32, 1},
+        sideBg   = {0.03, 0.11, 0.13, 1},
+        tabBarBg = {0.04, 0.14, 0.17, 1},
+        footBg   = {0.04, 0.12, 0.15, 1},
+        modelBg  = {0.01, 0.05, 0.06, 1},
+        tabActiveBg   = {0.08, 0.42, 0.50},
+        tabInactiveBg = {0.03, 0.11, 0.14},
+        tabActiveTxt  = {0.55, 1.00, 1.00},
+        tabInactiveTxt= {0.30, 0.58, 0.64},
+    },
+    magenta = {
+        name="Magenta",
+        frameBg  = {0.12, 0.03, 0.10, 0.97},
+        border   = {0.78, 0.18, 0.68, 1},
+        headerBg = {0.18, 0.04, 0.16, 1},
+        sep      = {0.52, 0.12, 0.44, 1},
+        div      = {0.36, 0.08, 0.30, 1},
+        sideBg   = {0.13, 0.03, 0.11, 1},
+        tabBarBg = {0.18, 0.04, 0.15, 1},
+        footBg   = {0.15, 0.04, 0.13, 1},
+        modelBg  = {0.06, 0.01, 0.05, 1},
+        tabActiveBg   = {0.50, 0.08, 0.44},
+        tabInactiveBg = {0.13, 0.03, 0.11},
+        tabActiveTxt  = {1.00, 0.58, 0.96},
+        tabInactiveTxt= {0.62, 0.32, 0.56},
+    },
+    solar = {
+        name="Solar",
+        frameBg  = {0.14, 0.07, 0.02, 0.97},
+        border   = {0.80, 0.36, 0.06, 1},
+        headerBg = {0.20, 0.10, 0.03, 1},
+        sep      = {0.54, 0.24, 0.04, 1},
+        div      = {0.38, 0.16, 0.03, 1},
+        sideBg   = {0.15, 0.07, 0.02, 1},
+        tabBarBg = {0.20, 0.10, 0.03, 1},
+        footBg   = {0.17, 0.09, 0.02, 1},
+        modelBg  = {0.07, 0.03, 0.01, 1},
+        tabActiveBg   = {0.52, 0.20, 0.03},
+        tabInactiveBg = {0.15, 0.07, 0.02},
+        tabActiveTxt  = {1.00, 0.80, 0.38},
+        tabInactiveTxt= {0.64, 0.46, 0.24},
+    },
+    navy = {
+        name="Navy",
+        frameBg  = {0.03, 0.05, 0.14, 0.97},
+        border   = {0.22, 0.36, 0.72, 1},
+        headerBg = {0.04, 0.07, 0.20, 1},
+        sep      = {0.14, 0.24, 0.50, 1},
+        div      = {0.10, 0.16, 0.36, 1},
+        sideBg   = {0.03, 0.05, 0.15, 1},
+        tabBarBg = {0.04, 0.07, 0.20, 1},
+        footBg   = {0.04, 0.06, 0.18, 1},
+        modelBg  = {0.01, 0.02, 0.07, 1},
+        tabActiveBg   = {0.10, 0.20, 0.52},
+        tabInactiveBg = {0.03, 0.05, 0.15},
+        tabActiveTxt  = {0.68, 0.82, 1.00},
+        tabInactiveTxt= {0.38, 0.50, 0.72},
+    },
+    lavender = {
+        name="Lavender",
+        frameBg  = {0.09, 0.07, 0.15, 0.97},
+        border   = {0.60, 0.50, 0.84, 1},
+        headerBg = {0.13, 0.10, 0.22, 1},
+        sep      = {0.40, 0.32, 0.60, 1},
+        div      = {0.28, 0.22, 0.44, 1},
+        sideBg   = {0.10, 0.08, 0.17, 1},
+        tabBarBg = {0.13, 0.10, 0.22, 1},
+        footBg   = {0.11, 0.09, 0.19, 1},
+        modelBg  = {0.04, 0.03, 0.08, 1},
+        tabActiveBg   = {0.36, 0.26, 0.62},
+        tabInactiveBg = {0.10, 0.08, 0.17},
+        tabActiveTxt  = {0.94, 0.86, 1.00},
+        tabInactiveTxt= {0.55, 0.46, 0.70},
+    },
+    ash = {
+        name="Ash",
+        frameBg  = {0.10, 0.09, 0.09, 0.97},
+        border   = {0.52, 0.48, 0.46, 1},
+        headerBg = {0.15, 0.13, 0.12, 1},
+        sep      = {0.34, 0.30, 0.28, 1},
+        div      = {0.24, 0.22, 0.20, 1},
+        sideBg   = {0.11, 0.09, 0.09, 1},
+        tabBarBg = {0.15, 0.13, 0.12, 1},
+        footBg   = {0.13, 0.11, 0.10, 1},
+        modelBg  = {0.05, 0.04, 0.04, 1},
+        tabActiveBg   = {0.30, 0.26, 0.24},
+        tabInactiveBg = {0.12, 0.10, 0.09},
+        tabActiveTxt  = {0.96, 0.94, 0.90},
+        tabInactiveTxt= {0.54, 0.50, 0.46},
+    },
+    ivory = {
+        name="Ivory",
+        frameBg  = {0.13, 0.10, 0.07, 0.97},
+        border   = {0.92, 0.82, 0.58, 1},
+        headerBg = {0.20, 0.15, 0.10, 1},
+        sep      = {0.62, 0.54, 0.34, 1},
+        div      = {0.40, 0.32, 0.20, 1},
+        sideBg   = {0.14, 0.11, 0.07, 1},
+        tabBarBg = {0.20, 0.15, 0.10, 1},
+        footBg   = {0.16, 0.12, 0.08, 1},
+        modelBg  = {0.06, 0.05, 0.03, 1},
+        tabActiveBg   = {0.60, 0.48, 0.26},
+        tabInactiveBg = {0.14, 0.11, 0.07},
+        tabActiveTxt  = {1.00, 0.96, 0.78},
+        tabInactiveTxt= {0.66, 0.58, 0.40},
+    },
+    cobalt = {
+        name="Cobalt",
+        frameBg  = {0.04, 0.06, 0.18, 0.97},
+        border   = {0.28, 0.50, 1.00, 1},
+        headerBg = {0.06, 0.10, 0.28, 1},
+        sep      = {0.18, 0.34, 0.70, 1},
+        div      = {0.12, 0.22, 0.48, 1},
+        sideBg   = {0.04, 0.07, 0.20, 1},
+        tabBarBg = {0.06, 0.10, 0.28, 1},
+        footBg   = {0.05, 0.08, 0.22, 1},
+        modelBg  = {0.02, 0.03, 0.09, 1},
+        tabActiveBg   = {0.14, 0.30, 0.68},
+        tabInactiveBg = {0.04, 0.07, 0.20},
+        tabActiveTxt  = {0.68, 0.84, 1.00},
+        tabInactiveTxt= {0.34, 0.50, 0.72},
+    },
+    amber = {
+        name="Amber",
+        frameBg  = {0.18, 0.09, 0.02, 0.97},
+        border   = {1.00, 0.62, 0.06, 1},
+        headerBg = {0.26, 0.13, 0.03, 1},
+        sep      = {0.70, 0.42, 0.04, 1},
+        div      = {0.46, 0.26, 0.02, 1},
+        sideBg   = {0.18, 0.09, 0.02, 1},
+        tabBarBg = {0.26, 0.13, 0.03, 1},
+        footBg   = {0.22, 0.11, 0.02, 1},
+        modelBg  = {0.08, 0.04, 0.01, 1},
+        tabActiveBg   = {0.60, 0.36, 0.02},
+        tabInactiveBg = {0.18, 0.09, 0.02},
+        tabActiveTxt  = {1.00, 0.88, 0.52},
+        tabInactiveTxt= {0.66, 0.52, 0.28},
+    },
+    terra = {
+        name="Terra",
+        frameBg  = {0.16, 0.07, 0.04, 0.97},
+        border   = {0.84, 0.36, 0.16, 1},
+        headerBg = {0.24, 0.10, 0.05, 1},
+        sep      = {0.56, 0.24, 0.10, 1},
+        div      = {0.38, 0.16, 0.06, 1},
+        sideBg   = {0.16, 0.07, 0.04, 1},
+        tabBarBg = {0.24, 0.10, 0.05, 1},
+        footBg   = {0.20, 0.09, 0.04, 1},
+        modelBg  = {0.07, 0.03, 0.02, 1},
+        tabActiveBg   = {0.52, 0.22, 0.08},
+        tabInactiveBg = {0.16, 0.08, 0.04},
+        tabActiveTxt  = {1.00, 0.76, 0.58},
+        tabInactiveTxt= {0.64, 0.42, 0.30},
+    },
+    plum = {
+        name="Plum",
+        frameBg  = {0.14, 0.04, 0.09, 0.97},
+        border   = {0.74, 0.14, 0.42, 1},
+        headerBg = {0.22, 0.06, 0.14, 1},
+        sep      = {0.50, 0.10, 0.28, 1},
+        div      = {0.34, 0.06, 0.18, 1},
+        sideBg   = {0.14, 0.04, 0.09, 1},
+        tabBarBg = {0.22, 0.06, 0.14, 1},
+        footBg   = {0.18, 0.05, 0.12, 1},
+        modelBg  = {0.06, 0.02, 0.04, 1},
+        tabActiveBg   = {0.48, 0.08, 0.28},
+        tabInactiveBg = {0.14, 0.04, 0.09},
+        tabActiveTxt  = {1.00, 0.62, 0.80},
+        tabInactiveTxt= {0.60, 0.30, 0.44},
+    },
+    jade = {
+        name="Jade",
+        frameBg  = {0.05, 0.13, 0.09, 0.97},
+        border   = {0.28, 0.80, 0.52, 1},
+        headerBg = {0.07, 0.20, 0.13, 1},
+        sep      = {0.18, 0.54, 0.34, 1},
+        div      = {0.12, 0.36, 0.22, 1},
+        sideBg   = {0.05, 0.14, 0.09, 1},
+        tabBarBg = {0.07, 0.20, 0.13, 1},
+        footBg   = {0.06, 0.17, 0.11, 1},
+        modelBg  = {0.02, 0.06, 0.04, 1},
+        tabActiveBg   = {0.12, 0.48, 0.28},
+        tabInactiveBg = {0.05, 0.13, 0.09},
+        tabActiveTxt  = {0.62, 1.00, 0.78},
+        tabInactiveTxt= {0.32, 0.60, 0.44},
+    },
 }
-local SC_THEME_ORDER = {"shadow","midnight","crimson","emerald","gold","storm","void","frost","obsidian","copper","rose","venom"}
+local SC_THEME_ORDER = {"shadow","midnight","crimson","emerald","gold","storm","void","frost","obsidian","copper","rose","venom","teal","magenta","solar","navy","lavender","ash","ivory","cobalt","amber","terra","plum","jade"}
 local themeRefs = {}   -- texture handles populated in SC_BuildMain
 
 -- If SlyStyle (SlySuite_Style addon) is loaded, use its shared theme table so
@@ -528,7 +721,17 @@ function SC_ApplyTheme(name)
     if r.themeBtn then
         r.themeBtn:SetText("|cffbbbbff"..th.name.."|r")
     end
-    SC_SwitchTab(SC.db and SC.db.lastTab or "stats")
+    -- Repaint tab button colors for the new theme without the side-effect of
+    -- SC_SwitchTab which can open wing flyouts (bug: sets wing auto-opened on reload).
+    local curTab = (SC.db and SC.db.lastTab) or "stats"
+    for k, tb in pairs(tabBtnWidgets) do
+        local a = (k == curTab)
+        local bg = a and th.tabActiveBg  or th.tabInactiveBg
+        local tx = a and th.tabActiveTxt or th.tabInactiveTxt
+        tb.bg:SetColorTexture(bg[1], bg[2], bg[3], 1)
+        tb.txt:SetTextColor(tx[1], tx[2], tx[3])
+        tb.txt:SetFont(tb.txt:GetFont(), a and 11 or 10, a and "OUTLINE" or "")
+    end
 end
 
 function SC_CycleTheme()
@@ -3813,6 +4016,15 @@ function SC_SwitchTab(name)
         SC_ToggleWing("social")
         name = "stats"
     end
+    -- In slychar_flyout mode, stats/sets/misc open as wing flyouts
+    local mode = (SC.db and SC.db.mode) or "native_flyout"
+    if mode == "slychar_flyout" and (name == "stats" or name == "sets" or name == "misc") then
+        SC.db.lastTab = name
+        SC_ToggleWing(name)
+        return
+    end
+    -- Restore any tab frames that may have been displaced into wing panes
+    RestoreTabFramesToSide()
     -- if still unknown, fall back to stats
     if not tabFrames[name] then name = "stats" end
     SC.db.lastTab = name
@@ -3926,6 +4138,8 @@ function SC_RefreshAll()
         if activeWingKey == "nit"    then SC_RefreshNIT()    end
         if activeWingKey == "social" then SC_RefreshSocial() end
         if activeWingKey == "macros" then SC_RefreshMacros() end
+        if activeWingKey == "stats"  then SC_RefreshStats()  end
+        if activeWingKey == "sets"   then SC_RefreshSets()   end
     end
 end
 
@@ -4056,20 +4270,50 @@ local function SC_OpenPanel(addonName, frameGlobal, fallbackFn)
     end
 end
 
+-- ============================================================
 -- Wing Panel — slides out to the right of the main frame.
 -- Keys: "social" (NIT), "spells", "talents"
 -- ============================================================
+
+-- Restore stats/sets tab frames to their original parent (side panel) if they
+-- were re-parented into wing panes by slychar_flyout mode.
+local function RestoreTabFramesToSide()
+    for key, anch in pairs(tabFrameAnchors) do
+        local tf = tabFrames[key]
+        if tf and tf:GetParent() ~= anch.parent then
+            tf:SetParent(anch.parent)
+            tf:ClearAllPoints()
+            tf:SetPoint("TOPLEFT",  anch.parent, "TOPLEFT",  0, anch.y)
+            tf:SetPoint("TOPRIGHT", anch.parent, "TOPRIGHT", 0, anch.y)
+            tf:SetHeight(anch.h)
+            tf:Hide()
+        end
+    end
+end
+
 function SC_ToggleWing(key)
     if not wingFrame then return end
     if activeWingKey == key and wingFrame:IsShown() then
+        RestoreTabFramesToSide()
         wingFrame:Hide() ; activeWingKey = nil ; return
     end
     activeWingKey = key
     for k, p in pairs(wingPanes) do
         if k == key then p:Show() else p:Hide() end
     end
+    -- For stats/sets/misc in slychar_flyout mode: re-parent the tab frame into its wing pane
+    if (key == "stats" or key == "sets" or key == "misc") and wingPanes[key] and tabFrames[key] and tabFrameAnchors[key] then
+        local tf = tabFrames[key]
+        tf:SetParent(wingPanes[key])
+        tf:ClearAllPoints()
+        tf:SetAllPoints(wingPanes[key])
+        tf:Show()
+        if key == "stats" then SC_RefreshStats() end
+        if key == "sets"  then SC_RefreshSets()  end
+        if key == "misc"  then SC_RefreshMisc()  end
+    end
     local macrosTitle = ((UnitClass and UnitClass("player")) or "Class") .. " Macros"
-    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents", macros=macrosTitle, rep="Reputation", skills="Skills", honor="Honor" }
+    local WING_TITLES = { social="Friends & Guild", nit="Lockouts & Layer", spells="Spellbook", talents="Talents", macros=macrosTitle, rep="Reputation", skills="Skills", honor="Honor", stats="Extended Stats", sets="Gear Sets", misc="Apps" }
     if wingTitleTx then wingTitleTx:SetText(WING_TITLES[key] or key) end
     wingFrame:Show()
     if key == "spells"  then SC_RefreshSpells()      end
@@ -4079,6 +4323,14 @@ function SC_ToggleWing(key)
     if key == "rep"     then SC_RefreshReputation()  end
     if key == "skills"  then SC_RefreshSkills()      end
     if key == "honor"   then SC_RefreshHonor()       end
+end
+
+-- Re-anchor the wing panel to a different frame (used when switching between
+-- native_flyout companion and SlyCharMainFrame).
+function SC_ReparentWing(anchor)
+    if not wingFrame or not anchor then return end
+    wingFrame:ClearAllPoints()
+    wingFrame:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 0, 0)
 end
 
 
@@ -4150,6 +4402,7 @@ local function BuildWingFrame(mainFrame)
     closeBtn:SetSize(24, 24)
     closeBtn:SetPoint("RIGHT", hdr, "RIGHT", -4, 0)
     closeBtn:SetScript("OnClick", function()
+        RestoreTabFramesToSide()
         f:Hide() ; activeWingKey = nil
     end)
 
@@ -4327,7 +4580,173 @@ local function BuildWingFrame(mainFrame)
     wingFoot:SetSize(WING_W, FOOT_H)
     wingFoot:SetPoint("BOTTOM", f, "BOTTOM", 0, 0)
     ThemeFill(wingFoot, "footBg", 0.07, 0.07, 0.10, 1)
+
+    -- Stats/Sets/Misc flyout panes — empty containers; in slychar_flyout mode the
+    -- corresponding tabFrames are re-parented here by SC_ToggleWing.
+    local statsWingPane = CreateFrame("Frame", nil, f)
+    statsWingPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    statsWingPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    ThemeFill(statsWingPane, "sideBg", 0.04, 0.04, 0.07, 1)
+    statsWingPane:Hide()
+    wingPanes["stats"] = statsWingPane
+
+    local setsWingPane = CreateFrame("Frame", nil, f)
+    setsWingPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    setsWingPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    ThemeFill(setsWingPane, "sideBg", 0.04, 0.04, 0.07, 1)
+    setsWingPane:Hide()
+    wingPanes["sets"] = setsWingPane
+
+    local miscWingPane = CreateFrame("Frame", nil, f)
+    miscWingPane:SetPoint("TOPLEFT",     f, "TOPLEFT",     2, -(HDR_H + 1))
+    miscWingPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, FOOT_H)
+    ThemeFill(miscWingPane, "sideBg", 0.04, 0.04, 0.07, 1)
+    miscWingPane:Hide()
+    wingPanes["misc"] = miscWingPane
 end
+
+-- ============================================================
+-- Native Companion — thin button strip docked to CharacterFrame
+-- Shown in "native_flyout" mode; opens wing panes alongside the
+-- native WoW character sheet.
+-- ============================================================
+local nativeCompanion  = nil
+local COMP_BTN_W       = 34
+local NATIVE_COMP_BTNS = {
+    { key="rep",     lbl="Rep",  tip="Reputation",           r=0.20, g=0.60, b=1.00 },  -- sky blue
+    { key="skills",  lbl="Sk",   tip="Skills",               r=0.25, g=1.00, b=0.40 },  -- neon green
+    { key="honor",   lbl="Hk",   tip="Honor",                r=1.00, g=0.20, b=0.25 },  -- crimson
+    { key="macros",  lbl="Mc",   tip="Class Macros",         r=1.00, g=0.65, b=0.00 },  -- amber
+    { key="social",  lbl="Fr",   tip="Friends & Guild",      r=0.10, g=0.85, b=0.55 },  -- teal
+    { key="nit",     lbl="NIT",  tip="Lockouts & Layer",     r=0.85, g=0.20, b=1.00 },  -- violet
+    { key="talents", lbl="T",    tip="Talents",              r=1.00, g=0.80, b=0.10 },  -- gold
+    { key="spells",  lbl="Sp",   tip="Spellbook",            r=0.30, g=0.75, b=1.00 },  -- cornflower
+    { key="stats",   lbl="St",   tip="Extended Stats",       r=0.90, g=0.40, b=1.00 },  -- orchid
+    { key="sets",    lbl="Set",  tip="Gear Sets",            r=1.00, g=0.40, b=0.10 },  -- orange
+}
+
+-- Lazily build (or re-use) SlyCharMainFrame so wing panes are available.
+-- Keeps the main frame hidden; re-anchors the wing to 'companion'.
+local function EnsureMainForCompanion(companion)
+    if not SlyCharMainFrame then
+        if InCombatLockdown() then return false end
+        local ok = pcall(SC_BuildMain)
+        if not ok or not SlyCharMainFrame then return false end
+        SlyCharMainFrame:Hide()
+    end
+    SC_ReparentWing(companion)
+    return true
+end
+
+function SC_BuildNativeCompanion()
+    if nativeCompanion then return nativeCompanion end
+    if not CharacterFrame then return nil end
+
+    local BSZ  = COMP_BTN_W - 4
+    local STEP = BSZ + 2
+    local totalH = #NATIVE_COMP_BTNS * STEP + 4
+
+    local f = CreateFrame("Frame", "SlyCharNativeCompanion", UIParent)
+    f:SetSize(COMP_BTN_W, totalH)
+    f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel(100)
+    f:SetPoint("TOPLEFT", CharacterFrame, "TOPRIGHT", -1, 0)
+    f:Hide()
+
+    if f.SetBackdrop then
+        f:SetBackdrop({
+            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile=true, tileSize=16, edgeSize=8,
+            insets={left=2, right=2, top=2, bottom=2},
+        })
+        f:SetBackdropColor(0.04, 0.03, 0.08, 0.95)
+        f:SetBackdropBorderColor(0.25, 0.20, 0.38, 1)
+    else
+        local bg = f:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.04, 0.03, 0.08, 0.95)
+    end
+
+    for i, bd in ipairs(NATIVE_COMP_BTNS) do
+        local btn = CreateFrame("Button", nil, f)
+        btn:SetSize(BSZ, BSZ)
+        btn:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -(2 + (i-1)*STEP))
+        btn:EnableMouse(true)
+
+        local bbg = btn:CreateTexture(nil, "BACKGROUND")
+        bbg:SetAllPoints()
+        bbg:SetColorTexture(bd.r*0.10, bd.g*0.10, bd.b*0.10, 1)
+
+        local accent = btn:CreateTexture(nil, "ARTWORK")
+        accent:SetSize(2, BSZ)
+        accent:SetPoint("LEFT", btn, "LEFT", 0, 0)
+        accent:SetColorTexture(bd.r, bd.g, bd.b, 0.8)
+
+        local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetAllPoints()
+        lbl:SetFont(lbl:GetFont(), 8, "OUTLINE")
+        lbl:SetText(bd.lbl)
+        lbl:SetTextColor(bd.r, bd.g, bd.b)
+
+        btn:SetScript("OnEnter", function()
+            bbg:SetColorTexture(bd.r*0.25, bd.g*0.25, bd.b*0.25, 1)
+            GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+            GameTooltip:SetText(bd.tip, bd.r, bd.g, bd.b)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function()
+            bbg:SetColorTexture(bd.r*0.10, bd.g*0.10, bd.b*0.10, 1)
+            GameTooltip:Hide()
+        end)
+        btn:SetScript("OnClick", function()
+            local key = bd.key
+            if key == "stats" or key == "sets" then
+                -- These need the full SlyChar panel; open it next to CharacterFrame
+                if EnsureMainForCompanion(f) and SlyCharMainFrame then
+                    SlyCharMainFrame:ClearAllPoints()
+                    SlyCharMainFrame:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, 0)
+                    SC_SwitchTab(key)
+                    SlyCharMainFrame:Show()
+                    SlyCharMainFrame:SetAlpha(1)
+                    SC_RefreshAll()
+                end
+            else
+                if EnsureMainForCompanion(f) then
+                    SC_ToggleWing(key)
+                end
+            end
+        end)
+    end
+
+    nativeCompanion = f
+    return f
+end
+
+function SC_ShowNativeCompanion()
+    if not nativeCompanion then SC_BuildNativeCompanion() end
+    if nativeCompanion then nativeCompanion:Show() end
+end
+
+function SC_HideNativeCompanion()
+    if nativeCompanion then nativeCompanion:Hide() end
+    if wingFrame        then wingFrame:Hide() ; activeWingKey = nil end
+    -- Hide SlyChar main if it was opened for stats/sets in native mode
+    if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+        SlyCharMainFrame:Hide()
+    end
+end
+
+-- ============================================================
+-- Mode data (used by settings panel and chat messages)
+-- ============================================================
+local MODE_LABELS = { native_flyout="Flyout", slychar="Full", slychar_flyout="Fly+" }
+local MODE_ORDER  = { "native_flyout", "slychar", "slychar_flyout" }
+local MODE_COLORS = {
+    native_flyout  = { r=0.30, g=0.80, b=1.00, hex="4dcfff" },  -- sky blue
+    slychar        = { r=1.00, g=0.80, b=0.10, hex="ffcc1a" },  -- gold
+    slychar_flyout = { r=0.90, g=0.35, b=1.00, hex="e659ff" },  -- orchid
+}
 
 -- ============================================================
 -- Build main frame (lazy, called once)
@@ -4452,34 +4871,11 @@ function SC_BuildMain()
     end)
     chrBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Theme cycle button
-    local themeBtn = CreateFrame("Button", nil, hdr)
-    themeBtn:SetSize(56, 18)
-    themeBtn:SetPoint("RIGHT", chrBtn, "LEFT", -4, 0)
-    themeBtn:EnableMouse(true)
-    themeBtn:RegisterForClicks("LeftButtonUp")
-    local themeBtnBg = themeBtn:CreateTexture(nil, "BACKGROUND")
-    themeBtnBg:SetAllPoints(themeBtn)
-    themeBtnBg:SetColorTexture(0.12, 0.12, 0.20, 0.90)
-    local themeBtnHl = themeBtn:CreateTexture(nil, "HIGHLIGHT")
-    themeBtnHl:SetAllPoints(themeBtn)
-    themeBtnHl:SetColorTexture(1, 1, 1, 0.12)
-    local themeBtnTx = themeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    themeBtnTx:SetFont(themeBtnTx:GetFont(), 9, "OUTLINE")
-    themeBtnTx:SetAllPoints(themeBtn) ; themeBtnTx:SetJustifyH("CENTER")
-    themeBtnTx:SetText("|cffbbbbffShadow|r")
-    themeBtn:SetScript("OnClick", SC_CycleTheme)
-    themeBtn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:SetText("Cycle theme", 1, 0.82, 0)
-        for _, k in ipairs(SC_THEME_ORDER) do
-            local isActive = (SC.db.theme == k)
-            GameTooltip:AddLine((isActive and "|cffffd700> " or "  ") .. SC_THEMES[k].name .. (isActive and " (active)|r" or ""), 0.8, 0.8, 0.8)
-        end
-        GameTooltip:Show()
-    end)
-    themeBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    themeRefs.themeBtn = themeBtnTx
+    -- Constrain headerInfo between the character name and the right-hand header buttons.
+    headerInfo:ClearAllPoints()
+    headerInfo:SetPoint("LEFT",  headerName, "RIGHT", 10, 0)
+    headerInfo:SetPoint("RIGHT", chrBtn,     "LEFT",  -8, 0)
+    headerInfo:SetJustifyH("CENTER")
 
     -- Header drag: drag the empty chrome area to move the whole frame
     hdr:EnableMouse(true)
@@ -4610,6 +5006,7 @@ function SC_BuildMain()
     statsTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
     statsTab:SetHeight(tcH) ; statsTab:Hide()
     tabFrames["stats"] = statsTab
+    tabFrameAnchors["stats"] = { parent = side, y = tcY, h = tcH }
 
     local statsScroll = CreateFrame("ScrollFrame", nil, statsTab, "UIPanelScrollFrameTemplate")
     statsScroll:SetPoint("TOPLEFT",     statsTab, "TOPLEFT",      PAD,  -2)
@@ -4624,6 +5021,7 @@ function SC_BuildMain()
     setsTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
     setsTab:SetHeight(tcH) ; setsTab:Hide()
     tabFrames["sets"] = setsTab
+    tabFrameAnchors["sets"] = { parent = side, y = tcY, h = tcH }
 
     -- Sub-tab strip: [Gear Sets][Bars][BIS]
     local sBW = math.floor(SIDE_W / 3)
@@ -4817,12 +5215,115 @@ function SC_BuildMain()
     miscTab:SetPoint("TOPRIGHT", side, "TOPRIGHT", 0, tcY)
     miscTab:SetHeight(tcH) ; miscTab:Hide()
     tabFrames["misc"] = miscTab
+    tabFrameAnchors["misc"] = { parent = side, y = tcY, h = tcH }
 
     -- Build the apps grid lazily on first show (ensures wingFrame exists)
     local appsBuilt = false
     miscTab:SetScript("OnShow", function()
         if appsBuilt then return end
         appsBuilt = true
+
+        -- ── Settings rows (theme + mode) ──────────────────────────────────
+        local SET_ROW_H = 22
+        local appW2     = SIDE_W - PAD * 2
+
+        -- Theme row
+        local themeSLbl = miscTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        themeSLbl:SetFont(themeSLbl:GetFont(), 9, "")
+        themeSLbl:SetPoint("TOPLEFT", miscTab, "TOPLEFT", PAD, -8)
+        themeSLbl:SetText("Theme:")
+        themeSLbl:SetTextColor(0.55, 0.55, 0.65)
+
+        local themeSBtn = CreateFrame("Button", nil, miscTab)
+        themeSBtn:SetSize(appW2 - 52, SET_ROW_H)
+        themeSBtn:SetPoint("TOPLEFT", miscTab, "TOPLEFT", PAD + 50, -4)
+        themeSBtn:EnableMouse(true) ; themeSBtn:RegisterForClicks("LeftButtonUp")
+        local tsBg = themeSBtn:CreateTexture(nil, "BACKGROUND")
+        tsBg:SetAllPoints() ; tsBg:SetColorTexture(0.12, 0.12, 0.20, 0.90)
+        local tsHl = themeSBtn:CreateTexture(nil, "HIGHLIGHT")
+        tsHl:SetAllPoints() ; tsHl:SetColorTexture(1, 1, 1, 0.12)
+        local tsTx = themeSBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tsTx:SetFont(tsTx:GetFont(), 9, "OUTLINE")
+        tsTx:SetAllPoints() ; tsTx:SetJustifyH("CENTER")
+        local curThemeName = SC_THEMES[(SC.db and SC.db.theme) or "shadow"]
+        tsTx:SetText("|cffbbbbff"..(curThemeName and curThemeName.name or "Shadow").."|r")
+        themeSBtn:SetScript("OnClick", SC_CycleTheme)
+        themeSBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText("Cycle colour theme", 1, 0.82, 0)
+            for _, k in ipairs(SC_THEME_ORDER) do
+                local isActive = (SC.db and SC.db.theme == k)
+                GameTooltip:AddLine((isActive and "|cffffd700> " or "  ") .. SC_THEMES[k].name .. (isActive and " (active)|r" or ""), 0.8, 0.8, 0.8)
+            end
+            GameTooltip:Show()
+        end)
+        themeSBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        themeRefs.themeBtn = tsTx   -- register so SC_ApplyTheme updates this label
+
+        -- Mode row
+        local modeSLbl = miscTab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        modeSLbl:SetFont(modeSLbl:GetFont(), 9, "")
+        modeSLbl:SetPoint("TOPLEFT", miscTab, "TOPLEFT", PAD, -(8 + SET_ROW_H + 6))
+        modeSLbl:SetText("Mode:")
+        modeSLbl:SetTextColor(0.55, 0.55, 0.65)
+
+        local modeSBtn = CreateFrame("Button", nil, miscTab)
+        modeSBtn:SetSize(appW2 - 52, SET_ROW_H)
+        modeSBtn:SetPoint("TOPLEFT", miscTab, "TOPLEFT", PAD + 50, -(4 + SET_ROW_H + 6))
+        modeSBtn:EnableMouse(true) ; modeSBtn:RegisterForClicks("LeftButtonUp")
+        local msBord = modeSBtn:CreateTexture(nil, "BACKGROUND")
+        msBord:SetAllPoints() ; msBord:SetColorTexture(0.30, 0.80, 1.00, 0.55)
+        local msBg = modeSBtn:CreateTexture(nil, "ARTWORK")
+        msBg:SetPoint("TOPLEFT",     modeSBtn, "TOPLEFT",      1, -1)
+        msBg:SetPoint("BOTTOMRIGHT", modeSBtn, "BOTTOMRIGHT", -1,  1)
+        msBg:SetColorTexture(0.04, 0.10, 0.16, 0.95)
+        local msHl = modeSBtn:CreateTexture(nil, "HIGHLIGHT")
+        msHl:SetAllPoints() ; msHl:SetColorTexture(1, 1, 1, 0.14)
+        local msTx = modeSBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        msTx:SetFont(msTx:GetFont(), 9, "OUTLINE")
+        msTx:SetAllPoints() ; msTx:SetJustifyH("CENTER")
+        local function refreshModeSBtn()
+            local cur = (SC.db and SC.db.mode) or "native_flyout"
+            local mc  = MODE_COLORS[cur] or MODE_COLORS.native_flyout
+            msTx:SetText("|cff" .. mc.hex .. (MODE_LABELS[cur] or cur) .. "|r")
+            msBord:SetColorTexture(mc.r, mc.g, mc.b, 0.55)
+            msBg:SetColorTexture(mc.r * 0.06, mc.g * 0.06, mc.b * 0.06, 0.95)
+        end
+        refreshModeSBtn()
+        modeSBtn:SetScript("OnClick", function()
+            local cur = (SC.db and SC.db.mode) or "native_flyout"
+            local nxt
+            for i, m in ipairs(MODE_ORDER) do
+                if m == cur then nxt = MODE_ORDER[(i % #MODE_ORDER) + 1] ; break end
+            end
+            nxt = nxt or "native_flyout"
+            if SC.db then SC.db.mode = nxt end
+            refreshModeSBtn()
+            local nc = MODE_COLORS[nxt] or MODE_COLORS.native_flyout
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Mode \226\134\146 |cff" .. nc.hex .. nxt .. "|r  (/reload to apply)")
+        end)
+        modeSBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText("Panel mode (click to cycle)", 1, 0.82, 0)
+            GameTooltip:AddLine("|cff4dcfffFlyout|r  native paperdoll + SlyChar flyouts", 0.8, 0.8, 0.8)
+            GameTooltip:AddLine("|cffffcc1aFull|r    full SlyChar panel with side tabs",   0.8, 0.8, 0.8)
+            GameTooltip:AddLine("|cffe659ffFly+|r    compact SlyChar + detached flyouts",  0.8, 0.8, 0.8)
+            GameTooltip:AddLine("|cffaaaaaa/reload required to apply.|r", 0.6, 0.6, 0.6)
+            GameTooltip:Show()
+        end)
+        modeSBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        -- Thin separator between settings and apps
+        local setSep = miscTab:CreateTexture(nil, "ARTWORK")
+        setSep:SetSize(appW2, 1)
+        setSep:SetPoint("TOPLEFT", miscTab, "TOPLEFT", PAD, -(4 + SET_ROW_H*2 + 6 + 8))
+        setSep:SetColorTexture(0.22, 0.22, 0.30, 1)
+
+        -- ── App launcher grid ─────────────────────────────────────────────
+        -- Settings section takes ~60px, leaving ~269px for the app grid.
+        -- Using ROW_H=36 + 2 gap: 7 rows = 7*38=266px ≤ 269px.
+        local APPS_GRID_TOP = 4 + SET_ROW_H*2 + 6 + 10  -- ~60
+
         local APP_ITEMS = {
             { tip="Reputation",      desc="Factions & standing",             lbl="Rep", r=0.70, g=0.85, b=1.00,
               fn=function() SC_ToggleWing("rep")    end },
@@ -4872,16 +5373,16 @@ function SC_BuildMain()
             { tip="Lockouts",        desc="Alt lockouts & layer detection",   lbl="NIT", r=0.30, g=0.80, b=1.00,
               fn=function() SC_ToggleWing("nit")    end },
         }
-        -- 2-column grid: ceil(13/2)=7 rows × 44px = 322px + 4px top pad = 326px ≤ tcH(329)
-        local ROW_H   = 44
+        -- 2-column grid; ROW_H reduced to 36 to fit below the settings section.
+        local ROW_H   = 36
         local COL_GAP = 4
-        local appW    = SIDE_W - PAD * 2                          -- 314
-        local colW    = math.floor((appW - COL_GAP) / 2)         -- 155
+        local appW    = SIDE_W - PAD * 2
+        local colW    = math.floor((appW - COL_GAP) / 2)
         for i, item in ipairs(APP_ITEMS) do
-            local col    = (i - 1) % 2                           -- 0 = left, 1 = right
-            local rowIdx = math.floor((i - 1) / 2)              -- 0-based row
+            local col    = (i - 1) % 2
+            local rowIdx = math.floor((i - 1) / 2)
             local xOff   = PAD + col * (colW + COL_GAP)
-            local yOff   = -(rowIdx * (ROW_H + 2) + 4)
+            local yOff   = -(APPS_GRID_TOP + rowIdx * (ROW_H + 2))
 
             local btn = CreateFrame("Button", nil, miscTab)
             btn:SetSize(colW, ROW_H)
@@ -4939,29 +5440,29 @@ function SC_BuildMain()
     ThemeFill(btnStrip, "sideBg", 0.05, 0.04, 0.08, 1)
 
     local STRIP_BTNS = {
-        { tip="Reputation",  desc="Factions & standing",           lbl="Rep", r=0.70, g=0.85, b=1.00,
+        { tip="Reputation",  desc="Factions & standing",           lbl="Rep", r=0.20, g=0.60, b=1.00,
           fn=function() SC_ToggleWing("rep")    end },
-        { tip="Skills",      desc="Professions & secondary skills", lbl="Sk",  r=0.65, g=1.00, b=0.65,
+        { tip="Skills",      desc="Professions & secondary skills", lbl="Sk",  r=0.25, g=1.00, b=0.40,
           fn=function() SC_ToggleWing("skills") end },
-        { tip="Honor",       desc="PvP honor, HKs & arena points", lbl="Hk",  r=1.00, g=0.45, b=0.45,
+        { tip="Honor",       desc="PvP honor, HKs & arena points", lbl="Hk",  r=1.00, g=0.15, b=0.20,
           fn=function() SC_ToggleWing("honor")  end },
-        { tip="Talents",   desc="Open Talent frame",          lbl="T",   r=0.75, g=0.50, b=1.00,
+        { tip="Talents",   desc="Open Talent frame",          lbl="T",   r=1.00, g=0.80, b=0.10,
           fn=function()
               SC_ToggleSidePanel(SC_GetTalentFrame())
           end },
-        { tip="Spellbook", desc="Open Spellbook",             lbl="Sp",  r=0.35, g=0.70, b=1.00,
+        { tip="Spellbook", desc="Open Spellbook",             lbl="Sp",  r=0.30, g=0.75, b=1.00,
           fn=function()
               SC_OpenPanel("Blizzard_SpellBookUI", "SpellBookFrame", ToggleSpellBook)
           end },
-        { tip="Quest Log", desc="Open Quest Log",             lbl="Q",   r=1.00, g=0.78, b=0.15,
+        { tip="Quest Log", desc="Open Quest Log",             lbl="Q",   r=1.00, g=0.90, b=0.00,
           fn=function()
               SC_OpenPanel("Blizzard_QuestLog", "QuestLogFrame", ToggleQuestLog)
           end },
-        { tip="World Map", desc="Open World Map",             lbl="M",   r=0.25, g=0.85, b=0.30,
+        { tip="World Map", desc="Open World Map",             lbl="M",   r=0.10, g=0.95, b=0.20,
           fn=function()
               SC_OpenPanel("Blizzard_MapCanvas", "WorldMapFrame", ToggleWorldMap)
           end },
-        { tip="Bag",       desc="Open bag window",               lbl="B",   r=0.85, g=0.65, b=0.20,
+        { tip="Bag",       desc="Open bag window",               lbl="B",   r=1.00, g=0.50, b=0.00,
           fn=function()
               if SlyBagFrame then
                   if SlyBagFrame:IsShown() then
@@ -4976,7 +5477,7 @@ function SC_BuildMain()
                   DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[SlyChar]|r SlyBag is not loaded — enable it in /sly")
               end
           end },
-        { tip="SlyLoot SR",  desc="Soft Res & Loot rolls",  lbl="SR",  r=0.20, g=0.90, b=0.50,
+        { tip="SlyLoot SR",  desc="Soft Res & Loot rolls",  lbl="SR",  r=0.45, g=1.00, b=0.10,
           fn=function()
               if SlyLootPanel and SlyLootPanel:IsShown() then
                   SlyLootPanel:Hide() ; return
@@ -4996,7 +5497,7 @@ function SC_BuildMain()
                   SlyLootPanel:SetPoint("TOPLEFT", SlyCharMainFrame, "TOPRIGHT", 4, 0)
               end
           end },
-        { tip="Whelp",      desc="Vendor ratings & reviews", lbl="Wh",  r=0.20, g=0.78, b=1.00,
+        { tip="Whelp",      desc="Vendor ratings & reviews", lbl="Wh",  r=0.00, g=0.88, b=1.00,
           fn=function()
               local wp = _G["SlyWhelpPanelFrame"]
               if wp then
@@ -5004,19 +5505,27 @@ function SC_BuildMain()
                   else wp:Show() end
               end
           end },
-        { tip="Class Macros",   desc="Macro library for your class (by spec)",         lbl="Mc", r=0.95, g=0.70, b=0.20,
+        { tip="Class Macros",   desc="Macro library for your class (by spec)",         lbl="Mc", r=1.00, g=0.65, b=0.00,
           fn=function()
               SC_ToggleWing("macros")
           end },
-        { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.40, g=0.90, b=0.60,
+        { tip="Friends & Guild", desc="Online friends and guild members", lbl="Fr",  r=0.10, g=0.85, b=0.55,
           fn=function()
               SC_ToggleWing("social")
           end },
-        { tip="Lockouts & Layer", desc="Alt instance lockouts, layer detection", lbl="NIT", r=0.30, g=0.80, b=1.00,
+        { tip="Lockouts & Layer", desc="Alt instance lockouts, layer detection", lbl="NIT", r=0.85, g=0.20, b=1.00,
           fn=function()
               SC_ToggleWing("nit")
           end },
     }
+
+    -- In slychar_flyout mode, prepend the tab-replacement entries so Stats/Sets/Apps
+    -- are accessible from the strip flyout (the side panel is hidden in this mode).
+    if (SC.db and SC.db.mode) == "slychar_flyout" then
+        table.insert(STRIP_BTNS, 1, { tip="Apps",  desc="Panel launchers & linked addons",  lbl="App", r=0.70, g=0.75, b=1.00, fn=function() SC_ToggleWing("misc")  end })
+        table.insert(STRIP_BTNS, 1, { tip="Gear Sets",      desc="Set management & BIS gear",        lbl="Set", r=1.00, g=0.40, b=0.10, fn=function() SC_ToggleWing("sets")  end })
+        table.insert(STRIP_BTNS, 1, { tip="Extended Stats", desc="Character stats & ratings",        lbl="St",  r=0.90, g=0.40, b=1.00, fn=function() SC_ToggleWing("stats") end })
+    end
 
     local bSz = BTN_STRIP_W - 6  -- 26px buttons with 3px margin each side
 
@@ -5047,7 +5556,9 @@ function SC_BuildMain()
 
     flyoutMenu:SetScript("OnShow", function()
         flyoutMenu:ClearAllPoints()
-        flyoutMenu:SetPoint("TOPLEFT", f, "TOPRIGHT", 2, -HDR_H)
+        -- Always open the popup to the LEFT of the button strip.
+        -- (Anchoring to TOPRIGHT of the main frame puts it off-screen in all modes.)
+        flyoutMenu:SetPoint("TOPRIGHT", btnStrip, "TOPLEFT", -2, 0)
     end)
 
     tinsert(UISpecialFrames, "SlyCharStripFlyout")
@@ -5067,7 +5578,7 @@ function SC_BuildMain()
 
         local rowBg = row:CreateTexture(nil, "BACKGROUND")
         rowBg:SetAllPoints(row)
-        rowBg:SetColorTexture(bd.r*0.08, bd.g*0.08, bd.b*0.08, 1)
+        rowBg:SetColorTexture(bd.r*0.14, bd.g*0.14, bd.b*0.14, 1)
 
         local accent = row:CreateTexture(nil, "ARTWORK")
         accent:SetSize(3, FLYOUT_RH - 2)
@@ -5091,7 +5602,7 @@ function SC_BuildMain()
             GameTooltip:Show()
         end)
         row:SetScript("OnLeave", function()
-            rowBg:SetColorTexture(bd.r*0.08, bd.g*0.08, bd.b*0.08, 1)
+            rowBg:SetColorTexture(bd.r*0.14, bd.g*0.14, bd.b*0.14, 1)
             GameTooltip:Hide()
         end)
         row:SetScript("OnClick", function()
@@ -5141,7 +5652,42 @@ function SC_BuildMain()
         end
     end)
 
-    -- ── Suite flyout panel (right-hand side panel outside the character sheet) ───
+    -- Quick-access buttons for Stats and Sets, sitting below >> on the strip.
+    -- These are always visible for instant tab switching without opening the flyout.
+    local STRIP_QUICK = {
+        { lbl="St",  tip="Extended Stats",  r=0.90, g=0.40, b=1.00, fn=function() SC_SwitchTab("stats") end },
+        { lbl="Set", tip="Gear Sets",        r=1.00, g=0.40, b=0.10, fn=function() SC_SwitchTab("sets")  end },
+    }
+    local prevBtn = stripFlyoutBtn
+    for _, qd in ipairs(STRIP_QUICK) do
+        local qb = CreateFrame("Button", nil, btnStrip)
+        qb:SetSize(bSz, bSz)
+        qb:SetPoint("TOP", prevBtn, "BOTTOM", 0, -2)
+        qb:EnableMouse(true)
+        local qbg = qb:CreateTexture(nil, "BACKGROUND")
+        qbg:SetAllPoints()
+        qbg:SetColorTexture(qd.r*0.10, qd.g*0.10, qd.b*0.10, 1)
+        local qacc = qb:CreateTexture(nil, "ARTWORK")
+        qacc:SetSize(2, bSz)
+        qacc:SetPoint("LEFT", qb, "LEFT", 0, 0)
+        qacc:SetColorTexture(qd.r, qd.g, qd.b, 0.85)
+        local qtx = qb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        qtx:SetFont(qtx:GetFont(), 8, "OUTLINE")
+        qtx:SetAllPoints() ; qtx:SetJustifyH("CENTER")
+        qtx:SetText(qd.lbl) ; qtx:SetTextColor(qd.r, qd.g, qd.b)
+        qb:SetScript("OnEnter", function()
+            qbg:SetColorTexture(qd.r*0.28, qd.g*0.28, qd.b*0.28, 1)
+            GameTooltip:SetOwner(qb, "ANCHOR_LEFT")
+            GameTooltip:SetText(qd.tip, qd.r, qd.g, qd.b)
+            GameTooltip:Show()
+        end)
+        qb:SetScript("OnLeave", function()
+            qbg:SetColorTexture(qd.r*0.10, qd.g*0.10, qd.b*0.10, 1)
+            GameTooltip:Hide()
+        end)
+        qb:SetScript("OnClick", function() qd.fn() end)
+        prevBtn = qb
+    end
     do
         local SP_W = 230
         local SP_H = FRAME_H - HDR_H - FOOT_H   -- full content height
@@ -5438,6 +5984,19 @@ function SC_BuildMain()
         if fm then fm:Hide() end
     end)
 
+    -- In slychar_flyout mode: collapse the side tab panel and shrink the main frame
+    -- so it shows only the paperdoll + button strip.
+    if (SC.db and SC.db.mode) == "slychar_flyout" then
+        side:Hide()
+        local newW = CHAR_W + BTN_STRIP_W + 1  -- paperdoll + 1px divider + strip
+        f:SetWidth(newW)
+        hdr:SetWidth(newW)
+        footer:SetWidth(newW)
+        if themeRefs.hdrSep then themeRefs.hdrSep:SetWidth(newW) end
+        stripDiv:ClearAllPoints()
+        stripDiv:SetPoint("TOPLEFT", f, "TOPLEFT", CHAR_W + 1, -HDR_H)
+    end
+
     BuildWingFrame(f)
     SlyCharMainFrame = f
     -- Do NOT register in UISpecialFrames: that causes CloseAllWindows()
@@ -5445,4 +6004,11 @@ function SC_BuildMain()
     -- Escape handling is intentionally omitted; use C or the × button.
 
     SC_ApplyTheme(SC.db.theme or "shadow")
+
+    -- Initialise tab visibility: hide every tab frame except the active one so
+    -- they don't all appear simultaneously when the frame is first shown.
+    local initTab = (SC.db and SC.db.lastTab) or "stats"
+    for k, tf in pairs(tabFrames) do
+        tf:SetShown(k == initTab)
+    end
 end
