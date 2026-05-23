@@ -6,7 +6,7 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "2.0.0"
+SC.version = "2.1.0"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
@@ -19,12 +19,13 @@ SC._pendingBuild    = false   -- true when SC_BuildMain() was blocked by combat 
 -- SavedVariables defaults
 -- --------------------------------------------------------
 local DB_DEFAULTS = {
-    position  = nil,     -- {point, x, y} for SlyCharMainFrame
-    lastTab   = "stats",
-    theme     = "shadow",
-    mode      = "slychar_flyout",  -- "native_flyout" | "slychar" | "slychar_flyout"
-    collapsed = {},      -- {[sectionKey]=true} for collapsed stat sections
-    hidden    = {},      -- {[sectionKey]=true} for fully hidden stat sections
+    position      = nil,     -- {point, x, y} for SlyCharMainFrame
+    lastTab       = "stats",
+    theme         = "shadow",
+    mode          = "slychar_flyout",  -- "native_flyout" | "slychar" | "slychar_flyout"
+    collapsed     = {},      -- {[sectionKey]=true} for collapsed stat sections
+    hidden        = {},      -- {[sectionKey]=true} for fully hidden stat sections
+    minimap       = { hide = false, minimapPos = 225 },
 }
 
 SC.db = {}
@@ -113,6 +114,7 @@ local function HookCharacterFrame()
 
         if InCombatLockdown() then
             if SlyCharMainFrame then
+                -- CharacterFrame is not a restricted frame in TBC; Hide() works in combat.
                 self:Hide()
                 SlyCharMainFrame:Show()
                 SlyCharMainFrame:SetAlpha(1)
@@ -124,7 +126,7 @@ local function HookCharacterFrame()
             end
             return
         end
-        self:Hide()
+        HideUIPanel(self)  -- properly removes CharacterFrame from the UIPanel stack
         SC_ToggleMain()
     end)
 
@@ -279,24 +281,74 @@ local function SC_Slash(msg)
         DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SC]|r Honor debug saved. /reload then open WTF/.../SavedVariables/SlySuite_Char.lua and search for honorDebug")
     elseif msg:match("^mode") then
         local m = (msg:match("^mode%s+(.+)$") or ""):trim()
-        local MODES = {
-            native_flyout  = "Native paper doll + SlyChar flyouts",
-            slychar        = "Full SlyChar panel",
-            slychar_flyout = "SlyChar panel + detached flyouts",
+        -- Short aliases → internal key
+        local ALIASES = { flyout = "slychar_flyout", docked = "slychar", native = "native_flyout" }
+        m = ALIASES[m] or m
+        local MODE_LABEL = {
+            slychar_flyout = "Flyout",
+            slychar        = "Docked",
+            native_flyout  = "Native",
         }
-        if MODES[m] then
+        if MODE_LABEL[m] then
             if SC.db then SC.db.mode = m end
-            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Mode set to |cffffdd22" .. m .. "|r — /reload to apply.")
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Mode → |cffffdd22" .. MODE_LABEL[m] .. "|r — /reload to apply.")
         else
             local cur = (SC.db and SC.db.mode) or "native_flyout"
-            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Mode: |cffffdd22" .. cur .. "|r  (" .. (MODES[cur] or "?") .. ")")
-            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode native_flyout   — native paper doll + SlyChar flyouts  (default)")
-            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode slychar          — full SlyChar panel replaces CharacterFrame")
-            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode slychar_flyout   — SlyChar panel + detached flyouts")
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Mode: |cffffdd22" .. (MODE_LABEL[cur] or cur) .. "|r")
+            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode flyout   — SlyChar panel with detached flyouts")
+            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode docked   — SlyChar panel, tabs docked")
+            DEFAULT_CHAT_FRAME:AddMessage("  /slychar mode native   — native WoW character frame")
         end
     else
         SC_ToggleMain()
     end
+end
+
+-- --------------------------------------------------------
+-- Minimap button (LibDBIcon)
+-- --------------------------------------------------------
+local function SC_CreateMinimapButton()
+    local LDB     = LibStub and LibStub("LibDataBroker-1.1", true)
+    local LDBIcon = LibStub and LibStub("LibDBIcon-1.0", true)
+    if not LDB or not LDBIcon then return end
+    if LDBIcon:IsRegistered("SlyChar") then return end
+
+    local MODE_LABEL = { slychar_flyout="Flyout", slychar="Docked", native_flyout="Native" }
+
+    local dataObj = LDB:NewDataObject("SlyChar", {
+        type = "launcher",
+        text = "SlyChar",
+        icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
+        OnClick = function(_, btn)
+            if btn == "LeftButton" then
+                SC_ToggleMain()
+            elseif btn == "RightButton" then
+                local order  = { "slychar_flyout", "slychar", "native_flyout" }
+                local labels = { "Flyout",          "Docked",  "Native" }
+                if SC.db then
+                    local cur = SC.db.mode or "slychar_flyout"
+                    for i, m in ipairs(order) do
+                        if m == cur then
+                            local ni = (i % #order) + 1
+                            SC.db.mode = order[ni]
+                            DEFAULT_CHAT_FRAME:AddMessage(
+                                "|cff88bbff[SlyChar]|r Mode \226\134\146 |cffffdd22" .. labels[ni] .. "|r \226\128\148 /reload to apply")
+                            break
+                        end
+                    end
+                end
+            end
+        end,
+        OnTooltipShow = function(tip)
+            tip:SetText("|cff00ccffSlyChar|r v" .. SC.version)
+            tip:AddLine("Left-click: toggle panel", 1, 1, 1)
+            tip:AddLine("Right-click: cycle mode", 1, 1, 1)
+            local cur = (SC.db and SC.db.mode) or "?"
+            tip:AddLine("Mode: " .. (MODE_LABEL[cur] or cur), 1, 0.85, 0.1)
+        end,
+    })
+
+    LDBIcon:Register("SlyChar", dataObj, SC.db.minimap)
 end
 
 -- --------------------------------------------------------
@@ -452,6 +504,7 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
                 end
             end
         end
+        SC_CreateMinimapButton()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
         -- Combat started: close the character sheet.
@@ -490,7 +543,7 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         -- If player pressed C during combat before the frame was built, open it now.
-        if SC._pendingBuild and SlyCharMainFrame then
+        if SC._pendingBuild then
             SC._pendingBuild = false
             SC_ShowMain()
         end

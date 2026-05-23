@@ -3,7 +3,7 @@ name: Discord Bot CI
 on:
   pull_request:
     branches:
-      - main
+      - master
     paths:
       - "discord-bot/**"
       - ".github/workflows/discord-bot-ci.yml"
@@ -11,7 +11,7 @@ on:
 
   push:
     branches-ignore:
-      - main          # main is handled by deploy-discord-bot.yml
+      - master        # master is handled by deploy-discord-bot.yml
     paths:
       - "discord-bot/**"
       - ".github/workflows/discord-bot-ci.yml"

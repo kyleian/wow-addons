@@ -23,7 +23,7 @@
                        "enabled":  true,
                        "description":  "Top-level addon manager and error sandbox for the Sly addon family.",
                        "sourceDir":  "addons\\SlySuite",
-                       "version":  "1.5.1",
+                       "version":  "1.6.0",
                        "curseProjectId":  "1498485"
                    },
                    {
@@ -119,7 +119,7 @@
                        "enabled":  true,
                        "description":  "Movable character sheet companion — extended stats + gear sets docked beside CharacterFrame. C key. /slychar",
                        "sourceDir":  "addons\\SlySuite_Char",
-                       "version":  "2.0.0",
+                       "version":  "2.1.0",
                        "curseProjectId":  ""
                    },
                    {

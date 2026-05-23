@@ -3,7 +3,7 @@ name: Deploy Discord Sentiment Bot
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - "discord-bot/**"
       - ".github/workflows/deploy-discord-bot.yml"

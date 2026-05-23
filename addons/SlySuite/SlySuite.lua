@@ -7,7 +7,7 @@
 -- ============================================================
 
 local ADDON_NAME    = "SlySuite"
-local ADDON_VERSION = "1.0.0"
+local ADDON_VERSION = "1.6.0"
 
 -- Public namespace
 SS = SS or {}
@@ -321,10 +321,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             -- Install global Lua error hook so event-handler errors outside
             -- xpcall also land in the log (e.g. OnUpdate / addon event frames)
             if geterrorhandler and seterrorhandler then
-                local _prevHandler = geterrorhandler()
                 seterrorhandler(function(errMsg)
                     SS_LogError("global", tostring(errMsg))
-                    if _prevHandler then _prevHandler(errMsg) end
+                    -- Do NOT forward to the previous handler: that re-displays errors
+                    -- in chat, surfacing third-party addon errors (e.g. AtlasLootClassic)
+                    -- that WoW would otherwise suppress.
                 end)
             end
 

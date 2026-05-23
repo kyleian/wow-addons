@@ -51,12 +51,13 @@ local catCPs          = 0
 local bearRage        = 0
 local playerHP        = 1.0
 
-local ripExpiry       = 0
-local mangleCatExpiry = 0
-local lacerateExpiry  = 0
-local lacerateStacks  = 0
-local demoRoarExpiry  = 0
-local tfExpiry        = 0
+local ripExpiry        = 0
+local mangleCatExpiry  = 0  -- your own Mangle (Cat) debuff
+local mangleDebuffExpiry = 0  -- Mangle debuff from ANY druid/bear
+local lacerateExpiry   = 0
+local lacerateStacks   = 0
+local demoRoarExpiry   = 0
+local tfExpiry         = 0
 
 -- ─── Frame references ────────────────────────────────────────
 local catContainer  = nil
@@ -131,18 +132,27 @@ end
 
 -- ─── Debuff / buff scanners ──────────────────────────────────
 local function ScanTargetDebuffs()
-    ripExpiry = 0; mangleCatExpiry = 0
+    ripExpiry = 0; mangleCatExpiry = 0; mangleDebuffExpiry = 0
     lacerateExpiry = 0; lacerateStacks = 0; demoRoarExpiry = 0
     if not UnitExists("target") then return end
+    -- Single pass, no filter — check caster manually.
+    -- SP_MANGLE_C = "Mangle (Cat)", SP_MANGLE_B = "Mangle (Bear)",
+    -- but the actual debuff on target is just "Mangle". Match all three to be safe.
     local i = 1
     while true do
-        local name, _, count, _, _, expiry = UnitDebuff("target", i, "PLAYER")
+        local name, _, count, _, _, expiry, caster = UnitDebuff("target", i)
         if not name then break end
-        if name == SP_RIP       then ripExpiry       = expiry or 0 end
-        if name == SP_MANGLE_C  then mangleCatExpiry = expiry or 0 end
-        if name == SP_LACERATE  then lacerateExpiry  = expiry or 0; lacerateStacks = count or 1 end
-        if name == SP_DEMO_ROAR then demoRoarExpiry  = expiry or 0 end
-        if name == "Mangle"     then mangleCatExpiry = expiry or 0 end -- bear mangle debuff
+        local isMangle = (name == SP_MANGLE_C) or (name == SP_MANGLE_B) or (name == "Mangle")
+        if isMangle then
+            local t = expiry or 0
+            if t > mangleDebuffExpiry then mangleDebuffExpiry = t end
+            if caster == "player" then mangleCatExpiry = t end
+        end
+        if caster == "player" then
+            if name == SP_RIP       then ripExpiry      = expiry or 0 end
+            if name == SP_LACERATE  then lacerateExpiry = expiry or 0; lacerateStacks = count or 1 end
+            if name == SP_DEMO_ROAR then demoRoarExpiry = expiry or 0 end
+        end
         i = i + 1
     end
 end
@@ -167,18 +177,22 @@ end
 local function UpdateCat(now)
     local energy = catEnergy
     local cps    = catCPs
-    local ripL   = ripExpiry       > 0 and math.max(0, ripExpiry       - now) or 0
-    local manL   = mangleCatExpiry > 0 and math.max(0, mangleCatExpiry - now) or 0
+    local ripL   = ripExpiry         > 0 and math.max(0, ripExpiry         - now) or 0
+    local manL   = mangleDebuffExpiry > 0 and math.max(0, mangleDebuffExpiry - now) or 0
+    local myManL = mangleCatExpiry    > 0 and math.max(0, mangleCatExpiry   - now) or 0
     local tfL    = tfExpiry        > 0 and math.max(0, tfExpiry        - now) or 0
     local tfCD   = SpellCD(SP_TF)
     local manCD  = SpellCD(SP_MANGLE_C)
     local tgtHP  = UnitExists("target") and
                    (UnitHealth("target") / math.max(1, UnitHealthMax("target"))) or 1.0
 
+    -- Cat only applies Mangle if it's completely absent (no debuff from anyone)
+    local needMangle = manL == 0 and manCD <= 0
+
     local nextCost, nextName
     if cps >= 4 and ripL == 0 then
         nextCost = 30; nextName = "Rip"
-    elseif manL == 0 and manCD <= 0 then
+    elseif needMangle then
         nextCost = 40; nextName = "Mangle"
     else
         nextCost = 42; nextName = "Shred"
@@ -187,7 +201,7 @@ local function UpdateCat(now)
     local best
     if cps >= 4 and energy >= 30 and ripL == 0 then
         best = "RIP"
-    elseif manL == 0 and manCD <= 0 and energy >= 40 then
+    elseif needMangle and energy >= 40 then
         best = "MANGLE_CAT"
     elseif energy >= 42 then
         best = "SHRED"
@@ -216,7 +230,9 @@ local function UpdateCat(now)
             end
         elseif k == "MANGLE_CAT" then
             if manL > 0 then
-                s = Col("44ff44", Fmt(manL))
+                -- Mangle is up (yours or another druid's) — Shred is better
+                local src = myManL > 0 and "" or Col("888866", " (other)")
+                s = Col("44aa44", Fmt(manL)) .. src
             elseif manCD > 0 then
                 s = Col("ff8844", Fmt(manCD))
             else
@@ -290,12 +306,14 @@ end
 local function UpdateBear(now)
     local rage   = bearRage
     local hp     = playerHP
-    local manCD  = SpellCD(SP_MANGLE_B)
+    local manCD     = SpellCD(SP_MANGLE_B)
+    local manDebuffL = mangleDebuffExpiry > 0 and math.max(0, mangleDebuffExpiry - now) or 0
     local lacL   = lacerateExpiry > 0 and math.max(0, lacerateExpiry - now) or 0
     local demoL  = demoRoarExpiry > 0 and math.max(0, demoRoarExpiry - now) or 0
     local bashCD = SpellCD(SP_BASH)
     local frCD   = SpellCD(SP_FRENZIED)
 
+    -- Bear always wants Mangle (it's a primary threat move); CD + rage are the only gates
     local best
     if manCD <= 0 and rage >= 15 then
         best = "MANGLE_BEAR"
@@ -314,7 +332,17 @@ local function UpdateBear(now)
         local s = ""
 
         if k == "MANGLE_BEAR" then
-            if manCD > 0 then
+            if manDebuffL > 0 then
+                -- Debuff is up (anyone) — show timer as info alongside CD/rage state
+                local debuffStr = Col("44aa44", Fmt(manDebuffL))
+                if manCD > 0 then
+                    s = debuffStr .. Col("888888", "  CD " .. Fmt(manCD))
+                elseif rage >= 15 then
+                    s = debuffStr .. Col("888888", "  CAST") .. Col("aaaaaa", " " .. rage .. "R")
+                else
+                    s = debuffStr .. Col("ffaa00", "  " .. rage .. "/15R")
+                end
+            elseif manCD > 0 then
                 s = Col("ff8844", Fmt(manCD)) .. Col("888888","  wait")
             elseif rage >= 15 then
                 s = Col("44ff44","CAST NOW  ") .. Col("aaaaaa", rage .. "R")

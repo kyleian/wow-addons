@@ -87,6 +87,13 @@ jobs:
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CF_API_KEY }}
         run: |
-          python scripts/curseforge_publish.py dist \
+          set +e
+          OUTPUT=$(python scripts/curseforge_publish.py dist \
             "${{ steps.tag.outputs.VERSION }}" \
-            --addon "${{ steps.tag.outputs.ADDON_NAME }}"
+            --addon "${{ steps.tag.outputs.ADDON_NAME }}" 2>&1)
+          EXIT=$?
+          echo "$OUTPUT"
+          if [ $EXIT -ne 0 ]; then
+            echo "::error::CurseForge upload failed (exit $EXIT). Last output: $(echo "$OUTPUT" | tail -5 | tr '\n' ' ')"
+            exit $EXIT
+          fi
