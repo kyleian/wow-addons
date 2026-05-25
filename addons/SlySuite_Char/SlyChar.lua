@@ -75,6 +75,7 @@ function SC_ShowMain()
     end
     -- PlayerModel frames bypass parent alpha; must be shown/hidden explicitly.
     if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
+    SC_SetSlotMouseEnabled(true)
     SlyCharMainFrame:SetAlpha(1)
     SlyCharMainFrame:EnableMouse(true)
     SC._mainVisible    = true
@@ -97,6 +98,7 @@ function SC_ToggleMain()
         SlyCharMainFrame:EnableMouse(false)
         SC._mainVisible = false
         if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+        SC_SetSlotMouseEnabled(false)
         -- Also collapse any open wing
         local wf = _G["SlyCharWingFrame"]
         if wf and wf:IsShown() then wf:Hide() end
@@ -135,6 +137,7 @@ local function HookCharacterFrame()
                 self:Hide()
                 -- Frame is pre-shown at alpha=0; just reveal via SetAlpha (not Show()).
                 if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
+                SC_SetSlotMouseEnabled(true)
                 SlyCharMainFrame:SetAlpha(1)
                 SlyCharMainFrame:EnableMouse(true)
                 SC._mainVisible = true
@@ -525,6 +528,7 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
                     SlyCharMainFrame:EnableMouse(false)
                     -- PlayerModel frames bypass parent alpha; hide explicitly.
                     if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+                    SC_SetSlotMouseEnabled(false)
                 end
             end
         end
@@ -537,6 +541,7 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             SlyCharMainFrame:SetAlpha(0)
             SlyCharMainFrame:EnableMouse(false)
             if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+            SC_SetSlotMouseEnabled(false)
             SC._hiddenByCombat = true
         end
 

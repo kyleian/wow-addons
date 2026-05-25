@@ -202,6 +202,7 @@ do
                         SlyCharMainFrame:EnableMouse(false)
                         SC._mainVisible = false
                         if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+                        SC_SetSlotMouseEnabled(false)
                         local wf = _G["SlyCharWingFrame"]
                         if wf and wf:IsShown() then wf:Hide() end
                     end
@@ -1344,6 +1345,16 @@ end
 function SC_RefreshSlots()
     for sid, w in pairs(slotWidgets) do
         UpdateSlot(w, sid)
+    end
+end
+
+-- Enable/disable mouse on all gear slot buttons. WoW's EnableMouse(false) on a
+-- parent frame does NOT block child frames from receiving events, so slot buttons
+-- would still fire their OnEnter tooltip scripts even when SlyCharMainFrame is
+-- "hidden" at alpha=0. Call this alongside every SetAlpha change on the main frame.
+function SC_SetSlotMouseEnabled(t)
+    for _, w in pairs(slotWidgets) do
+        w.frame:EnableMouse(t)
     end
 end
 
@@ -4717,6 +4728,7 @@ function SC_BuildNativeCompanion()
                     SlyCharMainFrame:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, 0)
                     SC_SwitchTab(key)
                     if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
+                    SC_SetSlotMouseEnabled(true)
                     SlyCharMainFrame:SetAlpha(1)
                     SlyCharMainFrame:EnableMouse(true)
                     SC._mainVisible = true
@@ -4747,6 +4759,7 @@ function SC_HideNativeCompanion()
         SlyCharMainFrame:SetAlpha(0)
         SlyCharMainFrame:EnableMouse(false)
         if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+        SC_SetSlotMouseEnabled(false)
         SC._mainVisible = false
     end
 end
@@ -4838,6 +4851,7 @@ function SC_BuildMain()
         f:EnableMouse(false)
         SC._mainVisible = false
         if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+        SC_SetSlotMouseEnabled(false)
         local wf = _G["SlyCharWingFrame"]
         if wf and wf:IsShown() then wf:Hide() end
     end)
@@ -4884,6 +4898,7 @@ function SC_BuildMain()
             -- Ensure SlyChar is visible if user was viewing it (pre-shown at alpha=0 when not active).
             if SlyCharMainFrame and not SC._mainVisible then
                 if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
+                SC_SetSlotMouseEnabled(true)
                 SlyCharMainFrame:SetAlpha(1)
                 SlyCharMainFrame:EnableMouse(true)
                 SC._mainVisible = true
@@ -6044,4 +6059,5 @@ function SC_BuildMain()
     -- PlayerModel frames bypass parent alpha; hide the model explicitly so it
     -- is not visible while SlyCharMainFrame is pre-shown at alpha=0.
     model:Hide()
+    SC_SetSlotMouseEnabled(false)
 end
