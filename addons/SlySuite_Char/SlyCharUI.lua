@@ -179,7 +179,7 @@ do
             SpellIsTargeting() and not SpellIsTargetingUnit()
         if t then
             if cursorActive or itemTargeting then
-                if not (SlyCharMainFrame and SlyCharMainFrame:IsShown()) then
+                if not SC._mainVisible then
                     if SC_ShowMain and not InCombatLockdown() then
                         SC_ShowMain()
                         _autoShownSlyChar = true
@@ -195,10 +195,15 @@ do
                 _autoShownSlyChar = false
                 -- Small delay so the player sees the result update on the slot.
                 C_Timer.After(1.5, function()
-                    if SlyCharMainFrame and SlyCharMainFrame:IsShown()
+                    if SlyCharMainFrame and SC._mainVisible
                         and not (GetCursorInfo() ~= nil)
                         and not SpellIsTargeting() then
-                        SlyCharMainFrame:Hide()
+                        SlyCharMainFrame:SetAlpha(0)
+                        SlyCharMainFrame:EnableMouse(false)
+                        SC._mainVisible = false
+                        if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+                        local wf = _G["SlyCharWingFrame"]
+                        if wf and wf:IsShown() then wf:Hide() end
                     end
                 end)
             end
@@ -1315,13 +1320,17 @@ local function BuildSlot(parent, slotId, label, x, y)
     --   GetCursorInfo() = "enchant"→ applies cursor enchant to item in slot N
     -- Enabled only while targeting/cursor is active (_targetMonitor above).
     if EQUIP_SLOT_IDS[slotId] then
+        -- Parent to btn so that SlyCharMainFrame:SetAlpha(0) also hides these
+        -- overlays. Using UIParent as parent would break alpha inheritance and
+        -- leave gear slot buttons visible when the main frame is "hidden".
+        -- Note: WoW's Show()/Hide() restriction comes from the ANCHOR relationship
+        -- (sBtn anchored to btn inside SlyCharMainFrame), not the parent-child one,
+        -- so re-parenting to UIParent never prevented the restriction anyway.
         local sBtn = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
         sBtn:SetAllPoints(btn)
         sBtn:SetAttribute("type", "macro")
         sBtn:SetAttribute("macrotext", "/use " .. slotId)
         sBtn:RegisterForClicks("LeftButtonUp")
-        -- Explicitly raise frame level so sBtn sits above btn and wins the
-        -- mouse-hit test when both are enabled at the same screen position.
         sBtn:SetFrameLevel(btn:GetFrameLevel() + 20)
         sBtn:EnableMouse(false)
         _secureSlots[slotId] = sBtn
@@ -4632,7 +4641,7 @@ local function EnsureMainForCompanion(companion)
         if InCombatLockdown() then return false end
         local ok = pcall(SC_BuildMain)
         if not ok or not SlyCharMainFrame then return false end
-        SlyCharMainFrame:Hide()
+        -- Frame is pre-shown at alpha=0 after SC_BuildMain; no Hide() needed.
     end
     SC_ReparentWing(companion)
     return true
@@ -4707,8 +4716,10 @@ function SC_BuildNativeCompanion()
                     SlyCharMainFrame:ClearAllPoints()
                     SlyCharMainFrame:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, 0)
                     SC_SwitchTab(key)
-                    SlyCharMainFrame:Show()
+                    if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
                     SlyCharMainFrame:SetAlpha(1)
+                    SlyCharMainFrame:EnableMouse(true)
+                    SC._mainVisible = true
                     SC_RefreshAll()
                 end
             else
@@ -4731,9 +4742,12 @@ end
 function SC_HideNativeCompanion()
     if nativeCompanion then nativeCompanion:Hide() end
     if wingFrame        then wingFrame:Hide() ; activeWingKey = nil end
-    -- Hide SlyChar main if it was opened for stats/sets in native mode
-    if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
-        SlyCharMainFrame:Hide()
+    -- Suppress SlyChar main if it was shown for stats/sets in native mode
+    if SlyCharMainFrame and SC._mainVisible then
+        SlyCharMainFrame:SetAlpha(0)
+        SlyCharMainFrame:EnableMouse(false)
+        if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+        SC._mainVisible = false
     end
 end
 
@@ -4771,7 +4785,12 @@ function SC_BuildMain()
         SC.db.position = {point=pt or "CENTER", x=x or 0, y=y or 0}
     end)
     f:SetPoint("CENTER")
-    f:Hide()
+    -- Pre-show at alpha=0 so combat can reveal via SetAlpha(1) without calling
+    -- Show() (which WoW combat lockdown blocks for frames whose anchor tree
+    -- contains SecureActionButtonTemplate descendants).
+    f:Show()
+    f:SetAlpha(0)
+    -- f:EnableMouse(false) already set above at frame creation
 
     themeRefs.frameBg   = FillBg(f, 0.05, 0.05, 0.07, 0.97)
     local bord = f:CreateTexture(nil, "OVERLAY")
@@ -4814,7 +4833,14 @@ function SC_BuildMain()
     closeTx:SetAllPoints() ; closeTx:SetJustifyH("CENTER") ; closeTx:SetJustifyV("MIDDLE")
     closeTx:SetText("\195\151")  -- UTF-8 × (U+00D7)
     closeTx:SetTextColor(0.80, 0.30, 0.30)
-    closeBtn:SetScript("OnClick", function() f:Hide() end)
+    closeBtn:SetScript("OnClick", function()
+        f:SetAlpha(0)
+        f:EnableMouse(false)
+        SC._mainVisible = false
+        if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+        local wf = _G["SlyCharWingFrame"]
+        if wf and wf:IsShown() then wf:Hide() end
+    end)
     closeBtn:SetScript("OnEnter", function() closeBg:SetColorTexture(0.7, 0.15, 0.15, 0.40) end)
     closeBtn:SetScript("OnLeave", function() closeBg:SetColorTexture(0, 0, 0, 0) end)
 
@@ -4855,9 +4881,12 @@ function SC_BuildMain()
             -- Show directly (not via ShowUIPanel/ToggleCharacter) to avoid the
             -- UISpecialFrames auto-hide that would close SlyChar.
             CharacterFrame:Show()
-            -- Re-show SlyChar in case WoW triggered any hide side-effect.
-            if SlyCharMainFrame and not SlyCharMainFrame:IsShown() then
-                SlyCharMainFrame:Show()
+            -- Ensure SlyChar is visible if user was viewing it (pre-shown at alpha=0 when not active).
+            if SlyCharMainFrame and not SC._mainVisible then
+                if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
+                SlyCharMainFrame:SetAlpha(1)
+                SlyCharMainFrame:EnableMouse(true)
+                SC._mainVisible = true
             end
         end
         SC._skipHook = false
@@ -6011,4 +6040,8 @@ function SC_BuildMain()
     for k, tf in pairs(tabFrames) do
         tf:SetShown(k == initTab)
     end
+
+    -- PlayerModel frames bypass parent alpha; hide the model explicitly so it
+    -- is not visible while SlyCharMainFrame is pre-shown at alpha=0.
+    model:Hide()
 end

@@ -14,6 +14,7 @@ SC._skipHook        = false   -- true while Chr button is showing CharacterFrame
 SC._pendingHideChar = false   -- true when CharacterFrame was left open in combat
 SC._hiddenByCombat  = false   -- true when we suppressed the panel at combat start
 SC._pendingBuild    = false   -- true when SC_BuildMain() was blocked by combat lockdown
+SC._mainVisible     = false   -- true when user has logically opened SlyCharMainFrame
 
 -- --------------------------------------------------------
 -- SavedVariables defaults
@@ -66,8 +67,18 @@ function SC_ShowMain()
         SlyCharMainFrame:ClearAllPoints()
         SlyCharMainFrame:SetPoint(pos.point, UIParent, pos.point, pos.x or 0, pos.y or 0)
     end
-    SlyCharMainFrame:Show()
+    -- Frame is kept physically shown at alpha=0 after SC_BuildMain so that
+    -- Show() is never needed in combat (WoW blocks Show() on frames linked to
+    -- protected-frame anchors). SetAlpha/EnableMouse are layout-independent.
+    if not InCombatLockdown() then
+        SlyCharMainFrame:Show()  -- safety: re-show if somehow actually hidden
+    end
+    -- PlayerModel frames bypass parent alpha; must be shown/hidden explicitly.
+    if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
     SlyCharMainFrame:SetAlpha(1)
+    SlyCharMainFrame:EnableMouse(true)
+    SC._mainVisible    = true
+    SC._hiddenByCombat = false           -- opening explicitly; don't auto-close after combat
     -- Close the >> flyout menu if it was left open.
     local fm = _G["SlyCharStripFlyout"]
     if fm then fm:Hide() end
@@ -81,8 +92,14 @@ function SC_ShowMain()
 end
 
 function SC_ToggleMain()
-    if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
-        SlyCharMainFrame:Hide()
+    if SlyCharMainFrame and SC._mainVisible then
+        SlyCharMainFrame:SetAlpha(0)
+        SlyCharMainFrame:EnableMouse(false)
+        SC._mainVisible = false
+        if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
+        -- Also collapse any open wing
+        local wf = _G["SlyCharWingFrame"]
+        if wf and wf:IsShown() then wf:Hide() end
     else
         SC_ShowMain()
     end
@@ -114,10 +131,13 @@ local function HookCharacterFrame()
 
         if InCombatLockdown() then
             if SlyCharMainFrame then
-                -- CharacterFrame is not a restricted frame in TBC; Hide() works in combat.
+                -- CharacterFrame is not restricted; Hide() works fine.
                 self:Hide()
-                SlyCharMainFrame:Show()
+                -- Frame is pre-shown at alpha=0; just reveal via SetAlpha (not Show()).
+                if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
                 SlyCharMainFrame:SetAlpha(1)
+                SlyCharMainFrame:EnableMouse(true)
+                SC._mainVisible = true
                 SC_RefreshAll()
             else
                 SC._pendingBuild = true
@@ -403,9 +423,13 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             if ToggleCharacter then
                 local _origToggleChar = ToggleCharacter
                 ToggleCharacter = function(which)
-                    if (which == "HonorFrame" or which == "PVPFrame") then
-                        local mode = (SC.db and SC.db.mode) or "native_flyout"
-                        if mode ~= "native_flyout" then
+                    local mode = (SC.db and SC.db.mode) or "native_flyout"
+                    if mode ~= "native_flyout" then
+                        if which == "PaperDollFrame" or which == nil then
+                            -- C key / micro-menu: bypass CharacterFrame entirely
+                            SC_ToggleMain()
+                            return
+                        elseif which == "HonorFrame" or which == "PVPFrame" then
                             SC_ShowMain()
                             if SC_ToggleWing then SC_ToggleWing("honor") end
                             return
@@ -434,56 +458,50 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "UNIT_INVENTORY_CHANGED" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+        if SC._mainVisible then
             SC_RefreshAll()
         end
 
     elseif event == "PLAYER_TALENT_UPDATE"
         or event == "CHARACTER_POINTS_CHANGED" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+        if SC._mainVisible then
             SC_RefreshAll()
         end
 
     elseif event == "UPDATE_FACTION" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "misc" then
+        if SC._mainVisible and SC.db.lastTab == "misc" then
             if SC_RefreshMisc then SC_RefreshMisc() end
         end
 
     elseif event == "SKILL_LINES_CHANGED" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "misc" then
+        if SC._mainVisible and SC.db.lastTab == "misc" then
             if SC_RefreshMisc then SC_RefreshMisc() end
         end
 
     elseif event == "PLAYER_TARGET_CHANGED" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "social" then
+        if SC._mainVisible and SC.db.lastTab == "social" then
             if SC_UpdateNITLayer then SC_UpdateNITLayer("target") end
         end
 
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
         -- Only bother with mouseover if NWB hasn't already set a layer value
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "social"
+        if SC._mainVisible and SC.db.lastTab == "social"
             and (not NWB_CurrentLayer or NWB_CurrentLayer == 0) then
             if SC_UpdateNITLayer then SC_UpdateNITLayer("mouseover") end
         end
 
     elseif event == "GUILD_ROSTER_UPDATE" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "social" then
+        if SC._mainVisible and SC.db.lastTab == "social" then
             if SC_RefreshNITGuild then SC_RefreshNITGuild() end
         end
 
     elseif event == "FRIENDLIST_UPDATE" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown()
-            and SC.db.lastTab == "social" then
+        if SC._mainVisible and SC.db.lastTab == "social" then
             if SC_RefreshNITFriends then SC_RefreshNITFriends() end
         end
 
     elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
+        if SC._mainVisible then
             if SC_RefreshAll then SC_RefreshAll() end
         end
 
@@ -500,38 +518,34 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
                 if not ok then
                     DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
                 elseif SlyCharMainFrame then
-                    SlyCharMainFrame:Hide()
+                    -- Pre-show at alpha=0: Show() is blocked in combat but
+                    -- SetAlpha(1) is not, so keep frame physically shown.
+                    SlyCharMainFrame:Show()
+                    SlyCharMainFrame:SetAlpha(0)
+                    SlyCharMainFrame:EnableMouse(false)
+                    -- PlayerModel frames bypass parent alpha; hide explicitly.
+                    if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
                 end
             end
         end
         SC_CreateMinimapButton()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
-        -- Combat started: close the character sheet.
-        -- Frames with SecureActionButtonTemplate children cannot always be
-        -- hidden via :Hide() during lockdown — disable mouse and zero alpha
-        -- first so it cannot block the screen even if Hide() silently fails.
-        if SlyCharMainFrame and SlyCharMainFrame:IsShown() then
-            SlyCharMainFrame:EnableMouse(false)
+        -- Combat started: suppress via alpha+mouse. Show()/Hide() are blocked
+        -- by WoW combat lockdown for frames linked to protected-frame anchors.
+        if SlyCharMainFrame and SC._mainVisible then
             SlyCharMainFrame:SetAlpha(0)
+            SlyCharMainFrame:EnableMouse(false)
+            if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
             SC._hiddenByCombat = true
-            pcall(function() SlyCharMainFrame:Hide() end)
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
         -- Combat ended.
         if SC._hiddenByCombat then
             SC._hiddenByCombat = false
-            if SlyCharMainFrame then
-                -- If Hide() failed during combat the frame is still "shown"
-                -- but invisible — fully hide it now lockdown is lifted.
-                if SlyCharMainFrame:IsShown() then
-                    SlyCharMainFrame:Hide()
-                else
-                    -- Restore alpha in case user re-opens manually next time.
-                    SlyCharMainFrame:SetAlpha(1)
-                end
-            end
+            -- SC._mainVisible tracks whether user opened panel during combat.
+            -- If true: frame already at alpha=1, leave it. If false: alpha=0, leave it.
         end
         -- Hide the native CharacterFrame we couldn't suppress earlier.
         if SC._pendingHideChar then
