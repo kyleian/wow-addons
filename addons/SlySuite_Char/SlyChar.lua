@@ -51,7 +51,8 @@ end
 function SC_ShowMain()
     if not SlyCharMainFrame then
         if InCombatLockdown() then
-            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Open the character sheet once out of combat first.")
+            SC._pendingBuild = true
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Opening after combat ends...")
             return
         end
         local ok, err = pcall(SC_BuildMain)
@@ -67,26 +68,16 @@ function SC_ShowMain()
         SlyCharMainFrame:ClearAllPoints()
         SlyCharMainFrame:SetPoint(pos.point, UIParent, pos.point, pos.x or 0, pos.y or 0)
     end
-    -- Frame is kept physically shown at alpha=0 after SC_BuildMain so that
-    -- Show() is never needed in combat (WoW blocks Show() on frames linked to
-    -- protected-frame anchors). SetAlpha/EnableMouse are layout-independent.
-    if not InCombatLockdown() then
-        SlyCharMainFrame:Show()  -- safety: re-show if somehow actually hidden
-    end
-    -- PlayerModel frames bypass parent alpha; must be shown/hidden explicitly.
-    if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
-    SC_SetSlotMouseEnabled(true)
-    SlyCharMainFrame:SetAlpha(1)
+    -- sBtn frames are parented to UIParent so Show()/Hide() are unrestricted.
+    SlyCharMainFrame:Show()
     SlyCharMainFrame:EnableMouse(true)
     SC._mainVisible    = true
-    SC._hiddenByCombat = false           -- opening explicitly; don't auto-close after combat
+    SC._hiddenByCombat = false
     -- Close the >> flyout menu if it was left open.
     local fm = _G["SlyCharStripFlyout"]
     if fm then fm:Hide() end
     SC_RefreshAll()
     -- Restore the active tab (and in slychar_flyout mode, open its wing).
-    -- SC_SwitchTab handles both: tab-frame visibility for slychar mode, and
-    -- wing auto-open for slychar_flyout mode.
     if SC_SwitchTab then
         SC_SwitchTab(SC.db.lastTab or "stats")
     end
@@ -94,11 +85,10 @@ end
 
 function SC_ToggleMain()
     if SlyCharMainFrame and SC._mainVisible then
-        SlyCharMainFrame:SetAlpha(0)
+        SlyCharMainFrame:Hide()
         SlyCharMainFrame:EnableMouse(false)
         SC._mainVisible = false
-        if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
-        SC_SetSlotMouseEnabled(false)
+        SC._hiddenByCombat = false
         -- Also collapse any open wing
         local wf = _G["SlyCharWingFrame"]
         if wf and wf:IsShown() then wf:Hide() end
@@ -132,21 +122,11 @@ local function HookCharacterFrame()
         if GetCursorInfo() then return end
 
         if InCombatLockdown() then
-            if SlyCharMainFrame then
-                -- CharacterFrame is not restricted; Hide() works fine.
-                self:Hide()
-                -- Frame is pre-shown at alpha=0; just reveal via SetAlpha (not Show()).
-                if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
-                SC_SetSlotMouseEnabled(true)
-                SlyCharMainFrame:SetAlpha(1)
-                SlyCharMainFrame:EnableMouse(true)
-                SC._mainVisible = true
-                SC_RefreshAll()
-            else
-                SC._pendingBuild = true
-                DEFAULT_CHAT_FRAME:AddMessage(
-                    "|cff88bbff[SlyChar]|r Opening after combat ends...")
-            end
+            self:Hide()
+            -- sBtn frames are parented to UIParent so SlyCharMainFrame:Show()
+            -- is no longer combat-restricted.  SC_ShowMain guards SC_BuildMain
+            -- (which sets attributes and remains combat-restricted).
+            SC_ShowMain()
             return
         end
         HideUIPanel(self)  -- properly removes CharacterFrame from the UIPanel stack
@@ -298,6 +278,32 @@ local function SC_Slash(msg)
                     rec("  ["..i.."] "..tostring(nm).." isHeader="..tostring(isHeader)
                         .." count="..tostring(count).." max="..tostring(maximum))
                 end
+            end
+        end
+
+        -- 5. Arena (TBC Anniversary = personal rating, no teams)
+        rec("=== Arena ===")
+        rec("GetCurrentArenaSeasonUsesTeams type: "..type(GetCurrentArenaSeasonUsesTeams))
+        if GetCurrentArenaSeasonUsesTeams then
+            local ok, v = pcall(GetCurrentArenaSeasonUsesTeams)
+            rec("GetCurrentArenaSeasonUsesTeams(): ok="..tostring(ok).." v="..tostring(v))
+        end
+        if GetCurrentArenaSeason then
+            local ok, v = pcall(GetCurrentArenaSeason)
+            rec("GetCurrentArenaSeason(): ok="..tostring(ok).." v="..tostring(v))
+        end
+        rec("GetPersonalRatedInfo type: "..type(GetPersonalRatedInfo))
+        if GetPersonalRatedInfo then
+            for i = 1, 3 do
+                local ok, a,b,c,d,e,f,g,h,ii,j,k = pcall(GetPersonalRatedInfo, i)
+                rec("  GetPersonalRatedInfo("..i.."): ok="..tostring(ok).." rating="..tostring(a).." seasonPlayed="..tostring(b).." seasonWon="..tostring(c).." weeklyPlayed="..tostring(d).." weeklyWon="..tostring(e))
+            end
+        end
+        -- Also try C_PvP namespace
+        rec("C_PvP type: "..type(C_PvP))
+        if type(C_PvP) == "table" then
+            for k2, v in pairs(C_PvP) do
+                rec("  C_PvP."..tostring(k2).." = "..type(v))
             end
         end
 
@@ -514,43 +520,33 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local mode = (SC.db and SC.db.mode) or "native_flyout"
-        -- Pre-build the main frame only for slychar modes (native_flyout builds lazily on demand)
+        -- Pre-build for slychar modes.  SC_BuildMain ends with f:Hide() so no
+        -- pre-show or alpha tricks are needed; the frame starts truly hidden.
         if mode ~= "native_flyout" then
             if not SlyCharMainFrame and SC.db and not InCombatLockdown() then
                 local ok, err = pcall(SC_BuildMain)
                 if not ok then
                     DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
-                elseif SlyCharMainFrame then
-                    -- Pre-show at alpha=0: Show() is blocked in combat but
-                    -- SetAlpha(1) is not, so keep frame physically shown.
-                    SlyCharMainFrame:Show()
-                    SlyCharMainFrame:SetAlpha(0)
-                    SlyCharMainFrame:EnableMouse(false)
-                    -- PlayerModel frames bypass parent alpha; hide explicitly.
-                    if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
-                    SC_SetSlotMouseEnabled(false)
                 end
             end
         end
         SC_CreateMinimapButton()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
-        -- Combat started: suppress via alpha+mouse. Show()/Hide() are blocked
-        -- by WoW combat lockdown for frames linked to protected-frame anchors.
+        -- Auto-hide on combat start; PLAYER_REGEN_ENABLED restores it.
+        -- Hide() is now unrestricted: sBtn frames are parented to UIParent.
         if SlyCharMainFrame and SC._mainVisible then
-            SlyCharMainFrame:SetAlpha(0)
+            SlyCharMainFrame:Hide()
             SlyCharMainFrame:EnableMouse(false)
-            if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
-            SC_SetSlotMouseEnabled(false)
+            SC._mainVisible = false
             SC._hiddenByCombat = true
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        -- Combat ended.
+        -- Combat ended: restore panel if we auto-hid it at combat start.
         if SC._hiddenByCombat then
             SC._hiddenByCombat = false
-            -- SC._mainVisible tracks whether user opened panel during combat.
-            -- If true: frame already at alpha=1, leave it. If false: alpha=0, leave it.
+            SC_ShowMain()
         end
         -- Hide the native CharacterFrame we couldn't suppress earlier.
         if SC._pendingHideChar then

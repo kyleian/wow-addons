@@ -152,8 +152,11 @@ do
         if t == _wasTargeting then return end
         -- EnableMouse is NOT combat-restricted (only SetAttribute is).
         _wasTargeting = t
+        -- sBtn is parented to UIParent so it persists even when SlyChar is hidden;
+        -- only activate its mouse hit-test while the window is actually shown.
+        local winShown = SlyCharMainFrame and SlyCharMainFrame:IsShown()
         for sid, sBtn in pairs(_secureSlots) do
-            sBtn:EnableMouse(t)
+            sBtn:EnableMouse(t and winShown)
             -- Un-register / re-register LeftButton drag on the parent slot button.
             -- Without this, RegisterForDrag("LeftButton") on the parent claims
             -- the LeftButton-down event and the secure child never sees LeftButtonUp.
@@ -198,11 +201,10 @@ do
                     if SlyCharMainFrame and SC._mainVisible
                         and not (GetCursorInfo() ~= nil)
                         and not SpellIsTargeting() then
-                        SlyCharMainFrame:SetAlpha(0)
+                        SlyCharMainFrame:Hide()
                         SlyCharMainFrame:EnableMouse(false)
                         SC._mainVisible = false
-                        if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
-                        SC_SetSlotMouseEnabled(false)
+                        SC._hiddenByCombat = false
                         local wf = _G["SlyCharWingFrame"]
                         if wf and wf:IsShown() then wf:Hide() end
                     end
@@ -1321,13 +1323,13 @@ local function BuildSlot(parent, slotId, label, x, y)
     --   GetCursorInfo() = "enchant"→ applies cursor enchant to item in slot N
     -- Enabled only while targeting/cursor is active (_targetMonitor above).
     if EQUIP_SLOT_IDS[slotId] then
-        -- Parent to btn so that SlyCharMainFrame:SetAlpha(0) also hides these
-        -- overlays. Using UIParent as parent would break alpha inheritance and
-        -- leave gear slot buttons visible when the main frame is "hidden".
-        -- Note: WoW's Show()/Hide() restriction comes from the ANCHOR relationship
-        -- (sBtn anchored to btn inside SlyCharMainFrame), not the parent-child one,
-        -- so re-parenting to UIParent never prevented the restriction anyway.
-        local sBtn = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
+        -- Parented to UIParent (NOT to btn/SlyCharMainFrame) so that
+        -- SlyCharMainFrame:Show()/Hide() are unrestricted in combat.  The
+        -- secure parent-child chain was the sole cause of the lockdown
+        -- restriction; anchoring via SetAllPoints does NOT restrict Show/Hide.
+        -- _targetMonitor guards EnableMouse so sBtns only activate when the
+        -- SlyChar window is actually shown.
+        local sBtn = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate")
         sBtn:SetAllPoints(btn)
         sBtn:SetAttribute("type", "macro")
         sBtn:SetAttribute("macrotext", "/use " .. slotId)
@@ -1345,16 +1347,6 @@ end
 function SC_RefreshSlots()
     for sid, w in pairs(slotWidgets) do
         UpdateSlot(w, sid)
-    end
-end
-
--- Enable/disable mouse on all gear slot buttons. WoW's EnableMouse(false) on a
--- parent frame does NOT block child frames from receiving events, so slot buttons
--- would still fire their OnEnter tooltip scripts even when SlyCharMainFrame is
--- "hidden" at alpha=0. Call this alongside every SetAlpha change on the main frame.
-function SC_SetSlotMouseEnabled(t)
-    for _, w in pairs(slotWidgets) do
-        w.frame:EnableMouse(t)
     end
 end
 
@@ -3079,6 +3071,64 @@ function SC_RefreshHonor()
         { lbl="Lifetime DKs",      val=commaNum(lfDK) },
     }
 
+    -- Arena personal rating + points estimate (TBC Anniversary)
+    -- Official Blizzard formula (Feb 18 2026):
+    --   p = ((1651.94-475)/(1+2500000*e^(-0.009*r))+475)*1.5
+    --   2v2=p*0.76  3v3=p*0.88  5v5=p*1.00  — highest eligible bracket wins
+    --   Eligible = 10+ games played this week in that bracket
+    local function calcPts(rating, mult)
+        if not rating or rating <= 0 then return 0 end
+        local base = ((1651.94 - 475) / (1 + 2500000 * math.exp(-0.009 * rating)) + 475) * 1.5
+        return math.floor(base * (mult or 1))
+    end
+    -- Auto-save debug to SlyCharDB.arenaDebug on each refresh (no chat spam)
+    do
+        SlyCharDB = SlyCharDB or {}
+        local dbg = {}
+        SlyCharDB.arenaDebug = dbg
+        local function r(s) dbg[#dbg+1] = s end
+        r("GetPersonalRatedInfo="..type(GetPersonalRatedInfo))
+        if GetPersonalRatedInfo then
+            for i = 1, 5 do
+                local ok, a, b, c, d, e, f, g = pcall(GetPersonalRatedInfo, i)
+                r("PRI("..i.."): ok="..tostring(ok).." rating="..tostring(a).." sPlayed="..tostring(b).." sWon="..tostring(c).." wPlayed="..tostring(d).." wWon="..tostring(e).." f="..tostring(f).." g="..tostring(g))
+            end
+        end
+    end
+    if GetPersonalRatedInfo then
+        local BRACKETS = {
+            { idx=1, lbl="2v2", mult=0.76 },
+            { idx=2, lbl="3v3", mult=0.88 },
+            { idx=3, lbl="5v5", mult=1.00 },
+        }
+        local bestPts  = 0
+        local bestLbl  = nil
+        local arenaAdded = 0
+        for _, br in ipairs(BRACKETS) do
+            local ok, rating, seasonPlayed, seasonWon, weeklyPlayed, weeklyWon =
+                pcall(GetPersonalRatedInfo, br.idx)
+            if ok and type(rating) == "number" and ((rating > 0) or (seasonPlayed or 0) > 0) then
+                if arenaAdded == 0 then data[#data+1] = { sep=true } end
+                local seasonLost = math.max(0, (seasonPlayed or 0) - (seasonWon or 0))
+                local pts = calcPts(rating, br.mult)
+                local eligible = (weeklyPlayed or 0) >= 10
+                local eligStr  = eligible and "" or "  (need "..(10-(weeklyPlayed or 0)).." more games)"
+                data[#data+1] = {
+                    lbl = br.lbl,
+                    val = commaNum(rating).."  ("..tostring(seasonWon or 0).."W/"..tostring(seasonLost).."L)  ~"..commaNum(pts).." pts"..eligStr,
+                }
+                arenaAdded = arenaAdded + 1
+                if eligible and pts > bestPts then bestPts = pts ; bestLbl = br.lbl end
+            end
+        end
+        if bestPts > 0 then
+            data[#data+1] = {
+                lbl = "Est. pts/reset",
+                val = commaNum(bestPts).."  ("..bestLbl..")",
+            }
+        end
+    end
+
     for i = 1, #rows do
         local row = rows[i]
         local d   = data[i]
@@ -4573,7 +4623,7 @@ local function BuildWingFrame(mainFrame)
     miscUI.honorContent = honorPane   -- SC_RefreshHonor guards on IsShown()
 
     local honorPaneRows = {}
-    for i = 1, 11 do
+    for i = 1, 20 do
         local row = CreateFrame("Frame", nil, honorPane)
         row:SetPoint("TOPLEFT",  honorPane, "TOPLEFT",   PAD, -((i-1)*14 + 4))
         row:SetPoint("TOPRIGHT", honorPane, "TOPRIGHT", -PAD, -((i-1)*14 + 4))
@@ -4652,7 +4702,7 @@ local function EnsureMainForCompanion(companion)
         if InCombatLockdown() then return false end
         local ok = pcall(SC_BuildMain)
         if not ok or not SlyCharMainFrame then return false end
-        -- Frame is pre-shown at alpha=0 after SC_BuildMain; no Hide() needed.
+        -- SC_BuildMain ends with f:Hide(); main frame starts hidden (correct).
     end
     SC_ReparentWing(companion)
     return true
@@ -4727,9 +4777,7 @@ function SC_BuildNativeCompanion()
                     SlyCharMainFrame:ClearAllPoints()
                     SlyCharMainFrame:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, 0)
                     SC_SwitchTab(key)
-                    if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
-                    SC_SetSlotMouseEnabled(true)
-                    SlyCharMainFrame:SetAlpha(1)
+                    SlyCharMainFrame:Show()
                     SlyCharMainFrame:EnableMouse(true)
                     SC._mainVisible = true
                     SC_RefreshAll()
@@ -4756,11 +4804,10 @@ function SC_HideNativeCompanion()
     if wingFrame        then wingFrame:Hide() ; activeWingKey = nil end
     -- Suppress SlyChar main if it was shown for stats/sets in native mode
     if SlyCharMainFrame and SC._mainVisible then
-        SlyCharMainFrame:SetAlpha(0)
+        SlyCharMainFrame:Hide()
         SlyCharMainFrame:EnableMouse(false)
-        if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
-        SC_SetSlotMouseEnabled(false)
         SC._mainVisible = false
+        SC._hiddenByCombat = false
     end
 end
 
@@ -4798,11 +4845,6 @@ function SC_BuildMain()
         SC.db.position = {point=pt or "CENTER", x=x or 0, y=y or 0}
     end)
     f:SetPoint("CENTER")
-    -- Pre-show at alpha=0 so combat can reveal via SetAlpha(1) without calling
-    -- Show() (which WoW combat lockdown blocks for frames whose anchor tree
-    -- contains SecureActionButtonTemplate descendants).
-    f:Show()
-    f:SetAlpha(0)
     -- f:EnableMouse(false) already set above at frame creation
 
     themeRefs.frameBg   = FillBg(f, 0.05, 0.05, 0.07, 0.97)
@@ -4847,11 +4889,10 @@ function SC_BuildMain()
     closeTx:SetText("\195\151")  -- UTF-8 × (U+00D7)
     closeTx:SetTextColor(0.80, 0.30, 0.30)
     closeBtn:SetScript("OnClick", function()
-        f:SetAlpha(0)
+        f:Hide()
         f:EnableMouse(false)
         SC._mainVisible = false
-        if _G["SlyCharModel"] then _G["SlyCharModel"]:Hide() end
-        SC_SetSlotMouseEnabled(false)
+        SC._hiddenByCombat = false
         local wf = _G["SlyCharWingFrame"]
         if wf and wf:IsShown() then wf:Hide() end
     end)
@@ -4897,9 +4938,7 @@ function SC_BuildMain()
             CharacterFrame:Show()
             -- Ensure SlyChar is visible if user was viewing it (pre-shown at alpha=0 when not active).
             if SlyCharMainFrame and not SC._mainVisible then
-                if _G["SlyCharModel"] then _G["SlyCharModel"]:Show() end
-                SC_SetSlotMouseEnabled(true)
-                SlyCharMainFrame:SetAlpha(1)
+                SlyCharMainFrame:Show()
                 SlyCharMainFrame:EnableMouse(true)
                 SC._mainVisible = true
             end
@@ -6056,8 +6095,9 @@ function SC_BuildMain()
         tf:SetShown(k == initTab)
     end
 
-    -- PlayerModel frames bypass parent alpha; hide the model explicitly so it
-    -- is not visible while SlyCharMainFrame is pre-shown at alpha=0.
-    model:Hide()
-    SC_SetSlotMouseEnabled(false)
+    -- Frame starts hidden; the player opens it via C-key or minimap button.
+    -- sBtn frames (SecureActionButtonTemplate) are parented to UIParent so
+    -- SlyCharMainFrame:Show()/Hide() are unrestricted -- no alpha=0 tricks or
+    -- mouse-blocker needed.
+    f:Hide()
 end
