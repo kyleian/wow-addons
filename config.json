@@ -179,22 +179,6 @@
                        "curseProjectId":  ""
                    },
                    {
-                       "name":  "SlySuite_FeralHelper",
-                       "enabled":  true,
-                       "description":  "TBC Feral Druid rotation advisor — Cat DPS powershift cycle and Bear Tank priority display with debuff/CD timers. /slyferal",
-                       "sourceDir":  "addons\\SlySuite_FeralHelper",
-                       "version":  "1.5.1",
-                       "curseProjectId":  ""
-                   },
-                   {
-                       "name":  "SlySuite_WarriorHelper",
-                       "enabled":  true,
-                       "description":  "TBC Warrior rotation advisor — Fury DPS (BT/WW), Arms DPS (Slam/MS/WW with swing timer), Protection Tank (SS>Revenge>Devastate loop, Shield Block, debuffs). Auto-detects spec. /slywarrior",
-                       "sourceDir":  "addons\\SlySuite_WarriorHelper",
-                       "version":  "1.1.0",
-                       "curseProjectId":  ""
-                   },
-                   {
                        "name":  "SlyRotate",
                        "enabled":  true,
                        "description":  "Standalone rotation advisor suite for TBC Anniversary — all classes (Warrior/Druid/Shaman/Warlock/Mage/Hunter/Rogue/Paladin/Priest). Per-class/spec toggles, combat-only mode, spotlight box. /slyrotate",

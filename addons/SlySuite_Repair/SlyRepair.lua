@@ -32,13 +32,17 @@ end
 
 -- â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 local function CopperToString(copper)
+    -- Use WoW's native formatter when available (handles icons + colors natively)
+    if GetCoinTextureString then return GetCoinTextureString(copper) end
+    -- Manual fallback: g/s suffixes are not hex chars so color codes parse cleanly.
+    -- Copper suffix 'c' IS a hex char, so close |r before it to avoid parser ambiguity.
     local g = math.floor(copper / 10000)
     local s = math.floor((copper % 10000) / 100)
     local c = copper % 100
     local parts = {}
-    if g > 0 then parts[#parts+1] = "|cffd4af37" .. g .. "g|r" end
-    if s > 0 then parts[#parts+1] = "|cffc0c0c0" .. s .. "s|r" end
-    if c > 0 or #parts == 0 then parts[#parts+1] = "|cffb87333" .. c .. "c|r" end
+    if g > 0 then parts[#parts+1] = "|cFFD4AF37"..g.."g|r" end
+    if s > 0 then parts[#parts+1] = "|cFFC0C0C0"..s.."s|r" end
+    if c > 0 or #parts == 0 then parts[#parts+1] = "|cFFB87333"..c.."|rc" end
     return table.concat(parts, " ")
 end
 

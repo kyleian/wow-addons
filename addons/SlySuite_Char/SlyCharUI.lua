@@ -3107,7 +3107,7 @@ function SC_RefreshHonor()
         for _, br in ipairs(BRACKETS) do
             local ok, rating, seasonPlayed, seasonWon, weeklyPlayed, weeklyWon =
                 pcall(GetPersonalRatedInfo, br.idx)
-            if ok and type(rating) == "number" and ((rating > 0) or (seasonPlayed or 0) > 0) then
+            if ok and type(rating) == "number" and (seasonPlayed or 0) > 0 then
                 if arenaAdded == 0 then data[#data+1] = { sep=true } end
                 local seasonLost = math.max(0, (seasonPlayed or 0) - (seasonWon or 0))
                 local pts = calcPts(rating, br.mult)
