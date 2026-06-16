@@ -17,7 +17,7 @@
 -- ============================================================
 
 local ADDON_NAME = "SlyRotate"
-local VERSION    = "1.3.8"
+local VERSION    = "1.3.9"
 
 -- ─── Public namespace ───────────────────────────────────────
 -- Modules are loaded after this file (per .toc order) and call
@@ -36,6 +36,8 @@ local DB_DEFAULTS = {
     spotShown    = true,
     position     = { point = "CENTER", x = 280, y = 0 },
     spotPosition = { point = "CENTER", x = 0,   y = -150 },
+    swingTimerPosition = { point = "CENTER", x = -230, y = -190 },
+    swingTimerShown    = true,
     iconCache = {},   -- [spellName] = texturePath, resolved at runtime
     errorLog = {},    -- recent errors, capped at 50
     classes = {
@@ -1068,6 +1070,13 @@ evtFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
             SR.db.spotPosition = { point = pt or "CENTER", x = x or 0, y = y or 0 }
             SR.db.spotShown    = spotFrame:IsShown()
         end
+        -- Save warrior swing timer position
+        local wm = SR._modules and SR._modules.WARRIOR
+        if wm and wm.swingFrame and SR.db then
+            local pt2, _, _, x2, y2 = wm.swingFrame:GetPoint()
+            SR.db.swingTimerPosition = { point = pt2 or "CENTER", x = x2 or 0, y = y2 or 0 }
+            SR.db.swingTimerShown    = wm.swingTimerShown
+        end
     end
 end)
 
@@ -1079,6 +1088,10 @@ function SR.LogError(context, err)
     table.insert(SR.db.errorLog, entry)
     if #SR.db.errorLog > 50 then table.remove(SR.db.errorLog, 1) end
     DEFAULT_CHAT_FRAME:AddMessage(Col("ff4444","[SlyRotate ERR] ") .. Col("ffaaaa", tostring(err)))
+    -- Also persist to SlyError so /slyerror captures it across sessions
+    if SlyError and SlyError.Log then
+        SlyError.Log("SlyRotate:" .. tostring(context), tostring(err))
+    end
 end
 
 -- ─── Tick (50 ms) ────────────────────────────────────────────
@@ -1266,6 +1279,24 @@ local function SetupSlashCmd()
                     "  %s: byName=icon:%s(%s) | byID(%s)=icon:%s(%s)",
                     sn, tostring(c), type(c), tostring(spellID), tostring(dc), type(dc)
                 ))
+            end
+
+        elseif msg == "swing" then
+            local wm = SR._modules and SR._modules.WARRIOR
+            local sf = wm and wm.swingFrame
+            if not sf then
+                DEFAULT_CHAT_FRAME:AddMessage(
+                    Col("ff8844","[SlyRotate]") .. " Swing timer is Warrior-only.")
+            elseif wm.swingTimerShown then
+                wm.swingTimerShown = false
+                sf:Hide()
+                if SR.db then SR.db.swingTimerShown = false end
+                DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88","[SlyRotate]") .. " Swing timer hidden.")
+            else
+                wm.swingTimerShown = true
+                sf:Show()
+                if SR.db then SR.db.swingTimerShown = true end
+                DEFAULT_CHAT_FRAME:AddMessage(Col("88ff88","[SlyRotate]") .. " Swing timer shown.")
             end
 
         elseif msg == "admin" then

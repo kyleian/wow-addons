@@ -6,7 +6,7 @@
 -- ============================================================
 
 local ADDON_NAME    = "ExtendedCharStats"
-local ADDON_VERSION = "1.0.0"
+local ADDON_VERSION = "1.5.2"
 
 ECS = ECS or {}
 ECS.version = ADDON_VERSION
@@ -231,11 +231,14 @@ function ECS_GetStats()
     local hasteM = GetCombatRatingBonus(CR.HASTE_MELEE)
     table.insert(stats, { label="Melee Haste",    value=string.format("%.2f%%", hasteM or 0) })
 
-    local expRating = GetCombatRating(CR.EXPERTISE)
-    local expBonus  = GetCombatRatingBonus(CR.EXPERTISE)
-    local expVal,_  = safe(GetExpertise)
+    local expRating  = GetCombatRating(CR.EXPERTISE) or 0
+    -- GetCombatRatingBonus(EXPERTISE) returns the % dodge/parry reduction from gear
+    -- rating, using WoW's own internal scaling — same as we use for hit/crit/haste.
+    -- Each expertise POINT = 0.25% reduction, so pts = bonus% / 0.25.
+    local expBonusPct = GetCombatRatingBonus(CR.EXPERTISE) or 0
+    local expPts = math.floor(expBonusPct / 0.25 + 0.005)
     table.insert(stats, { label="Expertise",
-        value=string.format("%d (%d rating)", expVal or 0, expRating or 0) })
+        value=string.format("%d pts (%.2f%%  /  %d rating)", expPts, expBonusPct, expRating) })
 
     local armorPen = GetCombatRatingBonus(CR.ARMOR_PEN)
     table.insert(stats, { label="Armor Pen.",     value=string.format("%.2f%%", armorPen or 0) })

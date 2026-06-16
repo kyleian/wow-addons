@@ -25,6 +25,7 @@ local FURY_ROWS = {
     { key="HS",         label="+ Heroic Strike",      spell="Heroic Strike",       color={1.00,0.82,0.22} },
     { key="DEATH_WISH", label="Death Wish  (passive)",spell="Death Wish",          color={0.60,0.25,0.90} },
     { key="PROCS",      label="Procs  (DST/DS/MG)",   spell="Heroic Strike",       color={0.20,0.90,0.95} },
+    { key="DESYNC",     label="Swing Sync  (MH/OH)",  spell="Heroic Strike",       color={1.00,0.25,0.10} },
 }
 local ARMS_ROWS = {
     { key="SUNDER",     label="Sunder Armor",         spell="Sunder Armor",        color={0.70,0.70,0.70} },
@@ -70,6 +71,13 @@ local dstExpiry          = 0
 local dragonstrikeExpiry = 0
 local mongooseExpiry     = 0
 
+-- ─── Swing timer state ───────────────────────────────────────
+local mhLastSwing     = 0      -- GetTime() of last MH auto-attack
+local ohLastSwing     = 0      -- GetTime() of last OH auto-attack
+local mhSwingInterval = 2.0    -- current MH swing period (from UnitAttackSpeed)
+local ohSwingInterval = 2.4    -- current OH swing period
+local _pGUID          = nil    -- cached UnitGUID("player")
+
 -- ─── Frame references ────────────────────────────────────────
 local furyContainer  = nil
 local armsContainer  = nil
@@ -77,6 +85,28 @@ local protContainer  = nil
 local furyRowFrames  = {}
 local armsRowFrames  = {}
 local protRowFrames  = {}
+
+-- ─── Swing timer frame refs ──────────────────────────────────
+local swingFrame   = nil   -- "SlyRotateSwingFrame" (outer draggable Frame)
+local swingMHBar   = nil   -- StatusBar for main-hand
+local swingOHBar   = nil   -- StatusBar for off-hand
+local swingMHTimer = nil   -- FontString countdown (MH)
+local swingOHTimer = nil   -- FontString countdown (OH)
+local swingOHRow   = nil   -- Frame for OH row (hidden when single-wielding)
+local swingHdrTx   = nil   -- FontString in header (gap / sync warning)
+
+-- Swing timer layout constants
+local SW_W     = 220  -- match SlyRotate / TotemTwist frame width
+local SW_HDR_H = 14   -- header height
+local SW_ROW_H = 19   -- bar row height
+local SW_BAR_H = 10   -- bar height
+local SW_PAD   = 4    -- left/right padding
+local SW_LBL_W = 24   -- "MH" / "OH" label width
+local SW_CD_W  = 40   -- countdown text column width
+-- bar width = frame - pad*2 - label - countdown - small spacing
+local SW_BAR_W = SW_W - SW_PAD * 2 - SW_LBL_W - SW_CD_W - 4  -- = 144
+-- Forward-declare so W:Build (defined below) can reference before the body is assigned
+local BuildSwingTimer
 
 -- ─── Module API ──────────────────────────────────────────────
 function W:GetBodyHeight(ROW_H)
@@ -134,6 +164,7 @@ function W:Build(body)
     end
 
     W.specRowFrames = { FURY = furyRowFrames, ARMS = armsRowFrames, PROT = protRowFrames }
+    BuildSwingTimer()
 end
 
 -- ─── Sunder row visibility ───────────────────────────────────
@@ -212,6 +243,177 @@ function W:ScanAll()
     ScanPlayerBuffs()
 end
 
+-- ─── Swing timer frame ───────────────────────────────────────
+BuildSwingTimer = function()
+    if swingFrame then return end
+    local pos = (SR.db and SR.db.swingTimerPosition)
+                or { point = "CENTER", x = -230, y = -190 }
+    local fH  = SW_HDR_H + 1 + SW_ROW_H * 2 + 3   -- 14+1+19+19+3 = 56
+
+    local f = CreateFrame("Frame", "SlyRotateSwingFrame", UIParent)
+    f:SetSize(SW_W, fH)
+    f:SetFrameStrata("MEDIUM")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:SetClampedToScreen(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetPoint(pos.point or "CENTER", UIParent, pos.point or "CENTER",
+               pos.x or -230, pos.y or -190)
+    f:SetScript("OnDragStart", function()
+        if not (SR.db and SR.db.locked) then f:StartMoving() end
+    end)
+    f:SetScript("OnDragStop", function()
+        f:StopMovingOrSizing()
+        local pt, _, _, x, y = f:GetPoint()
+        if SR.db then
+            SR.db.swingTimerPosition = { point = pt or "CENTER", x = x or 0, y = y or 0 }
+        end
+    end)
+
+    -- Border + inner BG
+    local bdr = f:CreateTexture(nil, "BACKGROUND")
+    bdr:SetAllPoints()
+    bdr:SetColorTexture(SR.TC("border"))
+    local bg = f:CreateTexture(nil, "BACKGROUND")
+    bg:SetPoint("TOPLEFT",     f, "TOPLEFT",      1, -1)
+    bg:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1,  1)
+    bg:SetColorTexture(SR.TC("frameBg"))
+
+    -- Header row
+    local hdr = CreateFrame("Frame", nil, f)
+    hdr:SetSize(SW_W, SW_HDR_H)
+    hdr:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    local hdrBg = hdr:CreateTexture(nil, "BACKGROUND")
+    hdrBg:SetAllPoints()
+    hdrBg:SetColorTexture(SR.TC("headerBg"))
+
+    local titleTx = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    titleTx:SetFont(titleTx:GetFont(), 8, "OUTLINE")
+    titleTx:SetPoint("LEFT", hdr, "LEFT", 5, 0)
+    titleTx:SetText(SR.Col("997744","SWING") .. SR.Col("445566"," TIMER"))
+
+    swingHdrTx = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    swingHdrTx:SetFont(swingHdrTx:GetFont(), 8, "OUTLINE")
+    swingHdrTx:SetPoint("RIGHT", hdr, "RIGHT", -5, 0)
+    swingHdrTx:SetText("")
+
+    -- Header / content separator
+    local sep = f:CreateTexture(nil, "ARTWORK")
+    sep:SetHeight(1) ; sep:SetWidth(SW_W - 2)
+    sep:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -SW_HDR_H)
+    sep:SetColorTexture(SR.TC("sep"))
+
+    -- Helper: build one bar row; rowIdx 0=MH 1=OH
+    local function MakeRow(labelTxt, rowIdx)
+        local yOff = SW_HDR_H + 1 + rowIdx * SW_ROW_H
+        local row  = CreateFrame("Frame", nil, f)
+        row:SetSize(SW_W, SW_ROW_H)
+        row:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -yOff)
+
+        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetFont(lbl:GetFont(), 9, "OUTLINE")
+        lbl:SetPoint("LEFT", row, "LEFT", SW_PAD, 0)
+        lbl:SetWidth(SW_LBL_W) ; lbl:SetJustifyH("LEFT")
+        lbl:SetText(SR.Col("888888", labelTxt))
+
+        -- StatusBar acts as the progress bar
+        local bar = CreateFrame("StatusBar", nil, row)
+        bar:SetSize(SW_BAR_W, SW_BAR_H)
+        bar:SetPoint("LEFT", row, "LEFT", SW_PAD + SW_LBL_W, 0)
+        bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        bar:SetMinMaxValues(0, 1.0)
+        bar:SetValue(0)
+        bar:SetStatusBarColor(0.2, 0.7, 0.2, 0.9)
+        local barBg = bar:CreateTexture(nil, "BACKGROUND")
+        barBg:SetAllPoints(bar)
+        barBg:SetColorTexture(0.07, 0.07, 0.11, 0.95)
+
+        local cdTx = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        cdTx:SetFont(cdTx:GetFont(), 9, "OUTLINE")
+        cdTx:SetPoint("LEFT", bar, "RIGHT", 4, 0)
+        cdTx:SetWidth(SW_CD_W - 4) ; cdTx:SetJustifyH("LEFT")
+        cdTx:SetText(SR.Col("333344","--"))
+
+        return row, bar, cdTx
+    end
+
+    local mhRow, mhBar, mhTx = MakeRow("MH", 0)
+    local ohRow, ohBar, ohTx = MakeRow("OH", 1)
+
+    swingMHBar   = mhBar
+    swingOHBar   = ohBar
+    swingMHTimer = mhTx
+    swingOHTimer = ohTx
+    swingOHRow   = ohRow
+    swingFrame   = f
+    W.swingFrame = f   -- exposed so SlyRotate.lua can save position on logout
+
+    -- Track explicit user intent separately from spec-based hide/show
+    W.swingTimerShown = not (SR.db and SR.db.swingTimerShown == false)
+    if not W.swingTimerShown then f:Hide() end
+end
+
+local function UpdateSwingTimer(now)
+    if not swingFrame then return end
+    local mhSpd, ohSpd = UnitAttackSpeed("player")
+    local hasOH = ohSpd and ohSpd > 0
+    -- UnitAttackSpeed is authoritative (already haste-corrected)
+    if mhSpd and mhSpd > 0 then mhSwingInterval = mhSpd end
+    if ohSpd and ohSpd > 0 then ohSwingInterval = ohSpd end
+
+    if swingOHRow then swingOHRow:SetShown(hasOH) end
+
+    -- Update one bar: sets StatusBar value + color, updates countdown text
+    local function DoBar(bar, timerTx, lastSwing, interval)
+        if lastSwing <= 0 or interval <= 0 then
+            bar:SetValue(0)
+            bar:SetStatusBarColor(0.22, 0.22, 0.22, 0.4)
+            timerTx:SetText(SR.Col("333344","--"))
+            return
+        end
+        local remaining = math.max(0, (lastSwing + interval) - now)
+        local progress  = math.min(1.0, (now - lastSwing) / interval)
+        bar:SetValue(progress)
+        local r, g, b
+        if remaining > 0.5 then
+            r, g, b = 0.20, 0.75, 0.25   -- green: plenty of time
+        elseif remaining > 0.2 then
+            r, g, b = 0.85, 0.70, 0.10   -- yellow: approaching
+        else
+            r, g, b = 0.90, 0.22, 0.10   -- red: imminent
+        end
+        bar:SetStatusBarColor(r, g, b, 0.90)
+        if remaining < 0.1 then
+            timerTx:SetText(SR.Col("ff4444","NOW!"))
+        elseif remaining < 1.0 then
+            timerTx:SetText(SR.Col("ffcc44", string.format("%.2f", remaining)))
+        else
+            timerTx:SetText(SR.Col("88cc88", string.format("%.1f",  remaining)))
+        end
+    end
+
+    DoBar(swingMHBar, swingMHTimer, mhLastSwing, mhSwingInterval)
+    if hasOH then
+        DoBar(swingOHBar, swingOHTimer, ohLastSwing, ohSwingInterval)
+    end
+
+    -- Sync gap / warning in header
+    if swingHdrTx then
+        if hasOH and mhLastSwing > 0 and ohLastSwing > 0 then
+            local mhRem = math.max(0, (mhLastSwing + mhSwingInterval) - now)
+            local ohRem = math.max(0, (ohLastSwing + ohSwingInterval) - now)
+            local gap   = math.abs(mhRem - ohRem)
+            if gap < 0.35 then
+                swingHdrTx:SetText(SR.Col("ff3322","!! SYNC"))
+            else
+                swingHdrTx:SetText(SR.Col("446655", string.format("%.2fs", gap)))
+            end
+        else
+            swingHdrTx:SetText("")
+        end
+    end
+end
+
 -- ─── Row update helpers ──────────────────────────────────────
 local Col     = function(...) return SR.Col(...) end
 local Fmt     = function(...) return SR.Fmt(...) end
@@ -257,11 +459,26 @@ local function UpdateFury(db, now)
     local hsThresh = anyProc and 60 or 70
     local hsDump   = rage >= hsThresh and btCD > 0 and wwCD > 0
 
+    -- Swing sync detection (Fury dual-wield)
+    local swingSynced = false
+    local swingGap    = -1
+    local mhSpd2, ohSpd2 = UnitAttackSpeed("player")
+    if mhSpd2 and mhSpd2 > 0 then mhSwingInterval = mhSpd2 end
+    if ohSpd2 and ohSpd2 > 0 then ohSwingInterval = ohSpd2 end
+    if ohSpd2 and ohSpd2 > 0 and mhLastSwing > 0 and ohLastSwing > 0 then
+        local mhRem = math.max(0, (mhLastSwing + mhSwingInterval) - now)
+        local ohRem = math.max(0, (ohLastSwing + ohSwingInterval) - now)
+        swingGap    = math.abs(mhRem - ohRem)
+        swingSynced = swingGap < 0.35
+    end
+    if swingSynced then best = "DESYNC" end
+
     for _, row in ipairs(furyRowFrames) do
         local k      = row.rowDef.key
         local active = (k == best)
-                    or (k == "HS"    and hsDump)
-                    or (k == "PROCS" and anyProc)
+                    or (k == "HS"     and hsDump)
+                    or (k == "PROCS"  and anyProc)
+                    or (k == "DESYNC" and swingSynced)
         local s = ""
 
         if k == "SUNDER" then
@@ -333,7 +550,17 @@ local function UpdateFury(db, now)
                 s = table.concat(parts, Col("555566"," | "))
                 if rage >= hsThresh - 10 then s = s .. Col("ffee55","  HS!") end
             else
-                s = Col("333344","—")
+                s = Col("333344","--")
+            end
+        elseif k == "DESYNC" then
+            if not (ohSpd2 and ohSpd2 > 0) then
+                s = Col("333344","--  ") .. Col("555566","no OH weapon")
+            elseif mhLastSwing <= 0 or ohLastSwing <= 0 then
+                s = Col("333344","--  ") .. Col("555566","no swing data yet")
+            elseif swingSynced then
+                s = Col("ff3322",">> MACRO <<  ") .. Col("888888",string.format("%.2fs gap", swingGap))
+            else
+                s = Col("446644","OK  ") .. Col("555566",string.format("gap %.2f", swingGap))
             end
         end
         SR.SetRowState(row, active, s)
@@ -485,7 +712,7 @@ local function UpdateArms(db, now)
                 s = table.concat(parts, Col("555566"," | "))
                 if rage >= hsThresh - 10 then s = s .. Col("ffee55","  HS!") end
             else
-                s = Col("333344","—")
+                s = Col("333344","--")
             end
         end
         SR.SetRowState(row, active, s)
@@ -668,6 +895,7 @@ function W:Update(now, db)
         if furyContainer  then furyContainer:Hide()  end
         if armsContainer  then armsContainer:Hide()  end
         if protContainer  then protContainer:Hide()  end
+        if swingFrame     then swingFrame:Hide()     end
         SR.SetModeLabel(Col("555566", spec .. " disabled"))
         SR.UpdateSpotlight(nil, nil, nil)
         return
@@ -689,6 +917,13 @@ function W:Update(now, db)
         if protContainer  then protContainer:Show()  end
         UpdateProt(db, now)
     end
+
+    -- Swing timer: visible for FURY / ARMS only
+    if swingFrame and SR.db then
+        local showSwing = (spec ~= "PROT") and W.swingTimerShown
+        swingFrame:SetShown(showSwing)
+        if showSwing then UpdateSwingTimer(now) end
+    end
 end
 
 -- ─── Events ──────────────────────────────────────────────────
@@ -698,20 +933,54 @@ function W:OnEvent(event, arg1, arg2, arg3)
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then ScanPlayerBuffs()    end
         if arg1 == "target"  then ScanTargetDebuffs() end
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Zone transition: old swing timestamps are stale
+        mhLastSwing = 0
+        ohLastSwing = 0
+        _pGUID      = nil
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        -- Track main-hand swing timer for Arms Slam window
         local timestamp, subtype, _, sourceGUID = CombatLogGetCurrentEventInfo()
-        if (subtype == "SWING_DAMAGE" or subtype == "SWING_MISSED") and
-           sourceGUID == UnitGUID("player") then
-            local now = GetTime()
-            if lastSwingTime > 0 then
-                local elapsed = now - lastSwingTime
-                -- Sanity: only update if reasonable swing speed (0.5–4s)
-                if elapsed >= 0.5 and elapsed <= 4.0 then
-                    swingDuration = elapsed
-                end
-            end
+        -- Cache player GUID to avoid per-event UnitGUID call
+        if not _pGUID then _pGUID = UnitGUID("player") end
+        if sourceGUID ~= _pGUID then return end
+        if subtype ~= "SWING_DAMAGE" and subtype ~= "SWING_MISSED" then return end
+
+        local now = GetTime()
+        -- Determine MH vs OH from combat log args.
+        -- SWING_DAMAGE suffix (args 12+): amount,overkill,school,resisted,blocked,
+        --   absorbed,critical,glancing,crushing,isOffHand(21)
+        -- SWING_MISSED suffix (args 12+): missType,isOffHand(13)
+        local allArgs = {CombatLogGetCurrentEventInfo()}
+        local isOH
+        if subtype == "SWING_DAMAGE" then
+            isOH = allArgs[21]
+        else
+            isOH = allArgs[13]
+        end
+
+        local mhSpd, ohSpd = UnitAttackSpeed("player")
+        local hasDual       = ohSpd and ohSpd > 0
+
+        -- Fallback: if no flag, guess from which swing was more overdue
+        if isOH == nil and hasDual then
+            local mhDue = mhLastSwing > 0 and (mhLastSwing + mhSwingInterval) or -9999
+            local ohDue = ohLastSwing > 0 and (ohLastSwing + ohSwingInterval) or -9999
+            isOH = (now - ohDue) > (now - mhDue)
+        end
+
+        if isOH then
+            -- Off-hand swing: record time, refresh interval from server
+            local _, ohSpdE = UnitAttackSpeed("player")
+            if ohSpdE and ohSpdE > 0 then ohSwingInterval = ohSpdE end
+            ohLastSwing = now
+        else
+            -- Main-hand (or single-wield)
+            local mhSpdE = UnitAttackSpeed("player")
+            if mhSpdE and mhSpdE > 0 then mhSwingInterval = mhSpdE end
+            mhLastSwing   = now
+            -- Keep Arms Slam tracking in sync (lastSwingTime = last MH swing)
             lastSwingTime = now
+            swingDuration = mhSwingInterval
         end
     end
 end

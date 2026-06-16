@@ -2,7 +2,7 @@
 ## Title: SlyRotate
 ## Notes: Standalone rotation advisor for TBC Anniversary — all classes. Per-class/spec toggles, combat-only mode, spotlight box. /slyrotate
 ## X-Curse-Project-ID: 1528155
-## Version: 1.3.8
+## Version: 1.3.9
 ## Author: Sly
 ## DefaultState: enabled
 ## OptionalDeps: SlySuite, SlySuite_Style

@@ -6,7 +6,7 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "2.1.0"
+SC.version = "2.4.0"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
@@ -15,6 +15,42 @@ SC._pendingHideChar = false   -- true when CharacterFrame was left open in comba
 SC._hiddenByCombat  = false   -- true when we suppressed the panel at combat start
 SC._pendingBuild    = false   -- true when SC_BuildMain() was blocked by combat lockdown
 SC._mainVisible     = false   -- true when user has logically opened SlyCharMainFrame
+SC._refreshPending  = false   -- true when a deferred SC_RefreshAll is already queued
+SC._pendingCharFrame = false  -- true when CHR was clicked in combat, open after
+
+-- --------------------------------------------------------
+-- Debug ring-buffer  (/slychar debug)
+-- --------------------------------------------------------
+local _DBG = {}        -- ring buffer of strings
+local _DBG_MAX = 80
+local function dbg(msg)
+    local ts = string.format("%.1f", GetTime())
+    local line = "[" .. ts .. "] " .. tostring(msg)
+    if #_DBG >= _DBG_MAX then table.remove(_DBG, 1) end
+    _DBG[#_DBG + 1] = line
+end
+-- Expose so SlyCharUI.lua (same addon, different file) can log too.
+SC.dbg = dbg
+
+-- tryHideCharFrame(): attempt to hide CharacterFrame and return whether it worked.
+-- WoW combat lockdown silently no-ops restricted calls without raising a Lua error,
+-- so pcall(Hide) always returns ok=true even if Hide did nothing.
+-- Solution: always verify IsShown() AFTER the call.
+local function tryHideCharFrame()
+    if not (CharacterFrame and CharacterFrame:IsShown()) then return true end
+    CharacterFrame:Hide()
+    if CharacterFrame:IsShown() then
+        -- Hide was a silent no-op (combat lockdown restriction).
+        dbg("tryHideCharFrame: Hide ignored in combat, using alpha suppression")
+        CharacterFrame:SetAlpha(0)
+        CharacterFrame:EnableMouse(false)
+        CharacterFrame:EnableKeyboard(false)
+        SC._pendingHideChar = true
+        return false
+    end
+    return true
+end
+SC.tryHideCharFrame = tryHideCharFrame
 
 -- --------------------------------------------------------
 -- SavedVariables defaults
@@ -77,7 +113,8 @@ function SC_ShowMain()
     local fm = _G["SlyCharStripFlyout"]
     if fm then fm:Hide() end
     SC_RefreshAll()
-    -- Restore the active tab (and in slychar_flyout mode, open its wing).
+    -- Restore the last-active tab (and in slychar_flyout mode, open its wing).
+    -- Slash commands use SC_SwitchTab directly to jump to a specific tab.
     if SC_SwitchTab then
         SC_SwitchTab(SC.db.lastTab or "stats")
     end
@@ -95,6 +132,21 @@ function SC_ToggleMain()
     else
         SC_ShowMain()
     end
+end
+
+-- --------------------------------------------------------
+-- Debounced refresh: coalesces rapid UNIT_INVENTORY_CHANGED / talent
+-- events that flood in during combat into a single SC_RefreshAll call.
+-- Direct calls from SC_ShowMain / SC_SwitchTab stay immediate.
+-- --------------------------------------------------------
+local _REFRESH_DELAY = 0.35
+function SC_DeferRefresh()
+    if SC._refreshPending then return end
+    SC._refreshPending = true
+    C_Timer.After(_REFRESH_DELAY, function()
+        SC._refreshPending = false
+        if SC._mainVisible and SC_RefreshAll then SC_RefreshAll() end
+    end)
 end
 
 -- --------------------------------------------------------
@@ -122,21 +174,32 @@ local function HookCharacterFrame()
         if GetCursorInfo() then return end
 
         if InCombatLockdown() then
-            self:Hide()
-            -- sBtn frames are parented to UIParent so SlyCharMainFrame:Show()
-            -- is no longer combat-restricted.  SC_ShowMain guards SC_BuildMain
-            -- (which sets attributes and remains combat-restricted).
+            -- tryHideCharFrame detects silent combat no-ops via post-call IsShown().
+            dbg("OnShow:combat skipHook="..tostring(SC._skipHook))
+            tryHideCharFrame()
             SC_ShowMain()
             return
         end
-        HideUIPanel(self)  -- properly removes CharacterFrame from the UIPanel stack
+        -- Hide immediately to prevent a visible flash; then defer HideUIPanel
+        -- to AFTER ShowUIPanel's call chain completes — calling HideUIPanel
+        -- inside ShowUIPanel corrupts the VISIBLE_PANEL_LIST and breaks
+        -- push/close logic for all subsequent native panels.
+        self:Hide()
+        C_Timer.After(0, function() HideUIPanel(self) end)
         SC_ToggleMain()
     end)
 
-    -- In native_flyout mode: hide companion when CharacterFrame closes
+    -- In native_flyout mode: hide companion when CharacterFrame closes.
+    -- In slychar / slychar_flyout modes: restore the strata we raised in
+    -- the CHR button handler (CharacterFrame:SetFrameStrata("DIALOG")).
     CharacterFrame:HookScript("OnHide", function(self)
-        if (SC.db and SC.db.mode) == "native_flyout" then
+        local mode = (SC.db and SC.db.mode) or "native_flyout"
+        if mode == "native_flyout" then
             if SC_HideNativeCompanion then SC_HideNativeCompanion() end
+        else
+            -- Restore default strata so CharacterFrame behaves normally
+            -- the next time the game opens it through the UIPanel system.
+            self:SetFrameStrata("MEDIUM")
         end
     end)
 end
@@ -308,6 +371,25 @@ local function SC_Slash(msg)
         end
 
         DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SC]|r Honor debug saved. /reload then open WTF/.../SavedVariables/SlySuite_Char.lua and search for honorDebug")
+    elseif msg == "debug" then
+        -- Dump the combat/CharacterFrame event ring-buffer to chat.
+        if #_DBG == 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar Debug]|r No events logged yet.")
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar Debug]|r Last " .. #_DBG .. " events:")
+            for i = math.max(1, #_DBG - 29), #_DBG do
+                DEFAULT_CHAT_FRAME:AddMessage("|cffaaaaaa" .. _DBG[i] .. "|r")
+            end
+        end
+        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar Debug]|r combat=" .. tostring(InCombatLockdown())
+            .. " cfShown=" .. tostring(CharacterFrame and CharacterFrame:IsShown())
+            .. " cfAlpha=" .. string.format("%.2f", CharacterFrame and CharacterFrame:GetAlpha() or 0)
+            .. " mainVis=" .. tostring(SC._mainVisible)
+            .. " pendHide=" .. tostring(SC._pendingHideChar)
+            .. " pendCF=" .. tostring(SC._pendingCharFrame))
+    elseif msg == "debug clear" then
+        _DBG = {}
+        DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar Debug]|r Log cleared.")
     elseif msg:match("^mode") then
         local m = (msg:match("^mode%s+(.+)$") or ""):trim()
         -- Short aliases → internal key
@@ -400,6 +482,7 @@ evFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
 evFrame:RegisterEvent("FRIENDLIST_UPDATE")
 evFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 evFrame:RegisterEvent("TRADE_SHOW")
+evFrame:RegisterEvent("UPDATE_BATTLEFIELD_SCORE")  -- fires after BG ends; used to refresh honor
 
 evFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -435,7 +518,11 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
                     local mode = (SC.db and SC.db.mode) or "native_flyout"
                     if mode ~= "native_flyout" then
                         if which == "PaperDollFrame" or which == nil then
-                            -- C key / micro-menu: bypass CharacterFrame entirely
+                            dbg("ToggleChar:PaperDoll combat="..tostring(InCombatLockdown()).." cfShown="..tostring(CharacterFrame and CharacterFrame:IsShown()).." mainVis="..tostring(SC._mainVisible))
+                            if CharacterFrame and CharacterFrame:IsShown() then
+                                tryHideCharFrame()
+                                return
+                            end
                             SC_ToggleMain()
                             return
                         elseif which == "HonorFrame" or which == "PVPFrame" then
@@ -468,13 +555,13 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "UNIT_INVENTORY_CHANGED" then
         if SC._mainVisible then
-            SC_RefreshAll()
+            SC_DeferRefresh()
         end
 
     elseif event == "PLAYER_TALENT_UPDATE"
         or event == "CHARACTER_POINTS_CHANGED" then
         if SC._mainVisible then
-            SC_RefreshAll()
+            SC_DeferRefresh()
         end
 
     elseif event == "UPDATE_FACTION" then
@@ -511,12 +598,18 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "ACTIVE_TALENT_GROUP_CHANGED" then
         if SC._mainVisible then
-            if SC_RefreshAll then SC_RefreshAll() end
+            SC_DeferRefresh()
         end
 
     elseif event == "TRADE_SHOW" then
         -- Trade opened: do nothing. SlyChar stays open (they coexist).
         -- User can close SlyChar manually if it's in the way.
+
+    elseif event == "UPDATE_BATTLEFIELD_SCORE" then
+        -- Fires when BG score updates (end of BG, periodic updates).
+        -- Always update cache; also re-render if honor wing is open.
+        if SC_FetchHonorCache then SC_FetchHonorCache() end
+        if SC_RefreshHonor    then SC_RefreshHonor()    end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local mode = (SC.db and SC.db.mode) or "native_flyout"
@@ -531,31 +624,47 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         SC_CreateMinimapButton()
+        -- Stats + honor data arrive from the server asynchronously after zone-in.
+        -- SC_FetchHonorCache runs regardless of wing visibility (updates the cache).
+        -- SC_DeferRefresh re-renders stats/sets if the panel is open.
+        C_Timer.After(2.5, function()
+            if SC_FetchHonorCache then SC_FetchHonorCache() end
+            if SC._mainVisible and SC_DeferRefresh then SC_DeferRefresh() end
+            if SC_RefreshHonor then SC_RefreshHonor() end
+        end)
 
     elseif event == "PLAYER_REGEN_DISABLED" then
-        -- Auto-hide on combat start; PLAYER_REGEN_ENABLED restores it.
-        -- Hide() is now unrestricted: sBtn frames are parented to UIParent.
-        if SlyCharMainFrame and SC._mainVisible then
-            SlyCharMainFrame:Hide()
-            SlyCharMainFrame:EnableMouse(false)
-            SC._mainVisible = false
-            SC._hiddenByCombat = true
-        end
+        local cfShown = CharacterFrame and CharacterFrame:IsShown()
+        dbg("REGEN_DISABLED cfShown="..tostring(cfShown).." mainVis="..tostring(SC._mainVisible))
+        if cfShown then tryHideCharFrame() end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        -- Combat ended: restore panel if we auto-hid it at combat start.
-        if SC._hiddenByCombat then
-            SC._hiddenByCombat = false
-            SC_ShowMain()
-        end
-        -- Hide the native CharacterFrame we couldn't suppress earlier.
+        dbg("REGEN_ENABLED pendingHide="..tostring(SC._pendingHideChar).." pendingCF="..tostring(SC._pendingCharFrame))
+        -- Cleanup any alpha/mouse suppression from the combat fallback path.
         if SC._pendingHideChar then
             SC._pendingHideChar = false
             if CharacterFrame and CharacterFrame:IsShown() then
+                CharacterFrame:SetAlpha(1)
                 CharacterFrame:EnableMouse(true)
                 CharacterFrame:EnableKeyboard(true)
                 CharacterFrame:Hide()
             end
+        end
+        -- If the user clicked CHR during combat, open CharacterFrame now.
+        if SC._pendingCharFrame then
+            SC._pendingCharFrame = false
+            C_Timer.After(0.1, function()
+                if not CharacterFrame:IsShown() then
+                    SC._skipHook = true
+                    CharacterFrame:Show()
+                    CharacterFrame:SetFrameStrata("DIALOG")
+                    CharacterFrame:Raise()
+                    if CharacterFrame_ShowPanel then
+                        CharacterFrame_ShowPanel("PaperDollFrame")
+                    end
+                    SC._skipHook = false
+                end
+            end)
         end
         -- If player pressed C during combat before the frame was built, open it now.
         if SC._pendingBuild then

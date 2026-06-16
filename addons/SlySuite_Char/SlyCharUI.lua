@@ -142,7 +142,11 @@ local _targetMonitor = CreateFrame("Frame")
 do
     local _wasTargeting   = false
     local _autoShownSlyChar = false   -- true when we auto-opened the frame for targeting
-    _targetMonitor:SetScript("OnUpdate", function()
+    local _throttle = 0
+    _targetMonitor:SetScript("OnUpdate", function(self, elapsed)
+        _throttle = _throttle - elapsed
+        if _throttle > 0 then return end
+        _throttle = 0.05  -- check at most 20× per second
         -- Activate secure overlays whenever a spell is targeting (armor kit,
         -- oil, stone, poison, enchant) OR any cursor type is set (item drag).
         -- PickupInventoryItem is permanently restricted in TBC Anniversary; the
@@ -907,11 +911,10 @@ local function SC_BuildPicker()
     -- OnUpdate-based countdown timer (no C_Timer needed)
     pickerTimerFrame = CreateFrame("Frame", nil, UIParent)
     pickerTimerFrame:SetScript("OnUpdate", function(self, elapsed)
-        if pickerHideCountdown > 0 then
-            pickerHideCountdown = pickerHideCountdown - elapsed
-            if pickerHideCountdown <= 0 then
-                SC_HidePicker()
-            end
+        if pickerHideCountdown <= 0 then return end
+        pickerHideCountdown = pickerHideCountdown - elapsed
+        if pickerHideCountdown <= 0 then
+            SC_HidePicker()
         end
     end)
 
@@ -2743,7 +2746,7 @@ function SC_RefreshSets()
             GameTooltip:SetOwner(w.row, "ANCHOR_RIGHT")
             GameTooltip:SetText(name, 1, 0.84, 0)
             for _, itemId in pairs(IRR.chardata.sets[name]) do
-                if itemId then
+                if type(itemId) == "number" and itemId > 0 then
                     local n2 = GetItemInfo(itemId)
                     if n2 then GameTooltip:AddLine(n2, 0.8, 0.8, 0.8) end
                 end
@@ -2952,11 +2955,85 @@ function SC_RefreshSkills()
     end
 end
 
+-- SC_FetchHonorCache(): query all PvP APIs and persist results to the
+-- per-character cache.  Runs regardless of whether the honor wing is open,
+-- so zone-in and battlefield-score events always keep the cache warm.
+function SC_FetchHonorCache()
+    SlyCharDB = SlyCharDB or {}
+    SlyCharDB.honorCache = SlyCharDB.honorCache or {}
+
+    local charKey = (UnitName and UnitName("player") or "?")
+        .. "-" .. (GetRealmName and GetRealmName() or "?")
+    local cache = SlyCharDB.honorCache[charKey] or {}
+
+    local honorCurr, honorMax = 0, 75000
+    local arenaPts = 0
+
+    if GetHonorCurrency then
+        local c, m = GetHonorCurrency()
+        honorCurr = math.floor(c or 0)
+        honorMax  = (m and m > 0) and math.floor(m) or 75000
+    end
+    if arenaPts == 0 and GetArenaCurrency then
+        arenaPts = math.floor(GetArenaCurrency() or 0)
+    end
+    if (honorCurr == 0 or arenaPts == 0) and GetCurrencyListSize then
+        local size = GetCurrencyListSize()
+        for i = 1, (size or 0) do
+            local name, isHeader, _, _, _, qty, _, maxQty = GetCurrencyListInfo(i)
+            if not isHeader and name then
+                local ln = name:lower()
+                if honorCurr == 0 and ln:find("honor") then
+                    honorCurr = math.floor(qty or 0)
+                    honorMax  = (maxQty and maxQty > 0) and math.floor(maxQty) or 75000
+                elseif arenaPts == 0 and ln:find("arena") then
+                    arenaPts = math.floor(qty or 0)
+                end
+            end
+        end
+    end
+
+    local twHK, yHK, lwHK, lfHK, lfDK = 0, 0, 0, 0, 0
+    if GetPVPThisWeekStats  then local a = GetPVPThisWeekStats()  ; twHK = math.floor(a or 0) end
+    if GetPVPYesterdayStats then local a = GetPVPYesterdayStats() ; yHK  = math.floor(a or 0) end
+    if GetPVPLastWeekStats  then local a = GetPVPLastWeekStats()  ; lwHK = math.floor(a or 0) end
+    if GetPVPLifetimeStats  then
+        local a, b = GetPVPLifetimeStats()
+        lfHK = math.floor(a or 0) ; lfDK = math.floor(b or 0)
+    end
+
+    if honorCurr > 0 then cache.honorCurr = honorCurr ; cache.honorMax = honorMax end
+    if arenaPts  > 0 then cache.arenaPts  = arenaPts  end
+    if twHK      > 0 then cache.twHK      = twHK      end
+    if yHK       > 0 then cache.yHK       = yHK       end
+    if lwHK      > 0 then cache.lwHK      = lwHK      end
+    if lfHK      > 0 then cache.lfHK      = lfHK      end
+    if lfDK      > 0 then cache.lfDK      = lfDK      end
+    cache._charKey = charKey
+    SlyCharDB.honorCache[charKey] = cache
+    return cache
+end
+
 function SC_RefreshHonor()
     if not miscUI.honorContent then return end
     if not miscUI.honorContent:IsShown() then return end
     local rows = miscUI._honorRows
     if not rows then return end
+
+    -- Fetch live data (also updates cache).
+    local cache = SC_FetchHonorCache()
+    local charKey = cache._charKey or "?"
+
+    -- Re-read live values from cache (SC_FetchHonorCache already stored them).
+    -- Use live if non-zero, else fall back to cached with indicator.
+    local honorCurr = (GetHonorCurrency and math.floor(({GetHonorCurrency()})[1] or 0)) or 0
+    local honorMax  = (GetHonorCurrency and (function() local _,m=GetHonorCurrency(); return (m and m>0) and math.floor(m) or 75000 end)()) or 75000
+    local arenaPts  = (GetArenaCurrency and math.floor(GetArenaCurrency() or 0)) or 0
+    local twHK = (GetPVPThisWeekStats  and math.floor((GetPVPThisWeekStats())  or 0)) or 0
+    local yHK  = (GetPVPYesterdayStats and math.floor((GetPVPYesterdayStats()) or 0)) or 0
+    local lwHK = (GetPVPLastWeekStats  and math.floor((GetPVPLastWeekStats())  or 0)) or 0
+    local lfHK, lfDK = 0, 0
+    if GetPVPLifetimeStats then local a,b = GetPVPLifetimeStats(); lfHK=math.floor(a or 0); lfDK=math.floor(b or 0) end
 
     -- Number formatter with thousands separators: 75000 → "75,000"
     local function commaNum(n)
@@ -2979,96 +3056,28 @@ function SC_RefreshHonor()
         if rn then rankName = rn .. " (" .. rank .. ")" end
     end
 
-    -- ── Honor currency (spendable amount) ────────────────────────────────────
-    -- TBC Classic (including Anniversary) uses an index-based currency list:
-    --   GetCurrencyListSize()  → total rows (headers + entries)
-    --   GetCurrencyListInfo(i) → name, isHeader, isExpanded, _, _, qty, icon, maxQty
-    --   ExpandCurrencyList(i, 1/0) → expand/collapse a header row
-    local honorCurr, honorMax = 0, 75000
-    local arenaPts = 0
-    local function scanCurrencyList()
-        if not GetCurrencyListSize then return end
-        local size = GetCurrencyListSize()
-        if (size or 0) == 0 then return end
-        -- Expand every collapsed header so child entries become visible
-        local toCollapse = {}
-        for i = 1, size do
-            local _, isHeader, isExpanded = GetCurrencyListInfo(i)
-            if isHeader and not isExpanded then
-                toCollapse[#toCollapse+1] = i
-                ExpandCurrencyList(i, 1)
-            end
-        end
-        size = GetCurrencyListSize()   -- re-query after expansion
-        for i = 1, size do
-            local name, isHeader, _, _, _, qty, _, maxQty = GetCurrencyListInfo(i)
-            if not isHeader and name then
-                local lname = name:lower()
-                if lname:find("honor") then
-                    honorCurr = math.floor(qty or 0)
-                    honorMax  = (maxQty and maxQty > 0) and math.floor(maxQty) or 75000
-                elseif lname:find("arena") then
-                    arenaPts  = math.floor(qty or 0)
-                end
-            end
-        end
-        -- Re-collapse headers we opened
-        for i = #toCollapse, 1, -1 do
-            ExpandCurrencyList(toCollapse[i], 0)
-        end
-    end
-    scanCurrencyList()
-    -- WotLK+ fallbacks (nil on TBC Anniversary — kept for forward compat)
-    if honorCurr == 0 and GetHonorCurrency then
-        local c, m = GetHonorCurrency()
-        honorCurr = math.floor(c or 0)
-        honorMax  = (m and m > 0) and math.floor(m) or 75000
-    end
-    if arenaPts == 0 and GetArenaCurrency then
-        arenaPts = math.floor(GetArenaCurrency() or 0)
+    -- Show live value; if 0, fall back to cached with indicator.
+    local function withCache(live, cacheKey)
+        if live > 0 then return commaNum(live) end
+        local v = cache[cacheKey]
+        if v and v > 0 then return commaNum(v) .. " |cff888888(cached)|r" end
+        return commaNum(0)
     end
 
-    -- ── HK / kill stats via GetHonorInfo() ───────────────────────────────────
-    -- GetHonorInfo() -> todayHK, todayHonor, yHK, yHonor, lwHK, lwHonor,
-    --                   twHK, twHonor, lifetimeHK, lifetimeHighestRank
-    local twHK, yHK, lwHK, lfHK, lfDK = 0, 0, 0, 0, 0
-    if GetHonorInfo then
-        local _tdHK, _tdH, _yHK, _yH, _lwHK, _lwH, _twHK, _twH, _lfHK =
-            GetHonorInfo()
-        yHK  = math.floor(_yHK  or 0)
-        lwHK = math.floor(_lwHK or 0)
-        twHK = math.floor(_twHK or 0)
-        lfHK = math.floor(_lfHK or 0)
-        -- Use this-week honor as currency if C_CurrencyInfo gave us nothing
-        if honorCurr == 0 and _twH and _twH > 0 then
-            honorCurr = math.floor(_twH)
-        end
-    else
-        -- Final per-stat fallbacks (WotLK+)
-        if GetPVPThisWeekStats  then local a = GetPVPThisWeekStats()  ; twHK = math.floor(a or 0) end
-        if GetPVPYesterdayStats then local a = GetPVPYesterdayStats() ; yHK  = math.floor(a or 0) end
-        if GetPVPLastWeekStats  then local a = GetPVPLastWeekStats()  ; lwHK = math.floor(a or 0) end
-        if GetPVPLifetimeStats  then
-            local a, b = GetPVPLifetimeStats()
-            lfHK = math.floor(a or 0) ; lfDK = math.floor(b or 0)
-        end
-    end
-    if GetPVPLifetimeStats and lfHK == 0 then
-        local a, b = GetPVPLifetimeStats()
-        lfHK = math.floor(a or 0) ; lfDK = math.floor(b or 0)
-    end
+    local honorStr = withCache(honorCurr, "honorCurr")
+        .. " / " .. commaNum(honorCurr > 0 and honorMax or (cache.honorMax or honorMax))
 
     local data = {
-        { lbl="Rank",              val=rankName },
-        { lbl="Honor",             val=commaNum(honorCurr).." / "..commaNum(honorMax) },
-        { lbl="Arena Points",      val=commaNum(arenaPts) },
+        { lbl="Rank",          val=rankName },
+        { lbl="Honor",         val=honorStr },
+        { lbl="Arena Points",  val=withCache(arenaPts, "arenaPts") },
         { sep=true },
-        { lbl="Yesterday HKs",     val=commaNum(yHK) },
-        { lbl="This Week HKs",     val=commaNum(twHK) },
-        { lbl="Last Week HKs",     val=commaNum(lwHK) },
+        { lbl="Yesterday HKs", val=withCache(yHK,  "yHK")  },
+        { lbl="This Week HKs", val=withCache(twHK, "twHK") },
+        { lbl="Last Week HKs", val=withCache(lwHK, "lwHK") },
         { sep=true },
-        { lbl="Lifetime HKs",      val=commaNum(lfHK) },
-        { lbl="Lifetime DKs",      val=commaNum(lfDK) },
+        { lbl="Lifetime HKs",  val=withCache(lfHK, "lfHK") },
+        { lbl="Lifetime DKs",  val=withCache(lfDK, "lfDK") },
     }
 
     -- Arena personal rating + points estimate (TBC Anniversary)
@@ -3081,20 +3090,6 @@ function SC_RefreshHonor()
         local base = ((1651.94 - 475) / (1 + 2500000 * math.exp(-0.009 * rating)) + 475) * 1.5
         return math.floor(base * (mult or 1))
     end
-    -- Auto-save debug to SlyCharDB.arenaDebug on each refresh (no chat spam)
-    do
-        SlyCharDB = SlyCharDB or {}
-        local dbg = {}
-        SlyCharDB.arenaDebug = dbg
-        local function r(s) dbg[#dbg+1] = s end
-        r("GetPersonalRatedInfo="..type(GetPersonalRatedInfo))
-        if GetPersonalRatedInfo then
-            for i = 1, 5 do
-                local ok, a, b, c, d, e, f, g = pcall(GetPersonalRatedInfo, i)
-                r("PRI("..i.."): ok="..tostring(ok).." rating="..tostring(a).." sPlayed="..tostring(b).." sWon="..tostring(c).." wPlayed="..tostring(d).." wWon="..tostring(e).." f="..tostring(f).." g="..tostring(g))
-            end
-        end
-    end
     if GetPersonalRatedInfo then
         local BRACKETS = {
             { idx=1, lbl="2v2", mult=0.76 },
@@ -3105,17 +3100,27 @@ function SC_RefreshHonor()
         local bestLbl  = nil
         local arenaAdded = 0
         for _, br in ipairs(BRACKETS) do
-            local ok, rating, seasonPlayed, seasonWon, weeklyPlayed, weeklyWon =
+            -- TBC Anniversary: GetPersonalRatedInfo returns
+            --   rating, mmr, mmr(dup), seasonPlayed, seasonWon, weeklyPlayed, weeklyWon
+            -- Slots 2/3 are matchmaker-related (always equal each other).
+            -- Slots 4/5 are season totals; slots 6/7 are THIS WEEK's counts.
+            local ok, rating, _mmr, _mmr2, _seaPlayed, _seaWon, weeklyPlayed, weeklyWon =
                 pcall(GetPersonalRatedInfo, br.idx)
-            if ok and type(rating) == "number" and (seasonPlayed or 0) > 0 then
+            if ok and type(rating) == "number" and rating > 0 then
                 if arenaAdded == 0 then data[#data+1] = { sep=true } end
-                local seasonLost = math.max(0, (seasonPlayed or 0) - (seasonWon or 0))
                 local pts = calcPts(rating, br.mult)
                 local eligible = (weeklyPlayed or 0) >= 10
-                local eligStr  = eligible and "" or "  (need "..(10-(weeklyPlayed or 0)).." more games)"
+                local weeklyLost = math.max(0, (weeklyPlayed or 0) - (weeklyWon or 0))
+                local needed = math.max(0, 10 - (weeklyPlayed or 0))
+                local weekStr = tostring(weeklyWon or 0).."W/"..tostring(weeklyLost).."L"
+                    ..(eligible and "" or "  ("..needed.." more for pts)")
                 data[#data+1] = {
-                    lbl = br.lbl,
-                    val = commaNum(rating).."  ("..tostring(seasonWon or 0).."W/"..tostring(seasonLost).."L)  ~"..commaNum(pts).." pts"..eligStr,
+                    lbl = br.lbl .. " rating",
+                    val = commaNum(rating).."  ~"..commaNum(pts).." pts",
+                }
+                data[#data+1] = {
+                    lbl = br.lbl .. " this wk",
+                    val = weekStr,
                 }
                 arenaAdded = arenaAdded + 1
                 if eligible and pts > bestPts then bestPts = pts ; bestLbl = br.lbl end
@@ -4831,7 +4836,7 @@ function SC_BuildMain()
     local f = CreateFrame("Frame", "SlyCharMainFrame", UIParent)
     f:SetSize(FRAME_W, FRAME_H)
     f:SetFrameStrata("DIALOG")
-    f:SetFrameLevel(100)  -- pre-set above CharacterFrame; avoid level changes in combat
+    f:SetFrameLevel(100)
     f:SetMovable(true)
     f:EnableMouse(false)
     f:RegisterForDrag("LeftButton")
@@ -4928,22 +4933,60 @@ function SC_BuildMain()
     chrBtnTx:SetAllPoints(chrBtn) ; chrBtnTx:SetJustifyH("CENTER")
     chrBtnTx:SetText("|cff88ff88Chr|r")
     chrBtn:SetScript("OnClick", function()
+        local _dbg = SC and SC.dbg or function() end
+        local _tryHide = SC and SC.tryHideCharFrame or function() end
+        _dbg("CHR_click combat="..tostring(InCombatLockdown()).." cfShown="..tostring(CharacterFrame and CharacterFrame:IsShown()))
+        if InCombatLockdown() then
+            if CharacterFrame and CharacterFrame:IsShown() then
+                _tryHide()   -- detects silent no-ops via post-call IsShown()
+                return
+            end
+            -- Try to show; if WoW silently ignores it, check IsShown and queue.
+            SC._skipHook = true
+            CharacterFrame:Show()
+            CharacterFrame:SetFrameStrata("DIALOG")
+            CharacterFrame:Raise()
+            if CharacterFrame_ShowPanel then CharacterFrame_ShowPanel("PaperDollFrame") end
+            SC._skipHook = false
+            if not CharacterFrame:IsShown() then
+                _dbg("CHR_click:Show silently ignored in combat, queuing")
+                SC._pendingCharFrame = true
+                DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Paper-doll will open when combat ends.")
+            end
+            return
+        end
+
         -- Use _skipHook so the CharacterFrame OnShow interceptor ignores this click.
         SC._skipHook = true
-        if CharacterFrame:IsShown() then
-            CharacterFrame:Hide()
-        else
-            -- Show directly (not via ShowUIPanel/ToggleCharacter) to avoid the
-            -- UISpecialFrames auto-hide that would close SlyChar.
-            CharacterFrame:Show()
-            -- Ensure SlyChar is visible if user was viewing it (pre-shown at alpha=0 when not active).
-            if SlyCharMainFrame and not SC._mainVisible then
-                SlyCharMainFrame:Show()
-                SlyCharMainFrame:EnableMouse(true)
-                SC._mainVisible = true
+        local ok, err = pcall(function()
+            if CharacterFrame:IsShown() then
+                CharacterFrame:Hide()
+            else
+                -- Show directly (not via ShowUIPanel/ToggleCharacter) to avoid the
+                -- UISpecialFrames auto-hide that would close SlyChar.
+                CharacterFrame:Show()
+                -- CharacterFrame is MEDIUM strata; SlyCharMainFrame is DIALOG.
+                -- Raise CharacterFrame into DIALOG so it appears above SlyChar,
+                -- not hidden behind it.  Strata is restored in the OnHide hook.
+                CharacterFrame:SetFrameStrata("DIALOG")
+                CharacterFrame:Raise()
+                -- Always default to the Character (PaperDoll) sub-panel so we don't
+                -- land on whatever tab was last open (e.g. Reputation).
+                if CharacterFrame_ShowPanel then
+                    CharacterFrame_ShowPanel("PaperDollFrame")
+                end
+                -- Ensure SlyChar is visible if user was viewing it (pre-shown at alpha=0 when not active).
+                if SlyCharMainFrame and not SC._mainVisible then
+                    SlyCharMainFrame:Show()
+                    SlyCharMainFrame:EnableMouse(true)
+                    SC._mainVisible = true
+                end
             end
-        end
+        end)
         SC._skipHook = false
+        if not ok then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar]|r Chr error: " .. tostring(err))
+        end
     end)
     chrBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
