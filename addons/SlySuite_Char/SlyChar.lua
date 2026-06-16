@@ -6,7 +6,7 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "2.4.0"
+SC.version = "2.4.1"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
@@ -624,14 +624,26 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         SC_CreateMinimapButton()
-        -- Stats + honor data arrive from the server asynchronously after zone-in.
-        -- SC_FetchHonorCache runs regardless of wing visibility (updates the cache).
-        -- SC_DeferRefresh re-renders stats/sets if the panel is open.
-        C_Timer.After(2.5, function()
-            if SC_FetchHonorCache then SC_FetchHonorCache() end
+        -- Honor/PvP data arrives asynchronously from the server after zone-in.
+        -- Poll at 2.5 s, 6 s, and 12 s; stop early once we receive any data.
+        -- SC_DeferRefresh is only needed when the panel is already visible.
+        SC._honorRetrying = false   -- reset retry guard for SC_RefreshHonor
+        local _honorFetched = false
+        local function _tryFetchHonor()
+            if _honorFetched then return end
+            if not SC_FetchHonorCache then return end
+            local c = SC_FetchHonorCache()
+            if (c.honorCurr or 0) > 0 or (c.twHK or 0) > 0 or (c.lfHK or 0) > 0 then
+                _honorFetched = true
+                if SC_RefreshHonor then SC_RefreshHonor() end
+            end
+        end
+        C_Timer.After(2.5,  function()
+            _tryFetchHonor()
             if SC._mainVisible and SC_DeferRefresh then SC_DeferRefresh() end
-            if SC_RefreshHonor then SC_RefreshHonor() end
         end)
+        C_Timer.After(6.0,  _tryFetchHonor)
+        C_Timer.After(12.0, _tryFetchHonor)
 
     elseif event == "PLAYER_REGEN_DISABLED" then
         local cfShown = CharacterFrame and CharacterFrame:IsShown()

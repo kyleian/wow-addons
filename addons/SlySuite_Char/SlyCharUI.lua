@@ -3011,7 +3011,17 @@ function SC_FetchHonorCache()
     if lfDK      > 0 then cache.lfDK      = lfDK      end
     cache._charKey = charKey
     SlyCharDB.honorCache[charKey] = cache
-    return cache
+
+    -- Return both the (possibly-stale-preserved) cache entry AND the raw live
+    -- values just fetched from APIs.  Callers use liveVals to distinguish
+    -- "API returned data right now" from "we are showing a previous session's cache".
+    local liveVals = {
+        honorCurr = honorCurr, honorMax = honorMax,
+        arenaPts  = arenaPts,
+        twHK = twHK, yHK = yHK, lwHK = lwHK,
+        lfHK = lfHK, lfDK = lfDK,
+    }
+    return cache, liveVals
 end
 
 function SC_RefreshHonor()
@@ -3020,20 +3030,36 @@ function SC_RefreshHonor()
     local rows = miscUI._honorRows
     if not rows then return end
 
-    -- Fetch live data (also updates cache).
-    local cache = SC_FetchHonorCache()
+    -- Fetch live data (also updates per-character cache in SlyCharDB).
+    -- SC_FetchHonorCache returns both the cache entry (best-known persisted values)
+    -- and liveVals (what the APIs returned RIGHT NOW).  liveVals lets us show
+    -- "(cached)" only when the API actually returned 0 this call.
+    local cache, liveVals = SC_FetchHonorCache()
     local charKey = cache._charKey or "?"
 
-    -- Re-read live values from cache (SC_FetchHonorCache already stored them).
-    -- Use live if non-zero, else fall back to cached with indicator.
-    local honorCurr = (GetHonorCurrency and math.floor(({GetHonorCurrency()})[1] or 0)) or 0
-    local honorMax  = (GetHonorCurrency and (function() local _,m=GetHonorCurrency(); return (m and m>0) and math.floor(m) or 75000 end)()) or 75000
-    local arenaPts  = (GetArenaCurrency and math.floor(GetArenaCurrency() or 0)) or 0
-    local twHK = (GetPVPThisWeekStats  and math.floor((GetPVPThisWeekStats())  or 0)) or 0
-    local yHK  = (GetPVPYesterdayStats and math.floor((GetPVPYesterdayStats()) or 0)) or 0
-    local lwHK = (GetPVPLastWeekStats  and math.floor((GetPVPLastWeekStats())  or 0)) or 0
-    local lfHK, lfDK = 0, 0
-    if GetPVPLifetimeStats then local a,b = GetPVPLifetimeStats(); lfHK=math.floor(a or 0); lfDK=math.floor(b or 0) end
+    local honorCurr = liveVals.honorCurr
+    local honorMax  = liveVals.honorMax
+    local arenaPts  = liveVals.arenaPts
+    local twHK = liveVals.twHK
+    local yHK  = liveVals.yHK
+    local lwHK = liveVals.lwHK
+    local lfHK = liveVals.lfHK
+    local lfDK = liveVals.lfDK
+
+    -- If ALL live values are zero and there is no cached data either, the server
+    -- has not yet pushed PvP data to the client.  Schedule one retry so the
+    -- display auto-updates once the data arrives (avoids the user seeing blank
+    -- rows every login until they manually close and reopen the wing).
+    local hasCacheData = (cache.honorCurr or cache.arenaPts or cache.twHK or cache.lfHK)
+    local hasLiveData  = (honorCurr + arenaPts + twHK + yHK + lwHK + lfHK + lfDK) > 0
+    if not hasLiveData and not hasCacheData and not SC._honorRetrying then
+        SC._honorRetrying = true
+        C_Timer.After(4, function()
+            SC._honorRetrying = false
+            if SC_FetchHonorCache then SC_FetchHonorCache() end
+            if SC_RefreshHonor    then SC_RefreshHonor()    end
+        end)
+    end
 
     -- Number formatter with thousands separators: 75000 → "75,000"
     local function commaNum(n)
@@ -3056,7 +3082,9 @@ function SC_RefreshHonor()
         if rn then rankName = rn .. " (" .. rank .. ")" end
     end
 
-    -- Show live value; if 0, fall back to cached with indicator.
+    -- Show live value; if 0, fall back to cached value with indicator.
+    -- "live" here means what the API returned this call (liveVals),
+    -- "cache" is the persisted best-known value from a previous session.
     local function withCache(live, cacheKey)
         if live > 0 then return commaNum(live) end
         local v = cache[cacheKey]
@@ -3068,6 +3096,8 @@ function SC_RefreshHonor()
         .. " / " .. commaNum(honorCurr > 0 and honorMax or (cache.honorMax or honorMax))
 
     local data = {
+        { lbl="Character",     val="|cffaaaaaa" .. charKey .. "|r" },
+        { sep=true },
         { lbl="Rank",          val=rankName },
         { lbl="Honor",         val=honorStr },
         { lbl="Arena Points",  val=withCache(arenaPts, "arenaPts") },
