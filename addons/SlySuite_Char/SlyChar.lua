@@ -6,7 +6,7 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "2.4.1"
+SC.version = "2.4.2"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
@@ -32,16 +32,28 @@ end
 -- Expose so SlyCharUI.lua (same addon, different file) can log too.
 SC.dbg = dbg
 
--- tryHideCharFrame(): attempt to hide CharacterFrame and return whether it worked.
--- WoW combat lockdown silently no-ops restricted calls without raising a Lua error,
--- so pcall(Hide) always returns ok=true even if Hide did nothing.
--- Solution: always verify IsShown() AFTER the call.
+-- tryHideCharFrame(): hide CharacterFrame correctly in all situations.
+-- WoW combat lockdown silently no-ops Hide() on managed frames without raising
+-- a Lua error.  We skip the Hide() attempt entirely in combat and go straight
+-- to visual suppression.  Outside combat we use HideUIPanel() so the frame is
+-- properly removed from the UIPanel VISIBLE_PANEL_LIST (raw Hide() bypasses
+-- this, which breaks Escape-key close and subsequent panel push/pop logic).
 local function tryHideCharFrame()
     if not (CharacterFrame and CharacterFrame:IsShown()) then return true end
-    CharacterFrame:Hide()
+    if InCombatLockdown() then
+        -- Skip Hide() — combat lockdown silently ignores it and may cause taint.
+        dbg("tryHideCharFrame: combat — alpha-suppressing CharacterFrame")
+        CharacterFrame:SetAlpha(0)
+        CharacterFrame:EnableMouse(false)
+        CharacterFrame:EnableKeyboard(false)
+        SC._pendingHideChar = true
+        return false
+    end
+    -- Outside combat: HideUIPanel cleans up the UIPanel stack correctly.
+    HideUIPanel(CharacterFrame)
     if CharacterFrame:IsShown() then
-        -- Hide was a silent no-op (combat lockdown restriction).
-        dbg("tryHideCharFrame: Hide ignored in combat, using alpha suppression")
+        -- Shouldn't happen outside combat, but guard defensively.
+        dbg("tryHideCharFrame: HideUIPanel failed unexpectedly — alpha suppressing")
         CharacterFrame:SetAlpha(0)
         CharacterFrame:EnableMouse(false)
         CharacterFrame:EnableKeyboard(false)
@@ -173,20 +185,40 @@ local function HookCharacterFrame()
         if SC._skipHook then return end
         if GetCursorInfo() then return end
 
-        if InCombatLockdown() then
-            -- tryHideCharFrame detects silent combat no-ops via post-call IsShown().
-            dbg("OnShow:combat skipHook="..tostring(SC._skipHook))
-            tryHideCharFrame()
-            SC_ShowMain()
-            return
-        end
-        -- Hide immediately to prevent a visible flash; then defer HideUIPanel
-        -- to AFTER ShowUIPanel's call chain completes — calling HideUIPanel
-        -- inside ShowUIPanel corrupts the VISIBLE_PANEL_LIST and breaks
-        -- push/close logic for all subsequent native panels.
-        self:Hide()
-        C_Timer.After(0, function() HideUIPanel(self) end)
-        SC_ToggleMain()
+        -- IMPORTANT: do NOT call Hide(), HideUIPanel(), or SC_ToggleMain()
+        -- synchronously inside OnShow.  Doing so while WoW is still executing
+        -- ShowUIPanel()'s call stack corrupts the VISIBLE_PANEL_LIST and
+        -- breaks Escape-key close + push/pop logic for all subsequent panels.
+        --
+        -- Instead: suppress visibility immediately (no frame-state side-effects),
+        -- then defer ALL frame management to the next frame via C_Timer.After(0).
+        self:SetAlpha(0)
+        self:EnableMouse(false)
+        self:EnableKeyboard(false)
+        dbg("OnShow:intercepted combat="..tostring(InCombatLockdown()))
+
+        C_Timer.After(0, function()
+            -- Restore defaults before deciding what to do.
+            self:SetAlpha(1)
+            self:EnableMouse(true)
+            self:EnableKeyboard(true)
+
+            if InCombatLockdown() then
+                -- Can't hide in combat; keep alpha-suppressed until REGEN_ENABLED.
+                dbg("OnShow:deferred:combat — alpha-suppressing CharacterFrame")
+                self:SetAlpha(0)
+                self:EnableMouse(false)
+                self:EnableKeyboard(false)
+                SC._pendingHideChar = true
+            else
+                -- Use HideUIPanel (not raw Hide) for proper UIPanel stack cleanup.
+                HideUIPanel(self)
+                -- If SlyChar is not already open, open it now.
+                -- Use ShowMain (never ToggleMain) so we can't accidentally close
+                -- a panel that was already open.
+                if not SC._mainVisible then SC_ShowMain() end
+            end
+        end)
     end)
 
     -- In native_flyout mode: hide companion when CharacterFrame closes.
@@ -652,14 +684,14 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_REGEN_ENABLED" then
         dbg("REGEN_ENABLED pendingHide="..tostring(SC._pendingHideChar).." pendingCF="..tostring(SC._pendingCharFrame))
-        -- Cleanup any alpha/mouse suppression from the combat fallback path.
+        -- Clean up any alpha/mouse suppression applied during combat.
         if SC._pendingHideChar then
             SC._pendingHideChar = false
             if CharacterFrame and CharacterFrame:IsShown() then
                 CharacterFrame:SetAlpha(1)
                 CharacterFrame:EnableMouse(true)
                 CharacterFrame:EnableKeyboard(true)
-                CharacterFrame:Hide()
+                HideUIPanel(CharacterFrame)   -- proper UIPanel stack cleanup
             end
         end
         -- If the user clicked CHR during combat, open CharacterFrame now.
