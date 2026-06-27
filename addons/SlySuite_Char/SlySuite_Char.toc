@@ -1,7 +1,7 @@
 ## Interface: 20505
 ## Title: Sly Char
 ## Notes: Enhanced character sheet — movable CharacterFrame + gear picker + Stats, Gear Sets, Reputation, Skills tabs.
-## Version: 2.4.2
+## Version: 2.4.3
 ## X-Curse-Project-ID: 1498485
 ## Author: Sly
 ## OptionalDeps: SlySuite, SlySuite_Style, SlySuite_Error, ExtendedCharStats, ItemRackRevived, SlySuite_Slot

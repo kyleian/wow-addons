@@ -6,7 +6,7 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "2.4.2"
+SC.version = "2.4.3"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
@@ -213,10 +213,11 @@ local function HookCharacterFrame()
             else
                 -- Use HideUIPanel (not raw Hide) for proper UIPanel stack cleanup.
                 HideUIPanel(self)
-                -- If SlyChar is not already open, open it now.
-                -- Use ShowMain (never ToggleMain) so we can't accidentally close
-                -- a panel that was already open.
-                if not SC._mainVisible then SC_ShowMain() end
+                -- Do NOT call SC_ShowMain() here.  SlyChar visibility is managed
+                -- exclusively by the ToggleCharacter override and the CHR button.
+                -- Calling ShowMain here would reopen SlyChar immediately after the
+                -- user pressed C to close it (ToggleCharacter fires first, closes
+                -- SlyChar, then OnShow fires and would reopen it).
             end
         end)
     end)
@@ -550,8 +551,11 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
                     local mode = (SC.db and SC.db.mode) or "native_flyout"
                     if mode ~= "native_flyout" then
                         if which == "PaperDollFrame" or which == nil then
-                            dbg("ToggleChar:PaperDoll combat="..tostring(InCombatLockdown()).." cfShown="..tostring(CharacterFrame and CharacterFrame:IsShown()).." mainVis="..tostring(SC._mainVisible))
-                            if CharacterFrame and CharacterFrame:IsShown() then
+                            dbg("ToggleChar:PaperDoll combat="..tostring(InCombatLockdown()).." cfShown="..tostring(CharacterFrame and CharacterFrame:IsShown()).." mainVis="..tostring(SC._mainVisible).." pendHide="..tostring(SC._pendingHideChar))
+                            if CharacterFrame and CharacterFrame:IsShown() and not SC._pendingHideChar then
+                                -- CharacterFrame is genuinely visible (CHR button); close it.
+                                -- If _pendingHideChar is true, CF is our invisible combat suppression —
+                                -- skip tryHide and fall through to SC_ToggleMain so C key still works.
                                 tryHideCharFrame()
                                 return
                             end
