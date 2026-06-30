@@ -3011,6 +3011,19 @@ function SC_FetchHonorCache()
     if lfDK      > 0 then cache.lfDK      = lfDK      end
     cache._charKey = charKey
 
+    -- Cache per-bracket arena rating data here so the multi-timer retry in
+    -- PLAYER_ENTERING_WORLD also refreshes it (GetPersonalRatedInfo returns 0
+    -- until the server pushes rated data, usually 3-10s after zone-in).
+    cache.arenaRatings = cache.arenaRatings or {}
+    if GetPersonalRatedInfo then
+        for _, br in ipairs({ {idx=1,lbl="2v2"}, {idx=2,lbl="3v3"}, {idx=3,lbl="5v5"} }) do
+            local ok, r, _, _, _, _, wPlayed, wWon = pcall(GetPersonalRatedInfo, br.idx)
+            if ok and type(r) == "number" and r > 0 then
+                cache.arenaRatings[br.lbl] = { rating=r, weeklyPlayed=wPlayed or 0, weeklyWon=wWon or 0 }
+            end
+        end
+    end
+
     -- ── Weekly reset detection + tracking ────────────────────────────────────
     -- weekTag "YYYYWW" (year + Sunday-based week) changes once per calendar week,
     -- which approximates the TBC Wednesday PvP reset well enough for projections.
@@ -3212,7 +3225,6 @@ function SC_RefreshHonor()
         local bestPts  = 0
         local bestLbl  = nil
         local arenaAdded = 0
-        cache.arenaRatings = cache.arenaRatings or {}
         for _, br in ipairs(BRACKETS) do
             -- TBC Anniversary: GetPersonalRatedInfo returns
             --   rating, mmr, mmr(dup), seasonPlayed, seasonWon, weeklyPlayed, weeklyWon

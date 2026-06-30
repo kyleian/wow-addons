@@ -6,7 +6,7 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "2.4.4"
+SC.version = "2.4.5"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
@@ -670,7 +670,11 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             if not SC_FetchHonorCache then return end
             local c = SC_FetchHonorCache()
             if (c.honorCurr or 0) > 0 or (c.twHK or 0) > 0 or (c.lfHK or 0) > 0 then
-                _honorFetched = true
+                -- Keep retrying (don't set _honorFetched) until arena bracket data
+                -- also loads — GetPersonalRatedInfo returns 0 for several seconds
+                -- after zone-in.  All 3 timers (2.5/6/12s) are allowed to fire.
+                local hasArena = c.arenaRatings and next(c.arenaRatings) ~= nil
+                if hasArena then _honorFetched = true end
                 if SC_RefreshHonor then SC_RefreshHonor() end
             end
         end
