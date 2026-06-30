@@ -3010,6 +3010,35 @@ function SC_FetchHonorCache()
     if lfHK      > 0 then cache.lfHK      = lfHK      end
     if lfDK      > 0 then cache.lfDK      = lfDK      end
     cache._charKey = charKey
+
+    -- ── Weekly reset detection + tracking ────────────────────────────────────
+    -- weekTag "YYYYWW" (year + Sunday-based week) changes once per calendar week,
+    -- which approximates the TBC Wednesday PvP reset well enough for projections.
+    local weekTag = (date and date("%Y%W")) or "?"
+    if (cache.weekTag or "") ~= weekTag then
+        if cache.weekTag then
+            -- Genuine week rollover: archive end-of-week values so this week's
+            -- display can compare against them.
+            cache.arenaEstAtReset   = cache._arenaEst  or 0
+            cache.arenaBeforeReset  = cache.arenaPts   or 0
+            cache.honorAtWeekEnd    = cache.honorCurr  or 0
+        end
+        cache.weekTag          = weekTag
+        -- Snapshot honor at week start (used to compute "earned this week").
+        cache.honorAtWeekStart = (honorCurr > 0) and honorCurr or (cache.honorCurr or 0)
+        -- Record which day-of-week the snapshot was taken (0=Sun…6=Sat).
+        cache.weekSnapWday     = tonumber((date and date("%w")) or "0") or 0
+    end
+    -- Detect arena weekly payout: first significant arenaPts increase after a
+    -- week rollover (arenaBeforeReset set = we're in the detection window).
+    if cache.arenaBeforeReset and arenaPts > 0 then
+        local gain = arenaPts - cache.arenaBeforeReset
+        if gain >= 50 then
+            cache.arenaActualPayout = gain
+            cache.arenaBeforeReset  = nil  -- consume: don't re-detect this reset
+        end
+    end
+
     SlyCharDB.honorCache[charKey] = cache
 
     -- Return both the (possibly-stale-preserved) cache entry AND the raw live
@@ -3095,6 +3124,45 @@ function SC_RefreshHonor()
     local honorStr = withCache(honorCurr, "honorCurr")
         .. " / " .. commaNum(honorCurr > 0 and honorMax or (cache.honorMax or honorMax))
 
+    -- Week-over-week HK delta: compare this week to last week.
+    local twEff = (twHK > 0) and twHK or (cache.twHK or 0)
+    local lwEff = (lwHK > 0) and lwHK or (cache.lwHK or 0)
+    local hkWoWStr
+    if twEff > 0 and lwEff > 0 then
+        local delta = twEff - lwEff
+        local pct   = math.floor(delta / lwEff * 100)
+        local sign  = delta >= 0 and "+" or ""
+        local col   = delta >= 0 and "88dd88" or "dd8888"
+        hkWoWStr = withCache(twHK, "twHK")
+            .. "  |cff" .. col .. "(" .. sign .. commaNum(delta) .. " / " .. sign .. pct .. "%)|r"
+    else
+        hkWoWStr = withCache(twHK, "twHK")
+    end
+
+    -- Days elapsed since last weekly reset snapshot (used for honor projection).
+    -- TBC resets Wednesday; wday 0=Sun…3=Wed…6=Sat.
+    local todayWday  = tonumber((date and date("%w")) or "0") or 0
+    local snapWday   = cache.weekSnapWday or todayWday
+    local daysIn     = math.max(1, (todayWday - snapWday + 7) % 7)
+
+    -- Honor earned this week (net: doesn't account for spending).
+    local honorStart   = cache.honorAtWeekStart or 0
+    local honorNow     = (honorCurr > 0) and honorCurr or (cache.honorCurr or 0)
+    local honorEarned  = honorNow - honorStart
+    local honorEarnStr
+    if honorStart > 0 then
+        local sign = honorEarned >= 0 and "+" or ""
+        local col  = honorEarned >= 0 and "88dd88" or "dd8888"
+        honorEarnStr = "|cff" .. col .. sign .. commaNum(honorEarned) .. "|r"
+    end
+
+    -- Projected honor for full 7-day week based on current rate.
+    local honorProjStr
+    if honorEarned > 0 and daysIn >= 1 then
+        local proj = math.floor(honorEarned / daysIn * 7)
+        honorProjStr = "~" .. commaNum(proj) .. "/wk"
+    end
+
     local data = {
         { lbl="Character",     val="|cffaaaaaa" .. charKey .. "|r" },
         { sep=true },
@@ -3103,12 +3171,27 @@ function SC_RefreshHonor()
         { lbl="Arena Points",  val=withCache(arenaPts, "arenaPts") },
         { sep=true },
         { lbl="Yesterday HKs", val=withCache(yHK,  "yHK")  },
-        { lbl="This Week HKs", val=withCache(twHK, "twHK") },
+        { lbl="This Week HKs", val=hkWoWStr },
         { lbl="Last Week HKs", val=withCache(lwHK, "lwHK") },
         { sep=true },
         { lbl="Lifetime HKs",  val=withCache(lfHK, "lfHK") },
         { lbl="Lifetime DKs",  val=withCache(lfDK, "lfDK") },
     }
+
+    -- ── Week tracking section ────────────────────────────────────────────────
+    if honorStart > 0 or (cache.arenaActualPayout or 0) > 0 then
+        data[#data+1] = { sep=true }
+        if honorEarnStr then
+            data[#data+1] = { lbl="Honor earned wk", val=honorEarnStr }
+        end
+        if honorProjStr then
+            data[#data+1] = { lbl="Honor proj/wk",   val=honorProjStr }
+        end
+        -- Arena points week-over-week: last actual payout vs this week's estimate.
+        if (cache.arenaActualPayout or 0) > 0 then
+            data[#data+1] = { lbl="Arena last payout", val=commaNum(cache.arenaActualPayout) .. " pts" }
+        end
+    end
 
     -- Arena personal rating + points estimate (TBC Anniversary)
     -- Official Blizzard formula (Feb 18 2026):
@@ -3129,6 +3212,7 @@ function SC_RefreshHonor()
         local bestPts  = 0
         local bestLbl  = nil
         local arenaAdded = 0
+        cache.arenaRatings = cache.arenaRatings or {}
         for _, br in ipairs(BRACKETS) do
             -- TBC Anniversary: GetPersonalRatedInfo returns
             --   rating, mmr, mmr(dup), seasonPlayed, seasonWon, weeklyPlayed, weeklyWon
@@ -3136,7 +3220,28 @@ function SC_RefreshHonor()
             -- Slots 4/5 are season totals; slots 6/7 are THIS WEEK's counts.
             local ok, rating, _mmr, _mmr2, _seaPlayed, _seaWon, weeklyPlayed, weeklyWon =
                 pcall(GetPersonalRatedInfo, br.idx)
+            -- Fall back to cached rating when live API returns 0 (common on login
+            -- after a weekly reset before the server pushes rated data).
+            local fromCache = false
+            if not (ok and type(rating) == "number" and rating > 0) then
+                local cr = cache.arenaRatings[br.lbl]
+                if cr and (cr.rating or 0) > 0 then
+                    rating       = cr.rating
+                    weeklyPlayed = cr.weeklyPlayed or 0
+                    weeklyWon    = cr.weeklyWon    or 0
+                    ok           = true
+                    fromCache    = true
+                end
+            end
             if ok and type(rating) == "number" and rating > 0 then
+                -- Persist live bracket data for future cache-fallback.
+                if not fromCache then
+                    cache.arenaRatings[br.lbl] = {
+                        rating       = rating,
+                        weeklyPlayed = weeklyPlayed or 0,
+                        weeklyWon    = weeklyWon    or 0,
+                    }
+                end
                 if arenaAdded == 0 then data[#data+1] = { sep=true } end
                 local pts = calcPts(rating, br.mult)
                 local eligible = (weeklyPlayed or 0) >= 10
@@ -3146,7 +3251,9 @@ function SC_RefreshHonor()
                     ..(eligible and "" or "  ("..needed.." more for pts)")
                 data[#data+1] = {
                     lbl = br.lbl .. " rating",
-                    val = commaNum(rating).."  ~"..commaNum(pts).." pts",
+                    val = commaNum(rating)
+                        .. (fromCache and " |cff888888(cached)|r" or "")
+                        .. "  ~"..commaNum(pts).." pts",
                 }
                 data[#data+1] = {
                     lbl = br.lbl .. " this wk",
@@ -3157,10 +3264,26 @@ function SC_RefreshHonor()
             end
         end
         if bestPts > 0 then
+            -- Persist estimate so next weekly reset can compare against actual payout.
+            cache._arenaEst = bestPts
             data[#data+1] = {
                 lbl = "Est. pts/reset",
                 val = commaNum(bestPts).."  ("..bestLbl..")",
             }
+            -- Calibration: last week's actual payout vs what we estimated.
+            local actual = cache.arenaActualPayout or 0
+            local est    = cache.arenaEstAtReset   or 0
+            if actual > 0 and est > 0 then
+                local diff = actual - est
+                local pct  = math.floor(diff / est * 100)
+                local sign = diff >= 0 and "+" or ""
+                local col  = math.abs(pct) <= 10 and "88dd88" or "dd8888"
+                data[#data+1] = {
+                    lbl = "Prev est\226\134\146rcvd",
+                    val = commaNum(est) .. "\226\134\146" .. commaNum(actual)
+                        .. "  |cff" .. col .. "(" .. sign .. pct .. "%)|r",
+                }
+            end
         end
     end
 
@@ -4658,7 +4781,7 @@ local function BuildWingFrame(mainFrame)
     miscUI.honorContent = honorPane   -- SC_RefreshHonor guards on IsShown()
 
     local honorPaneRows = {}
-    for i = 1, 20 do
+    for i = 1, 32 do
         local row = CreateFrame("Frame", nil, honorPane)
         row:SetPoint("TOPLEFT",  honorPane, "TOPLEFT",   PAD, -((i-1)*14 + 4))
         row:SetPoint("TOPRIGHT", honorPane, "TOPRIGHT", -PAD, -((i-1)*14 + 4))
