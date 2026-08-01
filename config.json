@@ -4,7 +4,7 @@
                 "clientDir":  "_anniversary_",
                 "addonsPath":  "C:\\Program Files (x86)\\World of Warcraft\\_anniversary_\\Interface\\AddOns",
                 "wtfPath":  "C:\\Program Files (x86)\\World of Warcraft\\_anniversary_\\WTF",
-                "interfaceVersion":  "20505",
+                "interfaceVersion":  "20506",
                 "gameVersion":  "TBC Anniversary"
             },
     "characters":  [
@@ -63,7 +63,7 @@
                        "enabled":  true,
                        "description":  "Calculates and displays gear score on tooltips and character frame.",
                        "sourceDir":  "addons\\GearScore",
-                       "version":  "1.5.1",
+                       "version":  "1.5.3",
                        "curseProjectId":  ""
                    },
                    {
@@ -119,8 +119,8 @@
                        "enabled":  true,
                        "description":  "Movable character sheet companion — extended stats + gear sets docked beside CharacterFrame. C key. /slychar",
                        "sourceDir":  "addons\\SlySuite_Char",
-                       "version":  "2.3.0",
-                       "curseProjectId":  ""
+                       "version":  "2.7.8",
+                       "curseProjectId":  "1498485"
                    },
                    {
                        "name":  "SlySuite_Bag",
@@ -186,6 +186,32 @@
                        "version":  "1.3.2",
                        "standaloneRelease":  true,
                        "curseProjectId":  "1528155"
+                   },
+                   {
+                       "name":  "ShadowedUnitFrames",
+                       "enabled":  true,
+                       "description":  "Shadowed Unit Frames v4.3.9-classic — patched for TBC Anniversary patch 2.5.6 (Interface 20506, DebuffTypeColor compat shim in ExternalAPI.lua).",
+                       "sourceDir":  "addons\\ShadowedUnitFrames",
+                       "version":  "4.3.9-classic",
+                       "upstream":  "https://github.com/Nevcairiel/ShadowedUnitFrames/tree/classic",
+                       "curseProjectId":  "19268"
+                   },
+                   {
+                       "name":  "ShadowedUF_Options",
+                       "enabled":  true,
+                       "description":  "Shadowed UF Options v4.3.9-classic — patched TOC Interface list to include 20506.",
+                       "sourceDir":  "addons\\ShadowedUF_Options",
+                       "version":  "4.3.9-classic",
+                       "upstream":  "https://github.com/Nevcairiel/ShadowedUnitFrames/tree/classic",
+                       "curseProjectId":  "19268"
+                   },
+                   {
+                       "name":  "SlySuite_Sim",
+                       "enabled":  true,
+                       "description":  "In-game gear export + gem optimiser using wowsimcli. /slysim for quick DPS, /slysim gems for gem swap suggestions.",
+                       "sourceDir":  "addons\\SlySuite_Sim",
+                       "version":  "1.0.0",
+                       "curseProjectId":  ""
                    }
                ],
     "deployment":  {

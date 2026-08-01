@@ -6,7 +6,7 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "2.7.7"
+SC.version = "2.7.8"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
