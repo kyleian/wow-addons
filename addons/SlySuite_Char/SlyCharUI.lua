@@ -158,7 +158,9 @@ do
         _wasTargeting = t
         -- sBtn is parented to UIParent so it persists even when SlyChar is hidden;
         -- only activate its mouse hit-test while the window is actually shown.
-        local winShown = SlyCharMainFrame and SlyCharMainFrame:IsShown()
+        -- SlyCharMainFrame is alpha-driven (see SC_ShowMain/SC_HideMain), so
+        -- SC._mainVisible is the source of truth, not :IsShown().
+        local winShown = SC._mainVisible
         for sid, sBtn in pairs(_secureSlots) do
             sBtn:EnableMouse(t and winShown)
             -- Un-register / re-register LeftButton drag on the parent slot button.
@@ -205,12 +207,7 @@ do
                     if SlyCharMainFrame and SC._mainVisible
                         and not (GetCursorInfo() ~= nil)
                         and not SpellIsTargeting() then
-                        SlyCharMainFrame:Hide()
-                        SlyCharMainFrame:EnableMouse(false)
-                        SC._mainVisible = false
-                        SC._hiddenByCombat = false
-                        local wf = _G["SlyCharWingFrame"]
-                        if wf and wf:IsShown() then wf:Hide() end
+                        if SC_HideMain then SC_HideMain() end
                     end
                 end)
             end
@@ -4256,11 +4253,17 @@ function SC_SwitchTab(name)
         SC_ToggleWing("social")
         name = "stats"
     end
-    -- In slychar_flyout mode, stats/sets/misc open as wing flyouts
+    -- In slychar_flyout mode, stats/sets/misc open as wing flyouts.
+    -- Use "ensure open" semantics here: if the wing is already showing this
+    -- key (e.g. SC_ShowMain re-calls SC_SwitchTab after a combat restore),
+    -- leave it open rather than toggling it off.
     local mode = (SC.db and SC.db.mode) or "native_flyout"
     if mode == "slychar_flyout" and (name == "stats" or name == "sets" or name == "misc") then
         SC.db.lastTab = name
-        SC_ToggleWing(name)
+        local alreadyOpen = wingFrame and wingFrame:IsShown() and activeWingKey == name
+        if not alreadyOpen then
+            SC_ToggleWing(name)
+        end
         return
     end
     -- Restore any tab frames that may have been displaced into wing panes
@@ -4367,6 +4370,27 @@ end
 function SC_RefreshAll()
     RefreshHeader()
     SC_RefreshSlots()
+    -- SlyCharModel's SetUnit("player") is only called once at build time
+    -- (during ADDON_LOADED / first open), which can be before unit/model data
+    -- is fully ready, or while the frame chain was still alpha=0 -- either
+    -- way the model can end up never rendering. Re-set it every refresh
+    -- (cheap, idempotent) so it recovers once the data/frame is actually
+    -- ready to show something.
+    if SlyCharModel then
+        SlyCharModel:SetUnit("player")
+        if SC and SC.dbg then
+            -- NOTE: PlayerModel widgets on this client don't expose GetUnit(),
+            -- calling it throws "attempt to call a nil value" -- don't add it
+            -- back. Log only real accessors.
+            SC.dbg(("Model refresh: shown=%s alpha=%.2f w=%.0f h=%.0f parentShown=%s parentAlpha=%.2f"):format(
+                tostring(SlyCharModel:IsShown()),
+                SlyCharModel:GetAlpha() or -1,
+                SlyCharModel:GetWidth() or -1,
+                SlyCharModel:GetHeight() or -1,
+                tostring(SlyCharMainFrame and SlyCharMainFrame:IsShown()),
+                (SlyCharMainFrame and SlyCharMainFrame:GetAlpha()) or -1))
+        end
+    end
     local tab = SC.db.lastTab or "stats"
     if     tab == "stats"  then SC_RefreshStats()
     elseif tab == "sets"   then SC_RefreshSetsSub()
@@ -4947,8 +4971,9 @@ function SC_BuildNativeCompanion()
                     SlyCharMainFrame:ClearAllPoints()
                     SlyCharMainFrame:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, 0)
                     SC_SwitchTab(key)
-                    SlyCharMainFrame:Show()
+                    SlyCharMainFrame:SetAlpha(1)
                     SlyCharMainFrame:EnableMouse(true)
+                    SlyCharMainFrame:EnableKeyboard(true)
                     SC._mainVisible = true
                     SC_RefreshAll()
                 end
@@ -4974,10 +4999,10 @@ function SC_HideNativeCompanion()
     if wingFrame        then wingFrame:Hide() ; activeWingKey = nil end
     -- Suppress SlyChar main if it was shown for stats/sets in native mode
     if SlyCharMainFrame and SC._mainVisible then
-        SlyCharMainFrame:Hide()
+        SlyCharMainFrame:SetAlpha(0)
         SlyCharMainFrame:EnableMouse(false)
+        SlyCharMainFrame:EnableKeyboard(false)
         SC._mainVisible = false
-        SC._hiddenByCombat = false
     end
 end
 
@@ -5059,12 +5084,7 @@ function SC_BuildMain()
     closeTx:SetText("\195\151")  -- UTF-8 × (U+00D7)
     closeTx:SetTextColor(0.80, 0.30, 0.30)
     closeBtn:SetScript("OnClick", function()
-        f:Hide()
-        f:EnableMouse(false)
-        SC._mainVisible = false
-        SC._hiddenByCombat = false
-        local wf = _G["SlyCharWingFrame"]
-        if wf and wf:IsShown() then wf:Hide() end
+        if SC_HideMain then SC_HideMain() end
     end)
     closeBtn:SetScript("OnEnter", function() closeBg:SetColorTexture(0.7, 0.15, 0.15, 0.40) end)
     closeBtn:SetScript("OnLeave", function() closeBg:SetColorTexture(0, 0, 0, 0) end)
@@ -5099,7 +5119,7 @@ function SC_BuildMain()
     chrBtnTx:SetText("|cff88ff88Chr|r")
     chrBtn:SetScript("OnClick", function()
         local _dbg = SC and SC.dbg or function() end
-        local _tryHide = SC and SC.tryHideCharFrame or function() end
+        local _tryHide = SC and SC.SuppressCharacterFrame or function() end
         _dbg("CHR_click combat="..tostring(InCombatLockdown()).." cfShown="..tostring(CharacterFrame and CharacterFrame:IsShown()))
         if InCombatLockdown() then
             if CharacterFrame and CharacterFrame:IsShown() then
@@ -5142,8 +5162,9 @@ function SC_BuildMain()
                 end
                 -- Ensure SlyChar is visible if user was viewing it (pre-shown at alpha=0 when not active).
                 if SlyCharMainFrame and not SC._mainVisible then
-                    SlyCharMainFrame:Show()
+                    SlyCharMainFrame:SetAlpha(1)
                     SlyCharMainFrame:EnableMouse(true)
+                    SlyCharMainFrame:EnableKeyboard(true)
                     SC._mainVisible = true
                 end
             end
@@ -5171,7 +5192,9 @@ function SC_BuildMain()
     -- Header drag: drag the empty chrome area to move the whole frame
     hdr:EnableMouse(true)
     hdr:RegisterForDrag("LeftButton")
-    hdr:SetScript("OnDragStart", function() f:StartMoving() end)
+    hdr:SetScript("OnDragStart", function()
+        if not InCombatLockdown() then f:StartMoving() end
+    end)
     hdr:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
         local pt, _, _, x, y = f:GetPoint()
@@ -6265,15 +6288,12 @@ function SC_BuildMain()
     ftxt:SetTextColor(0.3, 0.3, 0.38)
     ftxt:SetText("C or /slychar  |  left-click = gear picker  |  shift+click = socket  |  right-click = link  |  >> = panel menu  |  x = close panel")
 
-    f:HookScript("OnShow", function(self) self:EnableMouse(true) end)
-    f:HookScript("OnHide", function(self)
-        self:EnableMouse(false)
-        SC_HidePicker()
-        SC_CloseSidePanel()
-        if wingFrame then wingFrame:Hide() ; activeWingKey = nil end
-        local fm = _G["SlyCharStripFlyout"]
-        if fm then fm:Hide() end
-    end)
+    -- NOTE: SlyCharMainFrame's Show()/Hide() are called exactly once, ever,
+    -- at the very end of this function (initial creation), and never again --
+    -- real combat-test debug data proved Show()/Hide() silently fail to stick
+    -- on this frame during combat. All later show/hide is done purely via
+    -- alpha/mouse/keyboard from SC_ShowMain()/SC_HideMain() in SlyChar.lua,
+    -- which is also where the equivalent of this old OnHide cleanup now lives.
 
     -- In slychar_flyout mode: collapse the side tab panel and shrink the main frame
     -- so it shows only the paperdoll + button strip.
@@ -6303,9 +6323,18 @@ function SC_BuildMain()
         tf:SetShown(k == initTab)
     end
 
-    -- Frame starts hidden; the player opens it via C-key or minimap button.
-    -- sBtn frames (SecureActionButtonTemplate) are parented to UIParent so
-    -- SlyCharMainFrame:Show()/Hide() are unrestricted -- no alpha=0 tricks or
-    -- mouse-blocker needed.
-    f:Hide()
+    -- Frame is permanently Show()n from creation onward -- visibility is
+    -- controlled ENTIRELY via alpha/mouse/keyboard from here on (see
+    -- SC_ShowMain/SC_HideMain in SlyChar.lua), never via Show()/Hide() again,
+    -- because those were proven to silently fail to stick on this frame
+    -- during combat (Show() fires, IsShown() reads false right after, every
+    -- time, reverting instantly once combat ends).
+    f:Show()
+    f:SetAlpha(0)
+    f:EnableMouse(false)
+    f:EnableKeyboard(false)
+    -- 3D PlayerModel content doesn't reliably respect ancestor SetAlpha(0)
+    -- on this client -- start it explicitly hidden too; SC_ShowMain/
+    -- SC_HideMain toggle it explicitly from here on.
+    if model then model:Hide() end
 end

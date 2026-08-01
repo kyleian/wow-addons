@@ -6,13 +6,11 @@
 -- ============================================================
 
 SC  = SC  or {}
-SC.version = "2.4.5"
+SC.version = "2.7.7"
 local ADDON_NAME = "SlySuite_Char"
 
 -- Flags shared with SlyCharUI.lua (same global table, different file)
 SC._skipHook        = false   -- true while Chr button is showing CharacterFrame directly
-SC._pendingHideChar = false   -- true when CharacterFrame was left open in combat
-SC._hiddenByCombat  = false   -- true when we suppressed the panel at combat start
 SC._pendingBuild    = false   -- true when SC_BuildMain() was blocked by combat lockdown
 SC._mainVisible     = false   -- true when user has logically opened SlyCharMainFrame
 SC._refreshPending  = false   -- true when a deferred SC_RefreshAll is already queued
@@ -28,41 +26,71 @@ local function dbg(msg)
     local line = "[" .. ts .. "] " .. tostring(msg)
     if #_DBG >= _DBG_MAX then table.remove(_DBG, 1) end
     _DBG[#_DBG + 1] = line
+    -- Mirror to SavedVariables so the log survives without any manual command --
+    -- it's on disk automatically after the next /reload or logout, in
+    -- WTF/.../SavedVariables/SlyCharDB.lua under ["debugLog"].
+    if SC.db then SC.db.debugLog = _DBG end
 end
 -- Expose so SlyCharUI.lua (same addon, different file) can log too.
 SC.dbg = dbg
 
--- tryHideCharFrame(): hide CharacterFrame correctly in all situations.
--- WoW combat lockdown silently no-ops Hide() on managed frames without raising
--- a Lua error.  We skip the Hide() attempt entirely in combat and go straight
--- to visual suppression.  Outside combat we use HideUIPanel() so the frame is
--- properly removed from the UIPanel VISIBLE_PANEL_LIST (raw Hide() bypasses
--- this, which breaks Escape-key close and subsequent panel push/pop logic).
-local function tryHideCharFrame()
-    if not (CharacterFrame and CharacterFrame:IsShown()) then return true end
-    if InCombatLockdown() then
-        -- Skip Hide() — combat lockdown silently ignores it and may cause taint.
-        dbg("tryHideCharFrame: combat — alpha-suppressing CharacterFrame")
-        CharacterFrame:SetAlpha(0)
-        CharacterFrame:EnableMouse(false)
-        CharacterFrame:EnableKeyboard(false)
-        SC._pendingHideChar = true
-        return false
+-- SC_SuppressCharacterFrame(): the ONE place that makes the native
+-- CharacterFrame invisible/non-interactive in slychar modes.
+--
+-- IMPORTANT: this must NEVER call HideUIPanel()/Hide() on CharacterFrame.
+-- Doing that was tried (v2.7.0) and broke the C-key toggle entirely: forcing
+-- CharacterFrame's real IsShown() back to false right after every open meant
+-- Blizzard's own ToggleCharacter() ALWAYS saw "currently closed" on the next
+-- press and ALWAYS took its show-branch, so its close-branch (which is what
+-- calls the real HideUIPanel(CharacterFrame) that our HideUIPanel hook
+-- listens for) could never run -- SlyChar could open but never close, and
+-- CharacterFrame could end up genuinely shown+interactive at its own native
+-- screen position whenever the feedback loop desynced.
+--
+-- So instead: let CharacterFrame's real Show()/Hide() state track whatever
+-- ToggleCharacter naturally decides (that's what makes it alternate
+-- correctly, open/close/open/close). We just force it alpha=0 and
+-- mouse/keyboard-disabled EVERY time, regardless of its real shown state, so
+-- it's never visible and never intercepts a click no matter what.
+--
+-- CRITICAL: EnableMouse(false) on CharacterFrame itself does NOT stop its
+-- CHILDREN (equipment slot buttons, tabs, stat sub-frames) from receiving
+-- hover/click events -- each frame's mouse-enabled state is independent of
+-- its parent's. That's what caused equipped-item tooltips to "bleed
+-- through" on hover and blocked real right-clicks meant for SlyChar's own
+-- overlaid buttons: CharacterFrame's invisible-but-still-mouse-active child
+-- buttons were intercepting the events. So mouse must be disabled
+-- recursively across every descendant, not just the top frame.
+local function SC_SetMouseRecursive(frame, enabled)
+    if not frame then return end
+    if frame.EnableMouse then frame:EnableMouse(enabled) end
+    local kids = { frame:GetChildren() }
+    for _, kid in ipairs(kids) do
+        SC_SetMouseRecursive(kid, enabled)
     end
-    -- Outside combat: HideUIPanel cleans up the UIPanel stack correctly.
-    HideUIPanel(CharacterFrame)
-    if CharacterFrame:IsShown() then
-        -- Shouldn't happen outside combat, but guard defensively.
-        dbg("tryHideCharFrame: HideUIPanel failed unexpectedly — alpha suppressing")
-        CharacterFrame:SetAlpha(0)
-        CharacterFrame:EnableMouse(false)
-        CharacterFrame:EnableKeyboard(false)
-        SC._pendingHideChar = true
-        return false
-    end
-    return true
 end
-SC.tryHideCharFrame = tryHideCharFrame
+
+-- 3D PlayerModel content (the rotating character mesh) does NOT reliably
+-- respect ancestor SetAlpha(0) -- it's rendered on a separate compositing
+-- path from normal 2D frame textures/text on this client, so an alpha=0
+-- parent can still show a fully-opaque floating model. Must Hide() the
+-- model frame itself, explicitly, to actually remove it from the screen.
+local function SC_HideNativeModel()
+    if CharacterModelFrame then CharacterModelFrame:Hide() end
+end
+local function SC_ShowNativeModel()
+    if CharacterModelFrame then CharacterModelFrame:Show() end
+end
+
+local function SC_SuppressCharacterFrame()
+    if not CharacterFrame then return end
+    CharacterFrame:SetAlpha(0)
+    CharacterFrame:EnableKeyboard(false)
+    SC_SetMouseRecursive(CharacterFrame, false)
+    SC_HideNativeModel()
+end
+SC.SuppressCharacterFrame = SC_SuppressCharacterFrame
+
 
 -- --------------------------------------------------------
 -- SavedVariables defaults
@@ -96,15 +124,16 @@ end
 -- --------------------------------------------------------
 -- Show / Toggle our main panel
 -- --------------------------------------------------------
+
+-- Set true whenever WE call HideUIPanel(CF) for cleanup so the HideUIPanel hook
+-- does not interpret it as a user close-press.
 function SC_ShowMain()
     if not SlyCharMainFrame then
-        if InCombatLockdown() then
-            SC._pendingBuild = true
-            DEFAULT_CHAT_FRAME:AddMessage("|cff88bbff[SlyChar]|r Opening after combat ends...")
-            return
-        end
+        -- Frame creation is not combat-restricted (no secure templates).
+        -- Always build immediately so C works regardless of combat state.
         local ok, err = pcall(SC_BuildMain)
         if not ok then
+            dbg("SC_BuildMain FAILED: "..tostring(err))
             DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[SlyChar] Build error:|r " .. tostring(err))
             return
         end
@@ -116,11 +145,27 @@ function SC_ShowMain()
         SlyCharMainFrame:ClearAllPoints()
         SlyCharMainFrame:SetPoint(pos.point, UIParent, pos.point, pos.x or 0, pos.y or 0)
     end
-    -- sBtn frames are parented to UIParent so Show()/Hide() are unrestricted.
-    SlyCharMainFrame:Show()
+    -- Real combat-test debug data proved Frame:Show()/:Hide() silently fail to
+    -- stick on this frame during combat (Show() fires, IsShown() reads false
+    -- immediately after, every single tick, reverting the instant combat
+    -- ends). So SlyCharMainFrame is Show()n exactly once, permanently, at
+    -- creation (see SC_BuildMain) and NEVER Hidden again -- all visual
+    -- show/hide from here on is done purely via alpha/mouse/keyboard, which
+    -- has no such combat dependency. SC._mainVisible is the single source of
+    -- truth for "is it logically open", not SlyCharMainFrame:IsShown().
+    SlyCharMainFrame:SetAlpha(1)
     SlyCharMainFrame:EnableMouse(true)
-    SC._mainVisible    = true
-    SC._hiddenByCombat = false
+    SlyCharMainFrame:EnableKeyboard(true)
+    -- EnableMouse(true) on the top frame alone does NOT cascade to its own
+    -- children (equipment slot buttons etc.) any more than it does for
+    -- CharacterFrame -- re-enable recursively so slot buttons actually
+    -- receive hover/click again.
+    SC_SetMouseRecursive(SlyCharMainFrame, true)
+    -- PlayerModel 3D content doesn't reliably respect ancestor SetAlpha(0)
+    -- (see SC_HideNativeModel comment) -- Show() it explicitly too.
+    if SlyCharModel then SlyCharModel:Show() end
+    SC._mainVisible = true
+    dbg("SC_ShowMain: mainVisible=true combat="..tostring(InCombatLockdown()))
     -- Close the >> flyout menu if it was left open.
     local fm = _G["SlyCharStripFlyout"]
     if fm then fm:Hide() end
@@ -132,15 +177,43 @@ function SC_ShowMain()
     end
 end
 
+-- Unconditional hide -- the counterpart to SC_ShowMain(). Alpha-based (see
+-- comment in SC_ShowMain for why); this is also where the equivalent of the
+-- old OnHide cleanup (side panel / picker / wing / flyout-menu) now lives,
+-- since we no longer rely on a real Hide() call to trigger it.
+function SC_HideMain()
+    if not SlyCharMainFrame then return end
+    SlyCharMainFrame:SetAlpha(0)
+    SlyCharMainFrame:EnableMouse(false)
+    SlyCharMainFrame:EnableKeyboard(false)
+    -- Same recursive-mouse-disable requirement as CharacterFrame: our own
+    -- equipment slot buttons (children of SlyCharMainFrame) stay
+    -- individually mouse-enabled otherwise, so they keep receiving hover
+    -- events (item tooltip bleed-through) even after the window is alpha=0.
+    SC_SetMouseRecursive(SlyCharMainFrame, false)
+    -- Explicit Hide() -- SetAlpha(0) alone doesn't reliably remove 3D
+    -- PlayerModel content from the screen on this client.
+    if SlyCharModel then SlyCharModel:Hide() end
+    SC._mainVisible = false
+    dbg("SC_HideMain: mainVisible=false combat="..tostring(InCombatLockdown()))
+    if SC_HidePicker then SC_HidePicker() end
+    if SC_CloseSidePanel then SC_CloseSidePanel() end
+    local wf = _G["SlyCharWingFrame"]
+    if wf then wf:Hide() end
+    local fm = _G["SlyCharStripFlyout"]
+    if fm then fm:Hide() end
+end
+
+-- Real toggle, based on current visibility. Only used by discrete user
+-- actions that need to decide for themselves (slash command, minimap/LDB
+-- button) -- NOT by the ShowUIPanel/HideUIPanel hooks, which already know
+-- (from the native code they're mirroring) whether to show or hide and so
+-- call SC_ShowMain()/SC_HideMain() directly instead of toggling.
 function SC_ToggleMain()
-    if SlyCharMainFrame and SC._mainVisible then
-        SlyCharMainFrame:Hide()
-        SlyCharMainFrame:EnableMouse(false)
-        SC._mainVisible = false
-        SC._hiddenByCombat = false
-        -- Also collapse any open wing
-        local wf = _G["SlyCharWingFrame"]
-        if wf and wf:IsShown() then wf:Hide() end
+    local isOpen = SC._mainVisible
+    dbg("SC_ToggleMain isOpen="..tostring(isOpen).." mode="..(SC.db and SC.db.mode or "?"))
+    if isOpen then
+        SC_HideMain()
     else
         SC_ShowMain()
     end
@@ -162,12 +235,10 @@ function SC_DeferRefresh()
 end
 
 -- --------------------------------------------------------
--- Hook CharacterFrame: C key -> suppress default, use ours
--- The C keybinding fires ShowUIPanel(CharacterFrame).
--- HookScript on OnShow immediately hides it and toggles ours.
--- Since CharacterFrame is always instantly hidden,
--- ToggleCharacter() always thinks it's closed and calls Show --
--- so we toggle based on our own panel state.
+-- Hook CharacterFrame: suppress it in slychar modes.
+-- SC_ToggleMain is NOT called from here — that is handled by the
+-- hooksecurefunc("ShowUIPanel") in ADDON_LOADED, which fires on every
+-- C-key press regardless of CharacterFrame's current visibility state.
 -- --------------------------------------------------------
 local function HookCharacterFrame()
     if not CharacterFrame then return end
@@ -176,63 +247,30 @@ local function HookCharacterFrame()
         local mode = (SC.db and SC.db.mode) or "native_flyout"
 
         if mode == "native_flyout" then
-            -- Let native CharacterFrame show; attach our companion alongside it
             if SC_ShowNativeCompanion then SC_ShowNativeCompanion() end
             return
         end
 
-        -- slychar / slychar_flyout: intercept and redirect to SlyChar panel
         if SC._skipHook then return end
-        if GetCursorInfo() then return end
 
-        -- IMPORTANT: do NOT call Hide(), HideUIPanel(), or SC_ToggleMain()
-        -- synchronously inside OnShow.  Doing so while WoW is still executing
-        -- ShowUIPanel()'s call stack corrupts the VISIBLE_PANEL_LIST and
-        -- breaks Escape-key close + push/pop logic for all subsequent panels.
-        --
-        -- Instead: suppress visibility immediately (no frame-state side-effects),
-        -- then defer ALL frame management to the next frame via C_Timer.After(0).
-        self:SetAlpha(0)
-        self:EnableMouse(false)
-        self:EnableKeyboard(false)
-        dbg("OnShow:intercepted combat="..tostring(InCombatLockdown()))
-
-        C_Timer.After(0, function()
-            -- Restore defaults before deciding what to do.
-            self:SetAlpha(1)
-            self:EnableMouse(true)
-            self:EnableKeyboard(true)
-
-            if InCombatLockdown() then
-                -- Can't hide in combat; keep alpha-suppressed until REGEN_ENABLED.
-                dbg("OnShow:deferred:combat — alpha-suppressing CharacterFrame")
-                self:SetAlpha(0)
-                self:EnableMouse(false)
-                self:EnableKeyboard(false)
-                SC._pendingHideChar = true
-            else
-                -- Use HideUIPanel (not raw Hide) for proper UIPanel stack cleanup.
-                HideUIPanel(self)
-                -- Do NOT call SC_ShowMain() here.  SlyChar visibility is managed
-                -- exclusively by the ToggleCharacter override and the CHR button.
-                -- Calling ShowMain here would reopen SlyChar immediately after the
-                -- user pressed C to close it (ToggleCharacter fires first, closes
-                -- SlyChar, then OnShow fires and would reopen it).
-            end
-        end)
+        -- Safety net for whatever path just showed CharacterFrame (raw keypress,
+        -- macro, other addon) that isn't already covered by the ShowUIPanel hook
+        -- below -- force it alpha=0/non-interactive immediately, without ever
+        -- touching its real shown-state (see SC_SuppressCharacterFrame comment).
+        dbg("OnShow:CharacterFrame combat="..tostring(InCombatLockdown()))
+        SC_SuppressCharacterFrame()
     end)
 
-    -- In native_flyout mode: hide companion when CharacterFrame closes.
-    -- In slychar / slychar_flyout modes: restore the strata we raised in
-    -- the CHR button handler (CharacterFrame:SetFrameStrata("DIALOG")).
     CharacterFrame:HookScript("OnHide", function(self)
         local mode = (SC.db and SC.db.mode) or "native_flyout"
         if mode == "native_flyout" then
             if SC_HideNativeCompanion then SC_HideNativeCompanion() end
         else
-            -- Restore default strata so CharacterFrame behaves normally
-            -- the next time the game opens it through the UIPanel system.
+            self:SetAlpha(1)
+            self:EnableKeyboard(true)
             self:SetFrameStrata("MEDIUM")
+            SC_SetMouseRecursive(self, true)
+            SC_ShowNativeModel()
         end
     end)
 end
@@ -418,7 +456,6 @@ local function SC_Slash(msg)
             .. " cfShown=" .. tostring(CharacterFrame and CharacterFrame:IsShown())
             .. " cfAlpha=" .. string.format("%.2f", CharacterFrame and CharacterFrame:GetAlpha() or 0)
             .. " mainVis=" .. tostring(SC._mainVisible)
-            .. " pendHide=" .. tostring(SC._pendingHideChar)
             .. " pendCF=" .. tostring(SC._pendingCharFrame))
     elseif msg == "debug clear" then
         _DBG = {}
@@ -525,6 +562,11 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
             ApplyDefaults(SlyCharDB, DB_DEFAULTS)
             SC.db = SlyCharDB
 
+            -- Unmistakable, always-visible proof that THIS build is the one
+            -- actually loaded -- no need to wait for a SavedVariables round
+            -- trip to check. Bump SC.version whenever this file changes.
+            DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[SlyChar]|r v"..SC.version.." loaded")
+
             -- Wrap key refresh functions with error guard so failures are
             -- logged to SlyErrorDB (visible via /slyerror) rather than silently
             -- breaking the UI.
@@ -542,34 +584,144 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
 
             HookCharacterFrame()
 
-            -- Intercept the H key (ToggleCharacter("HonorFrame")) so it opens
-            -- the SlyChar panel with the honor wing rather than the native PvP frame.
-            -- Must be done here (after SC.db is set) so the mode check works.
-            if ToggleCharacter then
-                local _origToggleChar = ToggleCharacter
-                ToggleCharacter = function(which)
-                    local mode = (SC.db and SC.db.mode) or "native_flyout"
-                    if mode ~= "native_flyout" then
-                        if which == "PaperDollFrame" or which == nil then
-                            dbg("ToggleChar:PaperDoll combat="..tostring(InCombatLockdown()).." cfShown="..tostring(CharacterFrame and CharacterFrame:IsShown()).." mainVis="..tostring(SC._mainVisible).." pendHide="..tostring(SC._pendingHideChar))
-                            if CharacterFrame and CharacterFrame:IsShown() and not SC._pendingHideChar then
-                                -- CharacterFrame is genuinely visible (CHR button); close it.
-                                -- If _pendingHideChar is true, CF is our invisible combat suppression —
-                                -- skip tryHide and fall through to SC_ToggleMain so C key still works.
-                                tryHideCharFrame()
-                                return
-                            end
-                            SC_ToggleMain()
-                            return
-                        elseif which == "HonorFrame" or which == "PVPFrame" then
-                            SC_ShowMain()
-                            if SC_ToggleWing then SC_ToggleWing("honor") end
-                            return
-                        end
-                    end
-                    return _origToggleChar(which)
+            -- ==========================================================
+            -- SINGLE toggle path, deliberately.
+            --
+            -- A previous attempt used a second, separate path: a custom
+            -- SetBindingClick button bound directly to "C", bypassing
+            -- ToggleCharacter/ShowUIPanel/HideUIPanel entirely. Debug logs with
+            -- stack traces proved that path works fine out of combat, but goes
+            -- COMPLETELY silent in combat (no click, no hook, nothing) for the
+            -- entire duration of every fight -- almost certainly because
+            -- SetBindingClick/SetBinding are themselves combat-protected, so
+            -- whatever silently reverted our override at combat-start could
+            -- never be re-won until combat ended, leaving "C" dead the whole fight.
+            --
+            -- The ORIGINAL path below (hooksecurefunc on ToggleCharacter /
+            -- ShowUIPanel / HideUIPanel) is proven reliable in combat by that
+            -- same debug data (it's how every earlier in-combat toggle was
+            -- actually happening). It reacts to whatever invoked the native
+            -- action -- real "C" keypress, macro, other addon -- without ever
+            -- needing to own or fight over the keybinding itself. That's why
+            -- it survives combat: it doesn't depend on "C" pointing at anything
+            -- in particular.
+            -- ==========================================================
+            hooksecurefunc("ToggleCharacter", function(which)
+                local mode = (SC.db and SC.db.mode) or "native_flyout"
+                if mode == "native_flyout" then return end
+                -- Only side effect handled here: opening the honor wing.
+                -- The actual show/hide of SlyCharMainFrame is driven entirely
+                -- by the ShowUIPanel/HideUIPanel hooks below (ToggleCharacter
+                -- always calls one of those internally before returning, so by
+                -- the time this hook runs the panel is already in the right
+                -- state) -- see note above about why we don't duplicate that
+                -- call here.
+                if which == "HonorFrame" or which == "PVPFrame" then
+                    if SC_ToggleWing then SC_ToggleWing("honor") end
                 end
+            end)
+
+            -- ── ShowUIPanel / HideUIPanel hooks: the ONE source of truth ──────────
+            -- ToggleCharacter(), macros, micro-menu clicks, and other addons can
+            -- all end up calling ShowUIPanel(CharacterFrame)/HideUIPanel(CharacterFrame)
+            -- directly. Rather than trying to also react to every possible caller
+            -- (which previously meant BOTH the ToggleCharacter hook and this hook
+            -- firing for the same single keypress -- a real double-toggle race that
+            -- only a 100ms debounce papered over), these two hooks are now the only
+            -- place that shows/hides SlyCharMainFrame. Each one is a plain, direct
+            -- mirror of what the native code just decided (show -> show, hide ->
+            -- hide), never a toggle, so there is nothing to race.
+            --
+            -- CharacterFrame itself must never actually be visible/clickable in
+            -- slychar modes -- SC_SuppressCharacterFrame() forces it
+            -- alpha=0/mouse=false/keyboard=false every time, WITHOUT ever calling
+            -- HideUIPanel/Hide() on it. That's deliberate: forcing its real
+            -- shown-state back to false ourselves (tried in v2.7.0) broke the
+            -- native ToggleCharacter()'s own IsShown() check, so it could never
+            -- detect "already open" and take its close-branch -- SlyChar could
+            -- open but never close. Letting CharacterFrame's real shown-state
+            -- track ToggleCharacter's natural intent (and only suppressing it
+            -- visually/interactively) keeps that native alternation working.
+            hooksecurefunc("ShowUIPanel", function(frame)
+                if frame ~= CharacterFrame then return end
+                local mode = (SC.db and SC.db.mode) or "native_flyout"
+                if mode == "native_flyout" then return end
+                dbg("ShowUIPanel:hook combat="..tostring(InCombatLockdown()))
+                SC_ShowMain()
+                SC_SuppressCharacterFrame()
+            end)
+
+            -- ── HideUIPanel hook: catches close-C press when CF is in the UIPanel stack ──
+            -- A "close C" press routes through HideUIPanel (not ShowUIPanel) once
+            -- CharacterFrame is already in the UIPanel stack. Forward it to our
+            -- panel's hide so close-C always works. This now fires naturally and
+            -- reliably because SC_SuppressCharacterFrame() no longer forces
+            -- CharacterFrame's real shown-state back to false -- ToggleCharacter's
+            -- own internal IsShown() check genuinely alternates true/false, so its
+            -- close-branch (which is what calls this HideUIPanel) actually runs.
+            hooksecurefunc("HideUIPanel", function(frame)
+                if frame ~= CharacterFrame then return end
+                local mode = (SC.db and SC.db.mode) or "native_flyout"
+                if mode == "native_flyout" then return end
+                dbg("HideUIPanel:hook combat="..tostring(InCombatLockdown()))
+                SC_HideMain()
+            end)
+
+            -- ── CharacterFrame suppression enforcer (self-healing, always on) ─────
+            -- Continuously re-asserts suppression while CharacterFrame is
+            -- genuinely shown, not just as an alpha-drift safety net. Blizzard's
+            -- own paperdoll code re-enables mouse on individual item slot
+            -- buttons whenever it refreshes them (equip/unequip, inventory
+            -- update, stat refresh, etc.) -- that happens on a schedule we
+            -- don't control and isn't caught by the one-time suppression call
+            -- in the ShowUIPanel/OnShow hooks. That silent re-enable on
+            -- individual children (not CharacterFrame itself) is what let
+            -- equipped-item tooltips bleed through on hover and stole
+            -- right-clicks meant for whatever was underneath. So every tick,
+            -- while CharacterFrame is shown, re-run the full recursive
+            -- suppression unconditionally (cheap enough at 0.2s intervals).
+            if SC.db.mode ~= "native_flyout" then
+                local _lastEnforceLog = 0
+                SC._enforceTicker = C_Timer.NewTicker(0.2, function()
+                    local mode = (SC.db and SC.db.mode) or "native_flyout"
+                    if mode == "native_flyout" then return end
+                    if CharacterFrame and CharacterFrame:IsShown() then
+                        if CharacterFrame:GetAlpha() > 0 then
+                            local now = GetTime()
+                            if now - _lastEnforceLog > 1 then
+                                dbg("ENFORCE: CharacterFrame visible+alpha>0 — forcing suppress + SlyChar open")
+                                _lastEnforceLog = now
+                            end
+                            if not SC._mainVisible then
+                                SC_ShowMain()
+                            end
+                        end
+                        SC_SuppressCharacterFrame()
+                    end
+                end)
             end
+
+            -- ── Panel alpha enforcer (self-healing, always on) ────────────────────
+            -- SlyCharMainFrame's own visibility is alpha-driven now (see
+            -- SC_ShowMain/SC_HideMain), not Show()/Hide()-driven, specifically
+            -- because Show()/Hide() were proven to silently fail to stick on
+            -- this frame during combat. Alpha isn't known to have that problem,
+            -- but this stays as a cheap safety net in case some other code path
+            -- (another addon, a future edit) calls :SetAlpha() directly and
+            -- drifts it out of sync with SC._mainVisible.
+            SC._panelEnforceTicker = C_Timer.NewTicker(0.5, function()
+                if not SlyCharMainFrame then return end
+                local mode = (SC.db and SC.db.mode) or "native_flyout"
+                if mode == "native_flyout" then return end
+                local want   = SC._mainVisible
+                local actual = SlyCharMainFrame:GetAlpha() > 0
+                if want ~= actual then
+                    dbg("PANEL-ENFORCE: alpha out of sync (want="..tostring(want)..", actual="..tostring(actual)..") -- correcting")
+                    SlyCharMainFrame:SetAlpha(want and 1 or 0)
+                    SlyCharMainFrame:EnableMouse(want)
+                    SlyCharMainFrame:EnableKeyboard(want)
+                end
+            end)
 
             SLASH_SLYCHAR1 = "/slychar"
             SlashCmdList["SLYCHAR"] = SC_Slash
@@ -688,20 +840,13 @@ evFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_REGEN_DISABLED" then
         local cfShown = CharacterFrame and CharacterFrame:IsShown()
         dbg("REGEN_DISABLED cfShown="..tostring(cfShown).." mainVis="..tostring(SC._mainVisible))
-        if cfShown then tryHideCharFrame() end
+        -- SlyCharMainFrame intentionally stays open during combat — the player
+        -- may want to review gear/stats mid-fight.  Only suppress CharacterFrame
+        -- (the Blizzard managed frame that can't safely stay open in combat).
+        if cfShown then SC_SuppressCharacterFrame() end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        dbg("REGEN_ENABLED pendingHide="..tostring(SC._pendingHideChar).." pendingCF="..tostring(SC._pendingCharFrame))
-        -- Clean up any alpha/mouse suppression applied during combat.
-        if SC._pendingHideChar then
-            SC._pendingHideChar = false
-            if CharacterFrame and CharacterFrame:IsShown() then
-                CharacterFrame:SetAlpha(1)
-                CharacterFrame:EnableMouse(true)
-                CharacterFrame:EnableKeyboard(true)
-                HideUIPanel(CharacterFrame)   -- proper UIPanel stack cleanup
-            end
-        end
+        dbg("REGEN_ENABLED pendingCF="..tostring(SC._pendingCharFrame))
         -- If the user clicked CHR during combat, open CharacterFrame now.
         if SC._pendingCharFrame then
             SC._pendingCharFrame = false
