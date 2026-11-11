@@ -1,0 +1,9 @@
+## Interface: 20506, 16001
+## Title: Sly Forever Char Tabs
+## Notes: Adds a tab under the Reputation/Skills/Currency tabs on the character sheet for ItemRack gear sets and action bar profiles. /slytabs
+## Version: 0.5.0
+## Author: Sly
+## OptionalDeps: ItemRackRevived
+## SavedVariablesPerCharacter: SlyForeverCharTabsDB
+
+SlyForever_CharTabs.lua
